@@ -17,6 +17,9 @@ pub struct Settings {
     pub hotkeys: Hotkeys,
     pub voice_output: VoiceOutput,
     pub privacy: Privacy,
+    pub ai: Ai,
+    pub answer_style: AnswerStyle,
+    pub limits: Limits,
 }
 
 /// Top-level keys that the settings page treats as sections. Used for
@@ -28,6 +31,9 @@ pub const SECTIONS: &[&str] = &[
     "hotkeys",
     "voiceOutput",
     "privacy",
+    "ai",
+    "answerStyle",
+    "limits",
 ];
 
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
@@ -232,4 +238,224 @@ impl Default for VoiceOutput {
 #[ts(export)]
 pub struct Privacy {
     pub capture_paused: bool,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ProviderKind {
+    Anthropic,
+    OpenAi,
+    Gemini,
+    Ollama,
+    LmStudio,
+    LlamaCpp,
+    /// Any server that speaks the OpenAI chat completions API.
+    OpenAiCompatible,
+}
+
+impl ProviderKind {
+    /// Cloud APIs that can't be used without a key. Everything else may
+    /// run without one, so an unreadable keychain mustn't block it.
+    pub fn requires_key(self) -> bool {
+        matches!(self, Self::Anthropic | Self::OpenAi | Self::Gemini)
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct ModelConfig {
+    pub id: String,
+    /// Can read images. Detected when the model is added; the user can override it.
+    pub vision: bool,
+    /// Calls tools reliably. When false, Helpy doesn't offer it tools.
+    pub tools: bool,
+    /// Price in US dollars per million tokens. None means unknown.
+    pub input_price: Option<f64>,
+    pub output_price: Option<f64>,
+}
+
+impl Default for ModelConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            vision: true,
+            tools: true,
+            input_price: None,
+            output_price: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProviderConfig {
+    /// Stable id; also names the provider's API key in the OS keychain.
+    pub id: String,
+    pub kind: ProviderKind,
+    pub name: String,
+    pub base_url: String,
+    pub models: Vec<ModelConfig>,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            kind: ProviderKind::OpenAiCompatible,
+            name: String::new(),
+            base_url: String::new(),
+            models: Vec::new(),
+        }
+    }
+}
+
+/// A specific model on a specific provider.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct ModelRef {
+    pub provider_id: String,
+    pub model: String,
+}
+
+/// Which model each feature uses. None means "not set up yet".
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Routing {
+    /// Voice and text questions.
+    pub ask: Option<ModelRef>,
+    pub visual_guidance: Option<ModelRef>,
+    pub circle_to_explain: Option<ModelRef>,
+    pub agent_planning: Option<ModelRef>,
+    pub agent_orchestrator: Option<ModelRef>,
+    pub agent_worker: Option<ModelRef>,
+    /// Used for a request that needs the screen when its model can't read images.
+    pub vision_fallback: Option<ModelRef>,
+}
+
+impl Routing {
+    pub fn entries(&self) -> [(&'static str, &Option<ModelRef>); 7] {
+        [
+            ("ask", &self.ask),
+            ("visualGuidance", &self.visual_guidance),
+            ("circleToExplain", &self.circle_to_explain),
+            ("agentPlanning", &self.agent_planning),
+            ("agentOrchestrator", &self.agent_orchestrator),
+            ("agentWorker", &self.agent_worker),
+            ("visionFallback", &self.vision_fallback),
+        ]
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Ai {
+    pub providers: Vec<ProviderConfig>,
+    pub routing: Routing,
+    /// Tried in order, one attempt each, when a feature's model fails.
+    pub fallback_chain: Vec<ModelRef>,
+    pub temperature: f64,
+    pub max_response_tokens: u32,
+    /// Give up on a request after this many seconds without any data.
+    pub timeout_secs: u32,
+    /// Added to every request, e.g. "I use Windows 11 and Outlook desktop".
+    pub custom_instructions: String,
+}
+
+impl Default for Ai {
+    fn default() -> Self {
+        Self {
+            providers: Vec::new(),
+            routing: Routing::default(),
+            fallback_chain: Vec::new(),
+            temperature: 0.7,
+            max_response_tokens: 16000,
+            timeout_secs: 60,
+            custom_instructions: String::new(),
+        }
+    }
+}
+
+impl Ai {
+    pub fn provider(&self, id: &str) -> Option<&ProviderConfig> {
+        self.providers.iter().find(|p| p.id == id)
+    }
+
+    pub fn model(&self, r: &ModelRef) -> Option<(&ProviderConfig, &ModelConfig)> {
+        let p = self.provider(&r.provider_id)?;
+        Some((p, p.models.iter().find(|m| m.id == r.model)?))
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Detail {
+    Brief,
+    #[default]
+    Normal,
+    Detailed,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Tone {
+    #[default]
+    Casual,
+    Formal,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ScreenAccess {
+    /// Every question includes a screenshot.
+    Always,
+    /// The AI may ask; the user confirms each time.
+    Ask,
+    /// The AI decides.
+    #[default]
+    WhenNeeded,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct AnswerStyle {
+    pub detail: Detail,
+    pub tone: Tone,
+    pub screen_access: ScreenAccess,
+}
+
+/// Retry and spending limits, enforced in Rust for every model call.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Limits {
+    pub max_retries: u32,
+    pub backoff_base_ms: u32,
+    pub backoff_max_ms: u32,
+    /// 0 turns the daily token limit off.
+    #[ts(type = "number")]
+    pub daily_token_budget: u64,
+    /// US dollars per day. None turns the daily cost limit off.
+    pub daily_cost_budget: Option<f64>,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            backoff_base_ms: 2000,
+            backoff_max_ms: 30000,
+            daily_token_budget: 2_000_000,
+            daily_cost_budget: None,
+        }
+    }
 }

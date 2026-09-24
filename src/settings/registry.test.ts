@@ -3,12 +3,17 @@ import defaults from "../bindings/defaults.json";
 import { FIELDS, SECTIONS, searchFields } from "./registry";
 
 describe("settings registry", () => {
-  it("has a row for every setting in the sections it shows", () => {
-    for (const { id } of SECTIONS) {
-      const expected = Object.keys(defaults[id]).map((k) => `${id}.${k}`).sort();
-      const actual = FIELDS.filter((f) => f.section === id).map((f) => f.path).sort();
+  it("has a row for every setting of each settings group it shows", () => {
+    const shown = new Set(FIELDS.map((f) => f.path.split(".")[0] as keyof typeof defaults));
+    for (const group of shown) {
+      const expected = Object.keys(defaults[group]).map((k) => `${group}.${k}`).sort();
+      const actual = FIELDS.filter((f) => f.path.startsWith(`${group}.`)).map((f) => f.path).sort();
       expect(actual).toEqual(expected);
     }
+  });
+
+  it("puts every row in a section that exists", () => {
+    for (const f of FIELDS) expect(SECTIONS.map((s) => s.id)).toContain(f.section);
   });
 
   it("lists each setting once", () => {
@@ -21,5 +26,7 @@ describe("settings registry", () => {
     expect(searchFields("push to talk").map((f) => f.path)).toContain("hotkeys.voiceMode");
     expect(searchFields("buddy size").map((f) => f.path)).toEqual(["buddy.size"]);
     expect(searchFields("  ")).toEqual([]);
+    expect(searchFields("ollama").map((f) => f.path)).toEqual(["ai.providers"]);
+    expect(searchFields("screenshot").map((f) => f.path)).toContain("answerStyle.screenAccess");
   });
 });

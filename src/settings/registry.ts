@@ -5,12 +5,14 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, appearance and language." },
   { id: "buddy", title: "Cursor buddy", blurb: "The small character that rides along with your mouse." },
   { id: "hotkeys", title: "Hotkeys", blurb: "Shortcuts that work from any app. Click one to change it." },
+  { id: "ai", title: "AI providers", blurb: "The models Helpy talks to, what each one is used for, and how much it may spend." },
+  { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
 ];
 
 type Option = { value: string; label: string };
@@ -22,7 +24,13 @@ export type Control =
   | { kind: "slider"; min: number; max: number; step: number; format: (v: number) => string; ends?: [string, string] }
   | { kind: "number"; min: number; max: number; unit: string }
   | { kind: "hotkey" }
-  | { kind: "buddyStyle" };
+  | { kind: "textarea"; placeholder: string; max: number }
+  /** A dollar amount that can be left empty to turn it off. */
+  | { kind: "money"; emptyLabel: string }
+  | { kind: "buddyStyle" }
+  | { kind: "providers" }
+  | { kind: "routing" }
+  | { kind: "fallbackChain" };
 
 export type Field = {
   path: SettingPath;
@@ -177,6 +185,110 @@ export const FIELDS: Field[] = [
   { path: "hotkeys.openApprovalInbox", section: "hotkeys", group: "Agents", label: "Open approval inbox", control: { kind: "hotkey" } },
   { path: "hotkeys.pauseAllAgents", section: "hotkeys", group: "Agents", label: "Pause all agents", keywords: "stop", control: { kind: "hotkey" } },
   { path: "hotkeys.openSettings", section: "hotkeys", group: "App", label: "Open settings", keywords: "preferences", control: { kind: "hotkey" } },
+
+  // AI providers
+  {
+    path: "ai.providers", section: "ai", group: "Providers", label: "Connected providers",
+    help: "API keys are stored in your system keychain, never in Helpy's settings file.",
+    keywords: "anthropic claude openai gpt gemini google ollama lm studio llama.cpp local models api key endpoint",
+    control: { kind: "providers" },
+  },
+  {
+    path: "ai.routing", section: "ai", group: "Which model does what", label: "Model for each feature",
+    help: "Features that aren't built yet keep your choice until they arrive.",
+    keywords: "routing vision questions guidance agents orchestrator worker planning",
+    control: { kind: "routing" },
+  },
+  {
+    path: "ai.fallbackChain", section: "ai", group: "Which model does what", label: "Fallback models",
+    help: "If a model fails, these are tried in order, one attempt each. They count toward the retry limit.",
+    keywords: "backup failover chain order", control: { kind: "fallbackChain" },
+  },
+  {
+    path: "ai.temperature", section: "ai", group: "Responses", label: "Temperature",
+    help: "Higher is more varied. Current Claude models and OpenAI reasoning models ignore it.",
+    keywords: "creativity randomness sampling",
+    control: { kind: "slider", min: 0, max: 2, step: 0.1, format: (v) => v.toFixed(1), ends: ["Focused", "Varied"] },
+  },
+  {
+    path: "ai.maxResponseTokens", section: "ai", group: "Responses", label: "Max response length",
+    help: "Includes any thinking the model does before answering.",
+    keywords: "max tokens output limit", control: { kind: "number", min: 256, max: 128000, unit: "tokens" },
+  },
+  {
+    path: "ai.timeoutSecs", section: "ai", group: "Responses", label: "Give up after",
+    help: "Seconds without any data from the provider before a request counts as timed out.",
+    keywords: "timeout seconds wait", control: { kind: "number", min: 5, max: 600, unit: "sec" },
+  },
+  {
+    path: "ai.customInstructions", section: "ai", group: "Responses", label: "Custom instructions",
+    help: "Added to every request. Tell Helpy about your setup so answers fit it.",
+    keywords: "system prompt about me context",
+    control: { kind: "textarea", placeholder: "I use Windows 11 and Outlook desktop. I'm new to spreadsheets.", max: 4000 },
+  },
+  {
+    path: "limits.maxRetries", section: "ai", group: "Retries and daily budget", label: "Retries per failed request",
+    help: "Timeouts, network errors, rate limits and provider errors are retried. A bad key or missing model never is.",
+    keywords: "retry attempts", control: { kind: "number", min: 0, max: 10, unit: "times" },
+  },
+  {
+    path: "limits.backoffBaseMs", section: "ai", group: "Retries and daily budget", label: "First retry after",
+    help: "Each later retry waits twice as long, up to the maximum below.",
+    keywords: "backoff delay wait", control: { kind: "number", min: 100, max: 60000, unit: "ms" },
+  },
+  {
+    path: "limits.backoffMaxMs", section: "ai", group: "Retries and daily budget", label: "Longest wait between retries",
+    help: "If a provider asks Helpy to wait longer than this, the request stops instead.",
+    keywords: "backoff maximum delay", control: { kind: "number", min: 100, max: 600000, unit: "ms" },
+  },
+  {
+    path: "limits.dailyTokenBudget", section: "ai", group: "Retries and daily budget", label: "Daily token limit",
+    help: "Checked before every request. 0 turns it off.",
+    keywords: "budget spend tokens usage cap", control: { kind: "number", min: 0, max: 1000000000, unit: "tokens" },
+  },
+  {
+    path: "limits.dailyCostBudget", section: "ai", group: "Retries and daily budget", label: "Daily cost limit",
+    help: "Needs a price on every model you use. Leave empty to turn it off.",
+    keywords: "budget spend dollars money cost cap", control: { kind: "money", emptyLabel: "Off" },
+  },
+
+  // Answer style
+  {
+    path: "answerStyle.detail", section: "answerStyle", group: "Answers", label: "Detail",
+    keywords: "length verbose brief short long",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "brief", label: "Brief" },
+        { value: "normal", label: "Normal" },
+        { value: "detailed", label: "Detailed" },
+      ],
+    },
+  },
+  {
+    path: "answerStyle.tone", section: "answerStyle", group: "Answers", label: "Tone",
+    keywords: "voice formal casual friendly",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "casual", label: "Casual" },
+        { value: "formal", label: "Formal" },
+      ],
+    },
+  },
+  {
+    path: "answerStyle.screenAccess", section: "answerStyle", group: "Your screen", label: "Helpy may look at your screen",
+    help: "When needed, the AI decides per question. Screenshots never include Helpy's own windows.",
+    keywords: "screenshot privacy vision capture permission",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "whenNeeded", label: "When needed" },
+        { value: "ask", label: "Ask me each time" },
+        { value: "always", label: "Always" },
+      ],
+    },
+  },
 ];
 
 export function searchFields(query: string): Field[] {

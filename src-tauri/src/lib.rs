@@ -1,4 +1,6 @@
+mod ai;
 mod buddy;
+mod capture;
 mod cursor;
 mod fullscreen;
 mod hotkeys;
@@ -64,6 +66,7 @@ pub fn run() {
         .manage(hotkeys::Hotkeys::default())
         .manage(overlay::Overlays::default())
         .manage(cursor::CursorShared::default())
+        .manage(ai::ask::AskState::default())
         .setup(|app| {
             // A tray app: no Dock icon on macOS.
             #[cfg(target_os = "macos")]
@@ -73,6 +76,10 @@ pub fn run() {
             let store = SettingsStore::load(app.path().app_config_dir()?.join("settings.json"));
             let s = store.get();
             app.manage(store);
+            app.manage(ai::ask::AiState {
+                http: ai::provider::http_client(),
+                ledger: ai::ledger::Ledger::load(app.path().app_data_dir()?.join("usage.json")),
+            });
 
             tray::build(&handle, &s)?;
             hotkeys::sync(&handle, &s);
@@ -89,7 +96,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Closing settings hides it; Helpy keeps running in the tray.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == windows::SETTINGS {
+                if window.label() == windows::SETTINGS || window.label() == windows::ASK {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -110,6 +117,20 @@ pub fn run() {
             buddy::buddy_set_custom_image,
             buddy::buddy_custom_image,
             platform::platform_info,
+            ai::ai_set_key,
+            ai::ai_delete_key,
+            ai::ai_has_key,
+            ai::ai_list_models,
+            ai::ai_test_provider,
+            ai::ai_detect_local,
+            ai::ai_usage_today,
+            ai::ask::ask_send,
+            ai::ask::ask_cancel,
+            ai::ask::ask_reset,
+            ai::ask::ask_screen_answer,
+            ai::ask::ask_status,
+            windows::ask_hide,
+            windows::open_settings_section,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Helpy");

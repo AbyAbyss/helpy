@@ -2,7 +2,7 @@
 
 Helpy is built phase by phase. Each phase ends with an app that runs (`npm run tauri dev`) and does something useful on its own. This file lists what each phase delivers, the crates and plugins it pulls in, and the platform risks that could change the design.
 
-Status: **Phase 1 is implemented.** Phases 2 to 9 are planned.
+Status: **Phases 1 and 2 are implemented.** Phases 3 to 9 are planned.
 
 ## Architecture in one paragraph
 
@@ -38,15 +38,19 @@ Delivers: scaffold, one overlay per monitor, cursor buddy, tray, global hotkeys,
 Crates: `tauri` (tray-icon, image-png, macos-private-api), `tauri-plugin-global-shortcut`, `tauri-plugin-autostart`, `tauri-plugin-dialog`, `tauri-plugin-single-instance`, `serde`, `serde_json`, `ts-rs`, `windows` (Windows), `core-graphics` + `core-foundation` (macOS), `x11rb` (Linux).
 npm: `@tauri-apps/api`, the matching plugin packages, `@fontsource-variable/*` for bundled fonts (no network at runtime).
 
-## Phase 2: providers and text Q&A
+## Phase 2: providers and text Q&A (done)
 
-- `Provider` trait: `chat(request) -> stream of events`, `capabilities() -> {vision, tools, streaming}`. Adapters: Anthropic, OpenAI, Gemini, and one OpenAI-compatible adapter that covers Ollama, LM Studio, llama.cpp and custom URLs.
-- `limits/` module: retry classifier (retryable vs terminal errors), exponential backoff honoring `retry-after`, budget ledger. Every provider call goes through it, including non-agent calls. Unit tests with a scripted failing provider.
-- Screen capture of the cursor's monitor via `xcap`. Screenshots record `{monitor origin, scale factor, resize ratio}` so model coordinates map back exactly.
+- Provider-neutral conversation types (`ai/types.rs`) with one adapter per API: Anthropic Messages, OpenAI chat completions (also used for Ollama, LM Studio, llama.cpp and custom endpoints) and Gemini. All stream through one SSE reader that applies the idle timeout and cancellation. Enum dispatch instead of a trait object, since the set of wire formats is closed.
+- `ai/limits.rs`: every model call goes through `run_step`, which enforces the retry, backoff, fallback and budget rules. Tests drive it with a scripted failing provider under a paused clock.
+- `ai/ledger.rs`: daily tokens and cost, written to disk after every call. Failed attempts that may have been billed (timeouts, 5xx, garbled output) are charged their estimated input.
+- Screen capture of the cursor's monitor via `xcap`, downscaled to 1568 px on the long edge and sent as JPEG. `CaptureMeta` maps model coordinates back through the resize and DPI (tested now, used by Phase 4).
+- The model decides whether to look: models with tool calling get a `view_screen` tool; models without it are asked to reply `VIEW_SCREEN` (held back from the panel while it streams). Only the newest screenshot stays in the conversation.
 - API keys in the OS keychain via `keyring`.
-- Text ask panel (second hotkey), follow-up context until dismissed.
+- Anthropic specifics: sampling parameters are left out (current Claude models reject them), thinking blocks are passed back unchanged, and `claude-opus-5` / `claude-fable-5-1` opt into server-side refusal fallback (`fallbacks: "default"`), with the documented echo rules after a mid-output fallback.
 
-Crates: `reqwest` (rustls, stream), `tokio`, `eventsource-stream`, `keyring`, `xcap`, `image`, `thiserror`.
+Crates: `reqwest` 0.12 (rustls with ring, which cross-compiles without extra tooling), `tokio`, `tokio-util`, `futures-util`, `bytes`, `keyring` 3, `xcap`, `image`, `thiserror`, `chrono`. npm: `react-markdown` (escapes raw HTML in answers).
+
+Not in Phase 2: per-agent and per-batch budgets (Phase 6), provider usage charts (Phase 9), voice (Phase 3).
 
 ## Phase 3: voice
 
@@ -104,10 +108,11 @@ Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessib
 ## Platform risks
 
 1. **macOS transparency needs `macOSPrivateApi: true`.** That flag blocks Mac App Store distribution. Direct download is fine.
-2. **Capture exclusion differs per OS.** Windows: `set_content_protected` uses `SetWindowDisplayAffinity`; `WDA_EXCLUDEFROMCAPTURE` needs Windows 10 2004+, older builds show a black box instead of hiding. macOS: `NSWindowSharingNone` works for `CGWindowList` capture but ScreenCaptureKit on macOS 15+ may still record it; Phase 2 capture will exclude Helpy's windows explicitly by window ID as a second guard. Linux: no content protection at all, so Phase 2 will hide overlays for one frame during capture on Linux.
+2. **Capture exclusion differs per OS.** Windows: `set_content_protected` uses `SetWindowDisplayAffinity`; `WDA_EXCLUDEFROMCAPTURE` needs Windows 10 2004+, older builds show a black box instead of hiding. macOS: `NSWindowSharingNone` works for `CGWindowList` capture, but ScreenCaptureKit on macOS 15+ may still record it. **Still open:** Phase 2 relies on `NSWindowSharingNone` alone; excluding Helpy's windows by window ID needs a ScreenCaptureKit capture path and must be verified on a real Mac. Linux: no content protection at all, so Helpy hides its overlays and the ask panel for about 120 ms around each capture (verified under X11).
 3. **Wayland.** No global cursor position, no always-on-top guarantee, no global shortcuts without the portal, input-region click-through only via layer-shell. Helpy sets `GDK_BACKEND=x11` on Linux so it runs under XWayland when available, and the settings window shows a notice listing what won't work on native Wayland.
 4. **Click-through on Linux X11** needs a compositor for transparency. Without one, overlays show as black rectangles; the notice mentions this.
 5. **Global hotkeys can collide with the OS.** Registration failures are reported back to the Hotkeys section instead of silently ignored.
 6. **Per-monitor DPI.** All positions travel in physical pixels in Rust and convert to logical only at the window that renders them, using that monitor's own scale factor.
 7. **Gmail restricted scopes** need Google verification for a public client ID. Phase 7 supports a user-provided client ID.
-8. **Fullscreen detection on macOS** is a heuristic (a window covering the full display at the top layer). Presentation apps that use a separate Space are detected; borderless windowed games may not be.
+8. **Linux screen capture needs PipeWire headers** at build time (xcap links it for Wayland capture), and saving API keys needs a running Secret Service.
+9. **Fullscreen detection on macOS** is a heuristic (a window covering the full display at the top layer). Presentation apps that use a separate Space are detected; borderless windowed games may not be.

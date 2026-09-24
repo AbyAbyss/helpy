@@ -41,5 +41,34 @@
   },
   "privacy": {
     "capturePaused": false
+  },
+  "ai": {
+    "providers": [],
+    "routing": {
+      "ask": null,
+      "visualGuidance": null,
+      "circleToExplain": null,
+      "agentPlanning": null,
+      "agentOrchestrator": null,
+      "agentWorker": null,
+      "visionFallback": null
+    },
+    "fallbackChain": [],
+    "temperature": 0.7,
+    "maxResponseTokens": 16000,
+    "timeoutSecs": 60,
+    "customInstructions": ""
+  },
+  "answerStyle": {
+    "detail": "normal",
+    "tone": "casual",
+    "screenAccess": "whenNeeded"
+  },
+  "limits": {
+    "maxRetries": 3,
+    "backoffBaseMs": 2000,
+    "backoffMaxMs": 30000,
+    "dailyTokenBudget": 2000000,
+    "dailyCostBudget": null
   }
 }

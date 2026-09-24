@@ -195,3 +195,51 @@ export function HotkeyField(props: {
     </button>
   );
 }
+
+/** Multi-line text, saved when focus leaves. */
+export function TextArea({ id, value, placeholder, max, onCommit }: { id: string; value: string; placeholder: string; max: number; onCommit: (v: string) => void }) {
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  return (
+    <div className="textarea">
+      <textarea
+        id={id}
+        rows={3}
+        value={text}
+        maxLength={max}
+        placeholder={placeholder}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => text !== value && onCommit(text)}
+      />
+      <span className="textarea__count">{text.length} / {max}</span>
+    </div>
+  );
+}
+
+/** Optional dollar amount: empty means off. */
+export function MoneyField({ id, value, emptyLabel, invalid, onChange }: { id: string; value: number | null; emptyLabel: string; invalid: boolean; onChange: (v: number | null) => void }) {
+  const [text, setText] = useState(value === null ? "" : String(value));
+  useEffect(() => setText(value === null ? "" : String(value)), [value]);
+  const commit = () => {
+    const t = text.trim();
+    if (t === "") return value !== null && onChange(null);
+    const n = Number(t);
+    if (Number.isFinite(n)) onChange(n);
+    else setText(value === null ? "" : String(value));
+  };
+  return (
+    <label className={`number${invalid ? " is-invalid" : ""}`}>
+      <span className="number__unit number__unit--lead">$</span>
+      <input
+        id={id}
+        inputMode="decimal"
+        placeholder={emptyLabel}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && commit()}
+      />
+      <span className="number__unit">per day</span>
+    </label>
+  );
+}

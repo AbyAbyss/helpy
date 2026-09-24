@@ -53,7 +53,148 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
             }
         }
     }
+
+    validate_ai(s, &mut errors);
     errors
+}
+
+fn check_range(errors: &mut Vec<FieldError>, path: &str, v: f64, min: f64, max: f64) {
+    if !(min..=max).contains(&v) {
+        errors.push(FieldError::new(
+            path,
+            format!("Must be between {min} and {max}"),
+        ));
+    }
+}
+
+fn validate_ai(s: &Settings, errors: &mut Vec<FieldError>) {
+    let ai = &s.ai;
+    let mut ids: Vec<&str> = Vec::new();
+    for p in &ai.providers {
+        let path = "ai.providers";
+        if p.id.trim().is_empty() {
+            errors.push(FieldError::new(path, "Every provider needs an id"));
+        } else if ids.contains(&p.id.as_str()) {
+            errors.push(FieldError::new(
+                path,
+                format!("Two providers share the id \"{}\"", p.id),
+            ));
+        }
+        ids.push(&p.id);
+        if p.name.trim().is_empty() {
+            errors.push(FieldError::new(path, "Every provider needs a name"));
+        }
+        if !is_http_url(&p.base_url) {
+            errors.push(FieldError::new(
+                path,
+                format!(
+                    "{}: the address must start with http:// or https://",
+                    display_name(p)
+                ),
+            ));
+        }
+        let mut models: Vec<&str> = Vec::new();
+        for m in &p.models {
+            if m.id.trim().is_empty() {
+                errors.push(FieldError::new(
+                    path,
+                    format!("{}: a model has no name", display_name(p)),
+                ));
+            } else if models.contains(&m.id.as_str()) {
+                errors.push(FieldError::new(
+                    path,
+                    format!("{}: {} is listed twice", display_name(p), m.id),
+                ));
+            }
+            models.push(&m.id);
+            for price in [m.input_price, m.output_price].into_iter().flatten() {
+                if !(0.0..=10_000.0).contains(&price) {
+                    errors.push(FieldError::new(
+                        path,
+                        format!("{}: prices must be between 0 and 10000", m.id),
+                    ));
+                }
+            }
+        }
+    }
+
+    for (key, r) in ai.routing.entries() {
+        if let Some(r) = r {
+            if ai.model(r).is_none() {
+                errors.push(FieldError::new(
+                    "ai.routing",
+                    format!("{key}: {} isn't set up", describe(r)),
+                ));
+            }
+        }
+    }
+    for r in &ai.fallback_chain {
+        if ai.model(r).is_none() {
+            errors.push(FieldError::new(
+                "ai.fallbackChain",
+                format!("{} isn't set up", describe(r)),
+            ));
+        }
+    }
+
+    check_range(errors, "ai.temperature", ai.temperature, 0.0, 2.0);
+    check_range(
+        errors,
+        "ai.maxResponseTokens",
+        ai.max_response_tokens as f64,
+        256.0,
+        128_000.0,
+    );
+    check_range(errors, "ai.timeoutSecs", ai.timeout_secs as f64, 5.0, 600.0);
+    if ai.custom_instructions.len() > 4000 {
+        errors.push(FieldError::new(
+            "ai.customInstructions",
+            "Keep it under 4000 characters",
+        ));
+    }
+
+    let l = &s.limits;
+    check_range(errors, "limits.maxRetries", l.max_retries as f64, 0.0, 10.0);
+    check_range(
+        errors,
+        "limits.backoffBaseMs",
+        l.backoff_base_ms as f64,
+        100.0,
+        60_000.0,
+    );
+    check_range(
+        errors,
+        "limits.backoffMaxMs",
+        l.backoff_max_ms as f64,
+        100.0,
+        600_000.0,
+    );
+    if l.backoff_max_ms < l.backoff_base_ms {
+        errors.push(FieldError::new(
+            "limits.backoffMaxMs",
+            "Must be at least the base delay",
+        ));
+    }
+    if let Some(c) = l.daily_cost_budget {
+        check_range(errors, "limits.dailyCostBudget", c, 0.0, 100_000.0);
+    }
+}
+
+fn display_name(p: &super::schema::ProviderConfig) -> &str {
+    if p.name.trim().is_empty() {
+        &p.id
+    } else {
+        &p.name
+    }
+}
+
+fn describe(r: &super::schema::ModelRef) -> String {
+    format!("{} on {}", r.model, r.provider_id)
+}
+
+fn is_http_url(s: &str) -> bool {
+    reqwest::Url::parse(s)
+        .is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.host().is_some())
 }
 
 /// "auto", or a simple BCP 47 tag: 2-3 letter language, optional region/script.
@@ -112,6 +253,74 @@ mod tests {
         let e = validate(&s);
         assert_eq!(e.len(), 1);
         assert_eq!(e[0].path, "hotkeys.textAsk");
+    }
+
+    fn provider(id: &str) -> super::super::schema::ProviderConfig {
+        use super::super::schema::*;
+        ProviderConfig {
+            id: id.into(),
+            kind: ProviderKind::Ollama,
+            name: "Local".into(),
+            base_url: "http://localhost:11434/v1".into(),
+            models: vec![ModelConfig {
+                id: "llama3.2".into(),
+                ..Default::default()
+            }],
+        }
+    }
+
+    #[test]
+    fn routing_must_point_at_a_configured_model() {
+        use super::super::schema::ModelRef;
+        let mut s = Settings::default();
+        s.ai.providers.push(provider("local"));
+        s.ai.routing.ask = Some(ModelRef {
+            provider_id: "local".into(),
+            model: "llama3.2".into(),
+        });
+        assert_eq!(validate(&s), vec![]);
+        s.ai.routing.ask = Some(ModelRef {
+            provider_id: "local".into(),
+            model: "gone".into(),
+        });
+        assert_eq!(validate(&s)[0].path, "ai.routing");
+        s.ai.routing.ask = None;
+        s.ai.fallback_chain.push(ModelRef {
+            provider_id: "nope".into(),
+            model: "x".into(),
+        });
+        assert_eq!(validate(&s)[0].path, "ai.fallbackChain");
+    }
+
+    #[test]
+    fn provider_urls_ids_and_models_are_checked() {
+        let mut s = Settings::default();
+        let mut p = provider("a");
+        p.base_url = "localhost:11434".into();
+        s.ai.providers.push(p);
+        s.ai.providers.push(provider("a"));
+        let dup = s.ai.providers[1].models[0].clone();
+        s.ai.providers[1].models.push(dup);
+        let messages: Vec<_> = validate(&s).into_iter().map(|e| e.message).collect();
+        assert!(
+            messages.iter().any(|m| m.contains("http://")),
+            "{messages:?}"
+        );
+        assert!(
+            messages.iter().any(|m| m.contains("share the id")),
+            "{messages:?}"
+        );
+        assert!(
+            messages.iter().any(|m| m.contains("listed twice")),
+            "{messages:?}"
+        );
+    }
+
+    #[test]
+    fn backoff_max_cannot_be_below_base() {
+        let mut s = Settings::default();
+        s.limits.backoff_max_ms = 1000;
+        assert_eq!(validate(&s)[0].path, "limits.backoffMaxMs");
     }
 
     #[test]

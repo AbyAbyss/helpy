@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import type { Ai } from "../bindings/Ai";
 import type { HotkeyStatus } from "../bindings/HotkeyStatus";
+import type { UsageToday } from "../bindings/UsageToday";
 import type { PlatformInfo } from "../bindings/PlatformInfo";
 import type { Settings } from "../bindings/Settings";
 import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
 import { BuddyStage, BuddyStylePicker, useCustomBuddy } from "./BuddyPreview";
-import { HotkeyField, NumberField, Segmented, Select, Slider, Toggle } from "./controls";
+import { ProvidersEditor } from "./ai/Providers";
+import { FallbackEditor, RoutingEditor } from "./ai/Routing";
+import { allModels, refKey } from "./ai/routing";
+import { HotkeyField, MoneyField, NumberField, Segmented, Select, Slider, TextArea, Toggle } from "./controls";
 import { FIELDS, SECTIONS, searchFields, type Field, type SectionId } from "./registry";
 
 type Errors = Record<string, string>;
@@ -33,6 +38,17 @@ export function App() {
     api.hotkeyStatus().then(setHotkeys);
     api.platform().then(setPlatform);
     const off = listen<HotkeyStatus[]>(EVENTS.hotkeyStatus, (e) => setHotkeys(e.payload));
+    return () => void off.then((f) => f());
+  }, []);
+
+  // Other windows (the ask panel) can open a specific section.
+  useEffect(() => {
+    const off = listen<string>(EVENTS.openSection, (e) => {
+      if (SECTIONS.some((s) => s.id === e.payload)) {
+        setQuery("");
+        setSection(e.payload as SectionId);
+      }
+    });
     return () => void off.then((f) => f());
   }, []);
 
@@ -70,15 +86,40 @@ export function App() {
     [setSettings],
   );
 
+  const commitAi = useCallback(
+    async (ai: Ai): Promise<string | null> => {
+      try {
+        setSettings(await api.setGroup("ai", ai));
+        setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith("ai."))));
+        return null;
+      } catch (e) {
+        const list = asFieldErrors(e);
+        setErrors((prev) => ({ ...prev, ...Object.fromEntries(list.map((x) => [x.path, x.message])) }));
+        return list[0].message;
+      }
+    },
+    [setSettings],
+  );
+
+  /** Settings groups shown in a section, e.g. "ai" and "limits" for AI providers. */
+  const groupsOf = (id: SectionId) => [...new Set(FIELDS.filter((f) => f.section === id).map((f) => f.path.split(".")[0]))] as (keyof Settings)[];
+
   const clearSection = (id: SectionId) => {
-    const keep = (k: string) => !k.startsWith(`${id}.`);
+    const keep = (k: string) => !groupsOf(id).some((g) => k.startsWith(`${g}.`));
     setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => keep(k))));
     setDrafts((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => keep(k))));
   };
 
   const resetSection = async (id: SectionId) => {
     try {
-      setSettings(await api.resetSection(id));
+      const before = settings?.ai.providers.map((p) => p.id) ?? [];
+      let next: Settings | null = null;
+      for (const g of groupsOf(id)) next = await api.resetSection(g);
+      if (next) setSettings(next);
+      // Keys of providers the reset removed would otherwise stay in the keychain.
+      for (const pid of before.filter((pid) => !next?.ai.providers.some((p) => p.id === pid))) {
+        await api.deleteKey(pid).catch(() => {});
+      }
       clearSection(id);
       setToast({ text: `${SECTIONS.find((s) => s.id === id)!.title} is back to its defaults`, tone: "ok" });
     } catch (e) {
@@ -114,7 +155,11 @@ export function App() {
 
   if (!settings) return <div className="app app--loading" />;
 
-  const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, update, onError: (m) => setToast({ text: m, tone: "err" }) };
+  const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, update, commitAi, onError: (m) => setToast({ text: m, tone: "err" }) };
+  const extras: Record<string, React.ReactNode> = {
+    "Retries and daily budget": <UsageLine settings={settings} />,
+    "Your screen": <ScreenRecipients settings={settings} />,
+  };
   const results = searchFields(query);
   const current = SECTIONS.find((s) => s.id === section)!;
 
@@ -197,7 +242,7 @@ export function App() {
                 Hotkeys marked <span className="pill pill--idle">Not active yet</span> are saved and checked for conflicts now. They start working once their feature is built.
               </p>
             )}
-            <Groups fields={FIELDS.filter((f) => f.section === section)} ctx={ctx} />
+            <Groups fields={FIELDS.filter((f) => f.section === section)} ctx={ctx} extras={extras} />
           </div>
         )}
       </main>
@@ -216,10 +261,11 @@ type RowContext = {
   hotkeys: HotkeyStatus[];
   customSrc: string | null;
   update: <P extends SettingPath>(path: P, value: ValueAt<P>) => void;
+  commitAi: (ai: Ai) => Promise<string | null>;
   onError: (message: string) => void;
 };
 
-function Groups({ fields, ctx }: { fields: Field[]; ctx: RowContext }) {
+function Groups({ fields, ctx, extras = {} }: { fields: Field[]; ctx: RowContext; extras?: Record<string, React.ReactNode> }) {
   const visible = fields.filter((f) => !f.when || f.when(ctx.settings));
   const groups = [...new Set(visible.map((f) => f.group))];
   return (
@@ -229,6 +275,7 @@ function Groups({ fields, ctx }: { fields: Field[]; ctx: RowContext }) {
           <h2 id={`group-${g}`} className="group__title">
             {g}
           </h2>
+          {extras[g]}
           <div className="panel">
             {visible
               .filter((f) => f.group === g)
@@ -278,7 +325,7 @@ function Row({ field, ctx }: { field: Field; ctx: RowContext }) {
   const error = ctx.errors[field.path];
   const status = field.control.kind === "hotkey" ? ctx.hotkeys.find((h) => h.action === field.path.split(".")[1]) : undefined;
   const warning = !error ? status?.warning ?? (status?.state === "failed" ? status.error : null) : null;
-  const wide = field.control.kind === "buddyStyle";
+  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea"].includes(field.control.kind);
 
   return (
     <div className={`row${wide ? " row--wide" : ""}${error ? " has-error" : ""}`}>
@@ -345,8 +392,58 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
       );
     case "buddyStyle":
       return <BuddyStylePicker value={ctx.settings.buddy.style} customSrc={ctx.customSrc} onChange={set} onError={ctx.onError} />;
+    case "textarea":
+      return <TextArea id={id} value={saved as string} placeholder={c.placeholder} max={c.max} onCommit={set} />;
+    case "money":
+      return <MoneyField id={id} value={saved as number | null} emptyLabel={c.emptyLabel} invalid={!!ctx.errors[path]} onChange={set} />;
+    case "providers":
+      return <ProvidersEditor ai={ctx.settings.ai} commit={ctx.commitAi} />;
+    case "routing":
+      return <RoutingEditor ai={ctx.settings.ai} onChange={(routing) => ctx.commitAi({ ...ctx.settings.ai, routing })} />;
+    case "fallbackChain":
+      return <FallbackEditor ai={ctx.settings.ai} onChange={(fallbackChain) => ctx.commitAi({ ...ctx.settings.ai, fallbackChain })} />;
   }
 }
+
+/** Today's spending next to the limits, refreshed whenever settings change. */
+function UsageLine({ settings }: { settings: Settings }) {
+  const [usage, setUsage] = useState<UsageToday | null>(null);
+  useEffect(() => void api.usageToday().then(setUsage), [settings]);
+  if (!usage) return null;
+  const limit = settings.limits.dailyTokenBudget;
+  const share = limit > 0 ? Math.min(usage.tokens / limit, 1) : 0;
+  return (
+    <div className="usage">
+      <div className="usage__text">
+        <span>Today</span>
+        <strong className="mono">{usage.tokens.toLocaleString()}</strong>
+        <span>{limit > 0 ? `of ${limit.toLocaleString()} tokens` : "tokens, no limit"}</span>
+        {usage.cost > 0 && <span className="mono">· ${usage.cost.toFixed(2)}</span>}
+      </div>
+      {limit > 0 && (
+        <div className={`meter${share > 0.9 ? " meter--hot" : ""}`} role="meter" aria-valuenow={usage.tokens} aria-valuemin={0} aria-valuemax={limit} aria-label="Tokens used today">
+          <span style={{ width: `${share * 100}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Which provider receives screenshots under the current settings. */
+function ScreenRecipients({ settings }: { settings: Settings }) {
+  const ai = settings.ai;
+  const find = (r: typeof ai.routing.ask) => (r ? allModels(ai).find((m) => refKey(m.ref) === refKey(r)) : undefined);
+  const main = find(ai.routing.ask);
+  const seer = main?.model.vision ? main : find(ai.routing.visionFallback);
+  let text: string;
+  if (settings.privacy.capturePaused) text = "Screen capture is paused from the tray, so no screenshots are taken.";
+  else if (!main) text = "No model is set up for questions yet.";
+  else if (!seer) text = `${main.model.id} can't read images, so screenshots aren't sent anywhere.`;
+  else text = `Screenshots go to ${seer.model.id} on ${seer.provider}${isLocalProvider(settings, seer.ref.providerId) ? ", which runs on this computer" : ""}.`;
+  return <p className="group__note">{text}</p>;
+}
+
+const isLocalProvider = (s: Settings, id: string) => ["ollama", "lmStudio", "llamaCpp"].includes(s.ai.providers.find((p) => p.id === id)?.kind ?? "");
 
 function ResetButton({ title, onReset }: { title: string; onReset: () => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -405,6 +502,13 @@ function SectionIcon({ id }: { id: SectionId }) {
         <path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8" />
       </>
     ),
+    ai: (
+      <>
+        <rect x="6" y="6" width="12" height="12" rx="2.5" />
+        <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
+      </>
+    ),
+    answerStyle: <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM7 10h10M7 13h6" />,
   };
   return (
     <svg className="nav__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">

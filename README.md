@@ -6,13 +6,16 @@ Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first c
 
 The full phase plan, crate list and platform risks are in [docs/PLAN.md](docs/PLAN.md).
 
-## What works today (Phase 1)
+## What works today (Phases 1 and 2)
 
 - **Cursor buddy.** A small character follows the pointer on every monitor, with per-monitor DPI handled in Rust. Three built-in styles (Pip, Spark, Dot) or your own SVG/PNG. Size, opacity, offset and follow smoothness are adjustable. It auto-hides in fullscreen apps and, optionally, when the mouse rests.
 - **Overlays.** One transparent, always-on-top, click-through window per monitor. They're hidden from the taskbar and excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE` on Windows, `NSWindowSharingNone` on macOS). They are rebuilt when monitors are plugged in or removed.
 - **Tray.** Toggle the buddy, toggle voice guidance, pause screen capture, switch behavior profile, open settings, quit. The icon changes when capture is paused. Agent panel and approval inbox are shown but disabled until their phase.
-- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (open settings, pause capture, clear annotations) are registered with the OS. The others are saved and marked "Not active yet".
-- **Settings window.** Search (Ctrl/Cmd+F), instant apply, per-section reset, JSON import/export, inline validation, and light/dark/system theme. Sections: General, Cursor buddy (with a live preview that follows your mouse), Hotkeys.
+- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (text ask, open settings, pause capture, clear annotations) are registered with the OS. The others are saved and marked "Not active yet".
+- **Settings window.** Search (Ctrl/Cmd+F), instant apply, per-section reset, JSON import/export, inline validation, and light/dark/system theme. Sections: General, Cursor buddy (with a live preview that follows your mouse), Hotkeys, AI providers, Answer style.
+- **AI providers.** Anthropic, OpenAI, Google Gemini, Ollama, LM Studio, llama.cpp server and any OpenAI-compatible endpoint, all streaming. Add a provider from a preset, find local models with one click, load a provider's model list, test the connection, and choose which model each feature uses. API keys go in the OS keychain.
+- **Text questions (Alt+Shift+T).** A panel opens next to the cursor. Answers stream in, and follow-ups keep the context until you close it (Esc). Answer style decides whether Helpy sends a screenshot with every question, asks you first, or lets the model decide. Screenshots are of the monitor under the cursor, downscaled to 1568 px, and never include Helpy's own windows.
+- **Retry and budget limits, enforced in Rust.** Timeouts, network errors, rate limits (honoring `retry-after`), provider 5xx errors and garbled output are retried with exponential backoff, up to 3 times by default. Bad keys, missing models and refusals are never retried on the same model. Fallback models get one attempt each and count toward the retry limit. A daily token limit (and an optional cost limit) is checked before every call, retries included, and spending is saved to disk so it survives restarts.
 
 ## Run it
 
@@ -20,8 +23,10 @@ Prerequisites: Node 20+, Rust stable, and the [Tauri system dependencies](https:
 
 ```sh
 sudo apt install libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev \
-  libayatana-appindicator3-dev librsvg2-dev
+  libayatana-appindicator3-dev librsvg2-dev libpipewire-0.3-dev libclang-dev
 ```
+
+PipeWire is used for screen capture on Wayland. API keys are stored through the Secret Service (GNOME Keyring or KWallet), so one of those needs to be running to save keys on Linux; local providers work without it.
 
 Then:
 
@@ -32,11 +37,14 @@ npm run tauri dev
 
 Helpy starts in the tray. Open settings from the tray menu or with Alt+Shift+S. To have the window open on launch instead, turn off **General → Start in the tray**.
 
+To ask questions, add a provider under **Settings → AI providers**. The quickest free option is [Ollama](https://ollama.com) with a vision model such as `llama3.2-vision`: start it, click **Add provider → Find models on this computer**, and press Alt+Shift+T anywhere.
+
 ## Tests
 
 ```sh
 npm test                          # frontend: key handling, follow smoothing, settings registry
-cd src-tauri && cargo test        # backend: settings load/repair/validation, hotkeys, monitor math
+cd src-tauri && cargo test        # backend: settings, hotkeys, monitor math, provider request mapping,
+                                  # SSE parsing, screenshot mapping, and the retry/budget limits
 ```
 
 ## Project layout
@@ -44,6 +52,9 @@ cd src-tauri && cargo test        # backend: settings load/repair/validation, ho
 ```
 src-tauri/src/
   settings/     typed schema (source of truth), validation, persistence, commands
+  ai/           provider adapters (anthropic, openai, gemini), SSE, limits, ledger,
+                keychain secrets, and the ask flow
+  capture.rs    screenshots of the cursor's monitor, and model-to-screen coordinate mapping
   overlay.rs    per-monitor overlay windows
   cursor.rs     cursor polling, per-monitor coordinates, buddy visibility
   fullscreen/   fullscreen-app detection for Windows, macOS and X11
@@ -53,6 +64,7 @@ src/
   bindings/     TypeScript types generated from the Rust schema (do not edit)
   buddy/        the buddy character and smoothing, shared by overlay and settings
   overlay/      overlay window app
+  ask/          the ask panel
   settings/     settings window app; registry.ts lists every setting's label and control
 design/         source SVGs for the app and tray icons
 ```
@@ -65,5 +77,5 @@ design/         source SVGs for the app and tray icons
 
 ## Platform notes
 
-- **macOS:** transparent windows need `macOSPrivateApi`, which rules out the Mac App Store. Direct downloads are fine.
+- **macOS:** transparent windows need `macOSPrivateApi`, which rules out the Mac App Store. Direct downloads are fine. Screenshots need the Screen Recording permission (onboarding for it arrives in Phase 9; until then macOS asks on first capture).
 - **Linux:** overlays need a compositing window manager to be transparent; the settings page warns when none is running. On Wayland, Helpy runs through XWayland when it can. The General section lists what won't work in your session.

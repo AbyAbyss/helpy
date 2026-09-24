@@ -19,7 +19,12 @@ use crate::settings::{self, Settings, SettingsStore};
 pub const STATUS_EVENT: &str = "hotkeys://status";
 
 /// Actions that do something in this build.
-const WIRED: &[&str] = &["openSettings", "pauseCapture", "clearAnnotations"];
+const WIRED: &[&str] = &[
+    "openSettings",
+    "pauseCapture",
+    "clearAnnotations",
+    "textAsk",
+];
 
 #[derive(Serialize, TS, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -227,6 +232,7 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     };
     match action {
         "openSettings" => crate::windows::show_settings(app),
+        "textAsk" => crate::windows::show_ask(app),
         "pauseCapture" => {
             let s = app.state::<SettingsStore>().get();
             let _ = settings::settings_set(
