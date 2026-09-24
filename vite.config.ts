@@ -8,6 +8,16 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react()],
 
+  // One HTML entry per window kind, so each window loads only its own code.
+  build: {
+    rollupOptions: {
+      input: {
+        settings: "settings.html",
+        overlay: "overlay.html",
+      },
+    },
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

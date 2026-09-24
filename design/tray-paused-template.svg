@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <mask id="m"><rect width="64" height="64" fill="#fff"/><path d="M25 34 q4 3 8 0 M37 34 q4 3 8 0" stroke="#000" stroke-width="3.2" stroke-linecap="round" fill="none"/></mask>
+  <path d="M6 6 L26 13.5 A22 22 0 1 1 13.5 26 Z" fill="#000" fill-opacity="0.55" mask="url(#m)" transform="translate(-2 -2) scale(1.06)"/>
+</svg>

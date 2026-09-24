@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "helpy",
+  "productName": "Helpy",
   "version": "0.1.0",
   "identifier": "com.helpy.app",
   "build": {
@@ -10,15 +10,22 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "helpy",
-        "width": 800,
-        "height": 600
+        "label": "settings",
+        "url": "settings.html",
+        "title": "Helpy Settings",
+        "width": 1040,
+        "height": 720,
+        "minWidth": 780,
+        "minHeight": 520,
+        "center": true,
+        "visible": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     }
   },
   "bundle": {
