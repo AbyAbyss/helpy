@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import Markdown from "react-markdown";
 import type { AskAction } from "../bindings/AskAction";
+import type { AskEvent } from "../bindings/AskEvent";
 import type { AskStatus } from "../bindings/AskStatus";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
@@ -32,6 +33,21 @@ export function Panel() {
     return () => void off.then((f) => f());
   }, [refreshStatus]);
 
+  // Questions can come from this panel or from voice; both arrive as events.
+  useEffect(() => {
+    const off = listen<AskEvent>(EVENTS.ask, ({ payload: e }) => {
+      setItems((prev) => apply(prev, e));
+      if (e.type === "question") {
+        setRunning(true);
+        setMeta(null);
+      }
+      if (e.type === "started") setMeta(e.model);
+      if (e.type === "done") setMeta(`${e.model} · ${e.tokens.toLocaleString()} tokens`);
+      if (e.type === "done" || e.type === "error") setRunning(false);
+    });
+    return () => void off.then((f) => f());
+  }, []);
+
   // Follow the answer as it streams, unless the user scrolled up to read.
   useEffect(() => {
     const el = scroller.current;
@@ -42,19 +58,11 @@ export function Panel() {
     const q = text.trim();
     if (!q || running) return;
     setDraft("");
-    setMeta(null);
-    setRunning(true);
-    setItems((prev) => [...prev, { kind: "user", text: q }]);
     try {
-      await api.ask(q, (e) => {
-        setItems((prev) => apply(prev, e));
-        if (e.type === "started") setMeta(e.model);
-        if (e.type === "done") setMeta(`${e.model} · ${e.tokens.toLocaleString()} tokens`);
-      });
+      await api.ask(q);
     } catch (e) {
       setItems((prev) => [...prev, { kind: "error", text: String(e), action: null }]);
     } finally {
-      setRunning(false);
       input.current?.focus();
     }
   };
@@ -160,7 +168,12 @@ function ItemView({ item, onPermission }: { item: Item; onPermission: (id: numbe
   const [big, setBig] = useState(false);
   switch (item.kind) {
     case "user":
-      return <div className="msg msg--user">{item.text}</div>;
+      return (
+        <div className={`msg msg--user${item.voice ? " msg--voice" : ""}`}>
+          {item.voice && <MicIcon />}
+          {item.text}
+        </div>
+      );
     case "assistant":
       return (
         <div className="msg msg--ai">
@@ -275,6 +288,15 @@ function PipMark({ size = 20 }: { size?: number }) {
       <path d="M6 6 L26 13.5 A22 22 0 1 1 13.5 26 Z" fill="var(--accent)" />
       <ellipse cx="29" cy="33" rx="3.2" ry="4.4" fill="var(--surface)" />
       <ellipse cx="41" cy="33" rx="3.2" ry="4.4" fill="var(--surface)" />
+    </svg>
+  );
+}
+
+function MicIcon() {
+  return (
+    <svg className="msg__mic" viewBox="0 0 16 16" width="12" height="12" aria-label="Spoken">
+      <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" />
+      <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2" />
     </svg>
   );
 }

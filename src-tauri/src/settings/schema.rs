@@ -15,6 +15,7 @@ pub struct Settings {
     pub profiles: Profiles,
     pub buddy: Buddy,
     pub hotkeys: Hotkeys,
+    pub voice_input: VoiceInput,
     pub voice_output: VoiceOutput,
     pub privacy: Privacy,
     pub ai: Ai,
@@ -29,6 +30,7 @@ pub const SECTIONS: &[&str] = &[
     "profiles",
     "buddy",
     "hotkeys",
+    "voiceInput",
     "voiceOutput",
     "privacy",
     "ai",
@@ -216,18 +218,112 @@ impl Hotkeys {
     }
 }
 
-/// Only the on/off switch exists before Phase 3.
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SttEngine {
+    /// whisper.cpp on this computer.
+    #[default]
+    Whisper,
+    OpenAi,
+    Deepgram,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct VoiceInput {
+    pub engine: SttEngine,
+    /// Name of the local Whisper model, e.g. "base" (file ggml-base.bin).
+    pub whisper_model: String,
+    /// An AI provider (OpenAI or OpenAI-compatible) whose key is used.
+    pub openai_provider_id: Option<String>,
+    pub openai_model: String,
+    pub deepgram_model: String,
+    /// Input device name. None uses the system default.
+    pub microphone: Option<String>,
+    /// "auto" or a language code.
+    pub language: String,
+    /// Stop listening after this much silence. 0 turns auto-stop off.
+    pub silence_seconds: f64,
+    pub noise_suppression: bool,
+    pub wake_word: bool,
+    pub wake_phrase: String,
+}
+
+impl Default for VoiceInput {
+    fn default() -> Self {
+        Self {
+            engine: SttEngine::Whisper,
+            whisper_model: "base".into(),
+            openai_provider_id: None,
+            openai_model: "whisper-1".into(),
+            deepgram_model: "nova-3".into(),
+            microphone: None,
+            language: "auto".into(),
+            silence_seconds: 1.5,
+            noise_suppression: true,
+            wake_word: false,
+            wake_phrase: "hey helpy".into(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum TtsEngine {
+    /// The voices built into the operating system.
+    #[default]
+    System,
+    Piper,
+    OpenAi,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ReadAloud {
+    #[default]
+    FullAnswers,
+    StepsOnly,
+}
+
 #[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 #[ts(export)]
 pub struct VoiceOutput {
     pub voice_guidance: bool,
+    pub engine: TtsEngine,
+    /// OS voice id. None uses the system default voice.
+    pub system_voice: Option<String>,
+    /// Piper voice key, e.g. "en_US-lessac-medium".
+    pub piper_voice: String,
+    pub openai_provider_id: Option<String>,
+    pub openai_model: String,
+    pub openai_voice: String,
+    /// 1.0 is normal speed.
+    pub speed: f64,
+    /// 0 to 1.
+    pub volume: f64,
+    pub read_aloud: ReadAloud,
+    pub announce_agents: bool,
 }
 
 impl Default for VoiceOutput {
     fn default() -> Self {
         Self {
             voice_guidance: true,
+            engine: TtsEngine::System,
+            system_voice: None,
+            piper_voice: "en_US-lessac-medium".into(),
+            openai_provider_id: None,
+            openai_model: "tts-1".into(),
+            openai_voice: "alloy".into(),
+            speed: 1.0,
+            volume: 1.0,
+            read_aloud: ReadAloud::FullAnswers,
+            announce_agents: true,
         }
     }
 }

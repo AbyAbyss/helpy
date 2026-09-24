@@ -6,6 +6,10 @@ use crate::overlay::Overlays;
 
 pub const SETTINGS: &str = "settings";
 pub const ASK: &str = "ask";
+pub const PILL: &str = "pill";
+
+/// Voice pill size in logical pixels (matches tauri.conf.json).
+const PILL_SIZE: (f64, f64) = (300.0, 120.0);
 pub const OPEN_SECTION_EVENT: &str = "settings://open-section";
 
 /// Ask panel size in logical pixels (matches tauri.conf.json).
@@ -71,6 +75,40 @@ pub fn show_ask(app: &AppHandle) {
     let _ = w.set_always_on_top(true);
     let _ = w.set_focus();
     let _ = w.emit_to(ASK, "ask://shown", ());
+}
+
+/// Shows the voice waveform just right of the cursor, without taking focus
+/// from the app the user is in.
+pub fn show_pill(app: &AppHandle) {
+    let Some(w) = app.get_webview_window(PILL) else {
+        return;
+    };
+    if let Ok(cursor) = app.cursor_position() {
+        let monitors = app.state::<Overlays>().snapshot();
+        if let Some((_, m)) = monitors
+            .iter()
+            .find(|(_, m)| m.contains(cursor.x, cursor.y))
+        {
+            let size = (PILL_SIZE.0 * m.scale, PILL_SIZE.1 * m.scale);
+            // Sit level with the cursor, where the eye already is.
+            let at = (cursor.x, cursor.y - 22.0 * m.scale);
+            let (x, y) = place_near(
+                at,
+                (m.x as f64, m.y as f64, m.width as f64, m.height as f64),
+                size,
+                14.0 * m.scale,
+            );
+            let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        }
+    }
+    let _ = w.show();
+    let _ = w.set_always_on_top(true);
+}
+
+pub fn hide_pill(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(PILL) {
+        let _ = w.hide();
+    }
 }
 
 #[tauri::command]

@@ -9,8 +9,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::json;
-use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
@@ -45,11 +44,18 @@ pub struct AskState {
     next_id: AtomicU32,
 }
 
-/// What the panel shows while a question is answered.
+pub const EVENT: &str = "ask://event";
+
+/// What the panel and the voice pill show while a question is answered.
 #[derive(Serialize, TS, Clone, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(export)]
 pub enum AskEvent {
+    /// A new question, typed or spoken.
+    Question {
+        text: String,
+        voice: bool,
+    },
     Started {
         model: String,
     },
@@ -316,13 +322,17 @@ struct Turn<'a> {
     app: &'a AppHandle,
     settings: Settings,
     plan: Plan,
-    channel: &'a Channel<AskEvent>,
+    /// Reads the answer aloud (voice questions with voice guidance on).
+    feed: Option<crate::voice::Feed>,
     cancel: CancellationToken,
 }
 
 impl Turn<'_> {
     fn send(&self, e: AskEvent) {
-        let _ = self.channel.send(e);
+        if let Some(f) = &self.feed {
+            f.on_event(&e);
+        }
+        let _ = self.app.emit(EVENT, e);
     }
 
     fn describe(&self, r: &ModelRef) -> String {
@@ -421,23 +431,16 @@ impl Turn<'_> {
                     model: m.id.clone(),
                     ..base.clone()
                 };
-                let channel = self.channel.clone();
                 let key_name = format!("ask · {} · {}", p.name, m.id);
                 async move {
-                    let key = match secrets::get(&p.id) {
-                        Ok(k) => k,
-                        // Servers that work without a key mustn't be blocked
-                        // by a missing keychain.
-                        Err(_) if !p.kind.requires_key() => None,
-                        Err(e) => return Err(e),
-                    };
-                    let _ = channel.send(AskEvent::Started {
+                    let key = secrets::key_for(&p)?;
+                    self.send(AskEvent::Started {
                         model: format!("{} · {}", m.id, p.name),
                     });
                     let mut filter = SentinelFilter::new(sentinel);
                     let mut on_text = |piece: &str| {
                         if let Some(t) = filter.push(piece) {
-                            let _ = channel.send(AskEvent::Text { text: t });
+                            self.send(AskEvent::Text { text: t });
                         }
                     };
                     let result = provider::stream_chat(
@@ -451,7 +454,7 @@ impl Turn<'_> {
                     )
                     .await;
                     if let Some(rest) = filter.finish().filter(|_| result.is_ok()) {
-                        let _ = channel.send(AskEvent::Text { text: rest });
+                        self.send(AskEvent::Text { text: rest });
                     }
                     match &result {
                         Ok(c) => {
@@ -637,23 +640,21 @@ fn action_for(kind: &ErrorKind) -> Option<AskAction> {
     }
 }
 
-#[tauri::command]
-pub async fn ask_send(
-    app: AppHandle,
-    text: String,
-    channel: Channel<AskEvent>,
-) -> Result<(), String> {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Origin {
+    Text,
+    Voice,
+}
+
+/// Answers one question in the ongoing conversation. Progress goes out as
+/// `ask://event` to every window, so the panel and the voice pill both follow
+/// it. Errors are reported as events; `Err` only means another question is
+/// still running.
+pub async fn ask(app: &AppHandle, text: String, origin: Origin) -> Result<(), String> {
     let state = app.state::<AskState>();
     let settings = app.state::<SettingsStore>().get();
-    let plan = match plan(&settings.ai, &settings.answer_style) {
-        Ok(p) => p,
-        Err(message) => {
-            let _ = channel.send(AskEvent::Error {
-                message,
-                action: Some(AskAction::OpenProviders),
-            });
-            return Ok(());
-        }
+    let emit = |e: AskEvent| {
+        let _ = app.emit(EVENT, e);
     };
     let cancel = CancellationToken::new();
     {
@@ -663,12 +664,32 @@ pub async fn ask_send(
         }
         *running = Some(cancel.clone());
     }
+    emit(AskEvent::Question {
+        text: text.clone(),
+        voice: origin == Origin::Voice,
+    });
+    let plan = match plan(&settings.ai, &settings.answer_style) {
+        Ok(p) => p,
+        Err(message) => {
+            *state.running.lock().unwrap() = None;
+            emit(AskEvent::Error {
+                message,
+                action: Some(AskAction::OpenProviders),
+            });
+            return Ok(());
+        }
+    };
     let history = state.conversation.lock().unwrap().clone();
+    let feed = if origin == Origin::Voice {
+        crate::voice::Feed::new(app, &settings)
+    } else {
+        None
+    };
     let turn = Turn {
-        app: &app,
+        app,
         settings,
         plan,
-        channel: &channel,
+        feed,
         cancel,
     };
     let result = turn.run(history, text).await;
@@ -677,7 +698,7 @@ pub async fn ask_send(
     match result {
         Ok((messages, completion)) => {
             *state.conversation.lock().unwrap() = messages;
-            let _ = channel.send(AskEvent::Done {
+            turn.send(AskEvent::Done {
                 model: completion.model.clone(),
                 tokens: completion.usage.total().min(u32::MAX as u64) as u32,
             });
@@ -688,13 +709,23 @@ pub async fn ask_send(
             } else {
                 e.message.clone()
             };
-            let _ = channel.send(AskEvent::Error {
+            turn.send(AskEvent::Error {
                 message,
                 action: action_for(&e.kind),
             });
         }
     }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn ask_send(app: AppHandle, text: String) -> Result<(), String> {
+    ask(&app, text, Origin::Text).await
+}
+
+/// Stops the running answer, if any.
+pub fn cancel(app: &AppHandle) {
+    ask_cancel(app.state::<AskState>());
 }
 
 #[tauri::command]

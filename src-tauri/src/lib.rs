@@ -8,6 +8,7 @@ mod overlay;
 mod platform;
 mod settings;
 mod tray;
+mod voice;
 mod windows;
 
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
@@ -20,6 +21,12 @@ use settings::{Settings, SettingsStore};
 pub(crate) fn on_settings_changed(app: &AppHandle, prev: &Settings, next: &Settings) {
     if prev.hotkeys != next.hotkeys {
         hotkeys::sync(app, next);
+    }
+    if prev.voice_input != next.voice_input {
+        if prev.voice_input.whisper_model != next.voice_input.whisper_model {
+            app.state::<voice::VoiceState>().whisper.forget();
+        }
+        voice::sync_wake(app);
     }
     if prev.general.launch_at_login != next.general.launch_at_login {
         apply_autostart(app, next.general.launch_at_login);
@@ -81,10 +88,12 @@ pub fn run() {
                 ledger: ai::ledger::Ledger::load(app.path().app_data_dir()?.join("usage.json")),
             });
 
+            app.manage(voice::VoiceState::new(handle.clone()));
             tray::build(&handle, &s)?;
             hotkeys::sync(&handle, &s);
             overlay::sync(&handle);
             cursor::spawn(handle.clone());
+            voice::setup(&handle);
             if handle.autolaunch().is_enabled().unwrap_or(false) != s.general.launch_at_login {
                 apply_autostart(&handle, s.general.launch_at_login);
             }
@@ -131,6 +140,24 @@ pub fn run() {
             ai::ask::ask_status,
             windows::ask_hide,
             windows::open_settings_section,
+            voice::voice_input_devices,
+            voice::voice_meter_start,
+            voice::voice_meter_stop,
+            voice::voice_whisper_models,
+            voice::voice_whisper_download,
+            voice::voice_whisper_delete,
+            voice::voice_system_voices,
+            voice::voice_piper_voices,
+            voice::voice_piper_install,
+            voice::voice_piper_remove,
+            voice::voice_play_sample,
+            voice::voice_stop_speaking,
+            voice::voice_set_deepgram_key,
+            voice::voice_has_deepgram_key,
+            voice::voice_expand,
+            voice::voice_pill_hide,
+            voice::voice_cancel,
+            voice::voice_support,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Helpy");

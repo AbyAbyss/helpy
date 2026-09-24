@@ -1,6 +1,5 @@
 // Typed wrappers around Helpy's Rust commands and events.
-import { Channel, invoke } from "@tauri-apps/api/core";
-import type { AskEvent } from "../bindings/AskEvent";
+import { invoke } from "@tauri-apps/api/core";
 import type { AskStatus } from "../bindings/AskStatus";
 import type { LocalServer } from "../bindings/LocalServer";
 import type { ModelInfo } from "../bindings/ModelInfo";
@@ -8,7 +7,11 @@ import type { ProviderConfig } from "../bindings/ProviderConfig";
 import type { UsageToday } from "../bindings/UsageToday";
 import type { FieldError } from "../bindings/FieldError";
 import type { HotkeyStatus } from "../bindings/HotkeyStatus";
+import type { PiperVoice } from "../bindings/PiperVoice";
 import type { PlatformInfo } from "../bindings/PlatformInfo";
+import type { SystemVoice } from "../bindings/SystemVoice";
+import type { VoiceSupport } from "../bindings/VoiceSupport";
+import type { WhisperModel } from "../bindings/WhisperModel";
 import type { Settings } from "../bindings/Settings";
 
 export const EVENTS = {
@@ -19,6 +22,14 @@ export const EVENTS = {
   buddyImageChanged: "buddy://image-changed",
   openSection: "settings://open-section",
   askShown: "ask://shown",
+  ask: "ask://event",
+  voiceState: "voice://state",
+  voiceLevel: "voice://level",
+  voicePartial: "voice://partial",
+  voiceMeter: "voice://meter",
+  speaking: "voice://speaking",
+  speakError: "voice://speak-error",
+  download: "voice://download",
 } as const;
 
 type Section = keyof Settings;
@@ -66,18 +77,34 @@ export const api = {
   detectLocal: () => invoke<LocalServer[]>("ai_detect_local"),
   usageToday: () => invoke<UsageToday>("ai_usage_today"),
 
-  // The ask panel.
-  ask: (text: string, onEvent: (e: AskEvent) => void) => {
-    const channel = new Channel<AskEvent>();
-    channel.onmessage = onEvent;
-    return invoke<void>("ask_send", { text, channel });
-  },
+  // The ask panel. Progress arrives as EVENTS.ask events.
+  ask: (text: string) => invoke<void>("ask_send", { text }),
   askCancel: () => invoke<void>("ask_cancel"),
   askReset: () => invoke<void>("ask_reset"),
   askScreenAnswer: (id: number, allow: boolean) => invoke<void>("ask_screen_answer", { id, allow }),
   askStatus: () => invoke<AskStatus>("ask_status"),
   askHide: () => invoke<void>("ask_hide"),
   openSettingsSection: (section: string) => invoke<void>("open_settings_section", { section }),
+
+  // Voice.
+  inputDevices: () => invoke<string[]>("voice_input_devices"),
+  meterStart: (device: string | null, denoise: boolean) => invoke<void>("voice_meter_start", { device, denoise }),
+  meterStop: () => invoke<void>("voice_meter_stop"),
+  whisperModels: () => invoke<WhisperModel[]>("voice_whisper_models"),
+  whisperDownload: (name: string) => invoke<void>("voice_whisper_download", { name }),
+  whisperDelete: (name: string) => invoke<void>("voice_whisper_delete", { name }),
+  systemVoices: () => invoke<SystemVoice[]>("voice_system_voices"),
+  piperVoices: () => invoke<PiperVoice[]>("voice_piper_voices"),
+  piperInstall: (key: string) => invoke<void>("voice_piper_install", { key }),
+  piperRemove: (key: string) => invoke<void>("voice_piper_remove", { key }),
+  playSample: () => invoke<void>("voice_play_sample"),
+  stopSpeaking: () => invoke<void>("voice_stop_speaking"),
+  setDeepgramKey: (key: string) => invoke<void>("voice_set_deepgram_key", { key }),
+  hasDeepgramKey: () => invoke<boolean>("voice_has_deepgram_key"),
+  voiceExpand: () => invoke<void>("voice_expand"),
+  voicePillHide: () => invoke<void>("voice_pill_hide"),
+  voiceCancel: () => invoke<void>("voice_cancel"),
+  voiceSupport: () => invoke<VoiceSupport>("voice_support"),
 };
 
 export function asFieldErrors(e: unknown): FieldError[] {

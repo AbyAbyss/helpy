@@ -5,7 +5,7 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "voiceInput" | "voiceOutput";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, appearance and language." },
@@ -13,9 +13,12 @@ export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "hotkeys", title: "Hotkeys", blurb: "Shortcuts that work from any app. Click one to change it." },
   { id: "ai", title: "AI providers", blurb: "The models Helpy talks to, what each one is used for, and how much it may spend." },
   { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
+  { id: "voiceInput", title: "Voice input", blurb: "How Helpy hears you: the microphone, the speech engine, and when it stops listening." },
+  { id: "voiceOutput", title: "Voice output", blurb: "Whether Helpy reads answers aloud, and in which voice." },
 ];
 
-type Option = { value: string; label: string };
+/** `requires` hides an option on computers that can't use it. */
+type Option = { value: string; label: string; requires?: "piper" };
 
 export type Control =
   | { kind: "toggle" }
@@ -27,7 +30,15 @@ export type Control =
   | { kind: "textarea"; placeholder: string; max: number }
   /** A dollar amount that can be left empty to turn it off. */
   | { kind: "money"; emptyLabel: string }
+  | { kind: "text"; placeholder: string }
   | { kind: "buddyStyle" }
+  | { kind: "whisperModels" }
+  | { kind: "micPicker" }
+  /** An AI provider whose key a speech service borrows (OpenAI-style only). */
+  | { kind: "providerSelect" }
+  | { kind: "deepgram" }
+  | { kind: "systemVoice" }
+  | { kind: "piperVoice" }
   | { kind: "providers" }
   | { kind: "routing" }
   | { kind: "fallbackChain" };
@@ -290,6 +301,165 @@ export const FIELDS: Field[] = [
     },
   },
 ];
+
+const SPEECH_LANGUAGES: Option[] = [
+  { value: "auto", label: "Detect automatically" },
+  { value: "en", label: "English" },
+  { value: "de", label: "Deutsch" },
+  { value: "es", label: "Español" },
+  { value: "fr", label: "Français" },
+  { value: "it", label: "Italiano" },
+  { value: "nl", label: "Nederlands" },
+  { value: "pl", label: "Polski" },
+  { value: "pt", label: "Português" },
+  { value: "hi", label: "हिन्दी" },
+  { value: "ja", label: "日本語" },
+  { value: "ko", label: "한국어" },
+  { value: "zh", label: "中文" },
+];
+
+const secs = (v: number) => (v === 0 ? "Off" : `${v.toFixed(1)} s`);
+
+FIELDS.push(
+  // Voice input
+  {
+    path: "voiceInput.engine", section: "voiceInput", group: "Speech recognition", label: "Engine",
+    help: "On this computer is private and free. Cloud engines send your recording to that service.",
+    keywords: "speech to text stt whisper transcription cloud",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "whisper", label: "On this computer" },
+        { value: "openAi", label: "OpenAI" },
+        { value: "deepgram", label: "Deepgram" },
+      ],
+    },
+  },
+  {
+    path: "voiceInput.whisperModel", section: "voiceInput", group: "Speech recognition", label: "Whisper model",
+    help: "Bigger models understand more but take longer. Base is a good start.",
+    keywords: "whisper model download local offline size",
+    control: { kind: "whisperModels" },
+    when: (s) => s.voiceInput.engine === "whisper" || s.voiceInput.wakeWord,
+  },
+  {
+    path: "voiceInput.openaiProviderId", section: "voiceInput", group: "Speech recognition", label: "OpenAI account",
+    help: "Uses the API key of this provider from AI providers.", keywords: "openai key transcription",
+    control: { kind: "providerSelect" }, when: (s) => s.voiceInput.engine === "openAi",
+  },
+  {
+    path: "voiceInput.openaiModel", section: "voiceInput", group: "Speech recognition", label: "Transcription model",
+    keywords: "whisper-1 model", control: { kind: "text", placeholder: "whisper-1" },
+    when: (s) => s.voiceInput.engine === "openAi",
+  },
+  {
+    path: "voiceInput.deepgramModel", section: "voiceInput", group: "Speech recognition", label: "Deepgram",
+    help: "The key is stored in your system keychain.", keywords: "deepgram key nova model",
+    control: { kind: "deepgram" }, when: (s) => s.voiceInput.engine === "deepgram",
+  },
+  {
+    path: "voiceInput.microphone", section: "voiceInput", group: "Microphone", label: "Microphone",
+    help: "Speak to check the level.", keywords: "input device mic level meter",
+    control: { kind: "micPicker" },
+  },
+  {
+    path: "voiceInput.noiseSuppression", section: "voiceInput", group: "Microphone", label: "Noise suppression",
+    help: "Filters out fans, keyboards and background hum before transcribing.", keywords: "noise background filter rnnoise",
+    control: { kind: "toggle" },
+  },
+  {
+    path: "voiceInput.language", section: "voiceInput", group: "Listening", label: "Language you speak",
+    keywords: "input language locale", control: { kind: "select", options: SPEECH_LANGUAGES },
+  },
+  {
+    path: "voiceInput.silenceSeconds", section: "voiceInput", group: "Listening", label: "Stop after silence",
+    help: "In toggle mode and after the wake word. Push-to-talk stops when you let go.",
+    keywords: "silence auto stop pause timeout vad",
+    control: { kind: "slider", min: 0, max: 5, step: 0.5, format: secs, ends: ["Off", "5 s"] },
+  },
+  {
+    path: "voiceInput.wakeWord", section: "voiceInput", group: "Listening", label: "Wake word",
+    help: "Listens all the time for the phrase below, on this computer only. Needs the Whisper model.",
+    keywords: "hey helpy hands free always listening hotword",
+    control: { kind: "toggle" },
+  },
+  {
+    path: "voiceInput.wakePhrase", section: "voiceInput", group: "Listening", label: "Wake phrase",
+    help: "Two or three distinct words work best.", keywords: "hotword phrase",
+    control: { kind: "text", placeholder: "hey helpy" }, when: (s) => s.voiceInput.wakeWord,
+  },
+
+  // Voice output
+  {
+    path: "voiceOutput.voiceGuidance", section: "voiceOutput", group: "Speaking", label: "Read answers aloud",
+    help: "For spoken questions. Also in the tray menu. Press Esc to stop talking.",
+    keywords: "voice guidance tts speak read aloud mute", control: { kind: "toggle" },
+  },
+  {
+    path: "voiceOutput.readAloud", section: "voiceOutput", group: "Speaking", label: "What to read",
+    keywords: "steps full answer",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "fullAnswers", label: "Full answers" },
+        { value: "stepsOnly", label: "Step instructions only" },
+      ],
+    },
+  },
+  {
+    path: "voiceOutput.announceAgents", section: "voiceOutput", group: "Speaking", label: "Announce finished agents",
+    help: "A short spoken summary when an agent finishes. Takes effect once agents arrive.", keywords: "agents announcements notifications",
+    control: { kind: "toggle" },
+  },
+  {
+    path: "voiceOutput.engine", section: "voiceOutput", group: "Voice", label: "Engine",
+    help: "System voices need no download. Piper voices sound more natural and run on this computer.",
+    keywords: "tts text to speech piper openai system voice",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "system", label: "System voices" },
+        { value: "piper", label: "Piper", requires: "piper" },
+        { value: "openAi", label: "OpenAI" },
+      ],
+    },
+  },
+  {
+    path: "voiceOutput.systemVoice", section: "voiceOutput", group: "Voice", label: "Voice",
+    keywords: "system voice", control: { kind: "systemVoice" }, when: (s) => s.voiceOutput.engine === "system",
+  },
+  {
+    path: "voiceOutput.piperVoice", section: "voiceOutput", group: "Voice", label: "Piper voice",
+    help: "Download a voice to use it. Most are 20 to 120 MB.", keywords: "piper voice download",
+    control: { kind: "piperVoice" }, when: (s) => s.voiceOutput.engine === "piper",
+  },
+  {
+    path: "voiceOutput.openaiProviderId", section: "voiceOutput", group: "Voice", label: "OpenAI account",
+    help: "Uses the API key of this provider from AI providers.", keywords: "openai key",
+    control: { kind: "providerSelect" }, when: (s) => s.voiceOutput.engine === "openAi",
+  },
+  {
+    path: "voiceOutput.openaiModel", section: "voiceOutput", group: "Voice", label: "Speech model",
+    keywords: "tts-1 model", control: { kind: "text", placeholder: "tts-1" }, when: (s) => s.voiceOutput.engine === "openAi",
+  },
+  {
+    path: "voiceOutput.openaiVoice", section: "voiceOutput", group: "Voice", label: "OpenAI voice",
+    keywords: "alloy nova voice",
+    control: {
+      kind: "select",
+      options: ["alloy", "echo", "fable", "onyx", "nova", "shimmer"].map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) })),
+    },
+    when: (s) => s.voiceOutput.engine === "openAi",
+  },
+  {
+    path: "voiceOutput.speed", section: "voiceOutput", group: "Voice", label: "Speed", keywords: "rate fast slow",
+    control: { kind: "slider", min: 0.5, max: 2, step: 0.05, format: (v) => `${v.toFixed(2)}×`, ends: ["Slower", "Faster"] },
+  },
+  {
+    path: "voiceOutput.volume", section: "voiceOutput", group: "Voice", label: "Volume", keywords: "loud quiet",
+    control: { kind: "slider", min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
+  },
+);
 
 export function searchFields(query: string): Field[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);

@@ -204,7 +204,11 @@ async fn hide_own_windows(app: &AppHandle) -> Vec<tauri::WebviewWindow> {
     let hidden: Vec<_> = app
         .webview_windows()
         .into_values()
-        .filter(|w| w.label().starts_with("overlay-") || w.label() == crate::windows::ASK)
+        .filter(|w| {
+            w.label().starts_with("overlay-")
+                || w.label() == crate::windows::ASK
+                || w.label() == crate::windows::PILL
+        })
         .filter(|w| w.is_visible().unwrap_or(false))
         .collect();
     for w in &hidden {

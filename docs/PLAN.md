@@ -2,7 +2,7 @@
 
 Helpy is built phase by phase. Each phase ends with an app that runs (`npm run tauri dev`) and does something useful on its own. This file lists what each phase delivers, the crates and plugins it pulls in, and the platform risks that could change the design.
 
-Status: **Phases 1 and 2 are implemented.** Phases 3 to 9 are planned.
+Status: **Phases 1 to 3 are implemented.** Phases 4 to 9 are planned, plus the additional requirements R1 to R6 below.
 
 ## Architecture in one paragraph
 
@@ -52,14 +52,15 @@ Crates: `reqwest` 0.12 (rustls with ring, which cross-compiles without extra too
 
 Not in Phase 2: per-agent and per-batch budgets (Phase 6), provider usage charts (Phase 9), voice (Phase 3).
 
-## Phase 3: voice
+## Phase 3: voice (done)
 
-- STT: `whisper-rs` (whisper.cpp) with a model manager that downloads GGML files; cloud STT via OpenAI or Deepgram.
-- Audio input with `cpal`, level meter and waveform streamed to the panel as downsampled frames.
-- TTS: OS voices (`tts` crate covers SAPI, AVSpeechSynthesizer and speech-dispatcher), Piper as a sidecar binary, cloud voice.
-- Push-to-talk needs key-up events, which `tauri-plugin-global-shortcut` provides (`ShortcutState::Released`).
+- Audio in: cpal (through rodio) on its own thread per capture; `voice/dsp.rs` mixes to mono, resamples to 16 kHz, runs RNNoise (`nnnoiseless`, pure Rust) when noise suppression is on, meters the level, and detects the end of speech against a learned noise floor.
+- Speech to text: local Whisper (`whisper-rs`) with live partial transcripts while speaking, or OpenAI / Deepgram through the same retry rules as other provider calls (not counted in the token budget, since they bill per minute of audio). The model manager reads each model's real size from the server.
+- Text to speech: OS voices (`tts` crate), Piper (release binary and voices downloaded on demand; the option is hidden where Piper has no build), and OpenAI voices. Answers are split into sentences as they stream and spoken in order; a retry or Esc drops everything queued.
+- Voice flow: push-to-talk or toggle on the voice hotkey, and an optional wake word matched with local Whisper. The compact waveform pill (R6) sits beside the cursor, sizes its window to its content so it blocks no clicks around it, and opens the full panel on click. Esc is captured only while listening, answering or speaking.
+- Typed and spoken questions share one conversation: answers go out as `ask://event` to every window.
 
-Crates: `cpal`, `whisper-rs`, `tts`, `hound`, `webrtc-vad` or `nnnoiseless` for noise suppression.
+Crates: `rodio` (playback, and its cpal for capture), `whisper-rs`, `nnnoiseless`, `tts`, `flate2`, `tar`, `zip`, `reqwest` multipart.
 
 ## Phase 4: visual guidance
 

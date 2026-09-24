@@ -48,11 +48,7 @@ pub async fn ai_list_models(
     app: AppHandle,
     provider: ProviderConfig,
 ) -> Result<Vec<ModelInfo>, String> {
-    let key = match secrets::get(&provider.id) {
-        Ok(k) => k,
-        Err(_) if !provider.kind.requires_key() => None,
-        Err(e) => return Err(e.message),
-    };
+    let key = secrets::key_for(&provider).map_err(|e| e.message)?;
     let http = app.state::<AiState>().http.clone();
     provider::list_models(&http, &provider, key.as_deref())
         .await

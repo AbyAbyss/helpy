@@ -36,8 +36,31 @@
     "pauseAllAgents": "Alt+Shift+Z",
     "openSettings": "Alt+Shift+S"
   },
+  "voiceInput": {
+    "engine": "whisper",
+    "whisperModel": "base",
+    "openaiProviderId": null,
+    "openaiModel": "whisper-1",
+    "deepgramModel": "nova-3",
+    "microphone": null,
+    "language": "auto",
+    "silenceSeconds": 1.5,
+    "noiseSuppression": true,
+    "wakeWord": false,
+    "wakePhrase": "hey helpy"
+  },
   "voiceOutput": {
-    "voiceGuidance": true
+    "voiceGuidance": true,
+    "engine": "system",
+    "systemVoice": null,
+    "piperVoice": "en_US-lessac-medium",
+    "openaiProviderId": null,
+    "openaiModel": "tts-1",
+    "openaiVoice": "alloy",
+    "speed": 1.0,
+    "volume": 1.0,
+    "readAloud": "fullAnswers",
+    "announceAgents": true
   },
   "privacy": {
     "capturePaused": false

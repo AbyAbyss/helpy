@@ -24,6 +24,7 @@ const WIRED: &[&str] = &[
     "pauseCapture",
     "clearAnnotations",
     "textAsk",
+    "voiceAsk",
 ];
 
 #[derive(Serialize, TS, Clone, Debug, PartialEq)]
@@ -53,6 +54,47 @@ pub struct HotkeyStatus {
 pub struct Hotkeys {
     by_id: Mutex<HashMap<u32, &'static str>>,
     status: Mutex<Vec<HotkeyStatus>>,
+    /// Escape is captured only while voice is active.
+    escape: Mutex<bool>,
+}
+
+fn escape_shortcut() -> Shortcut {
+    Shortcut::new(None, Code::Escape)
+}
+
+/// Captures or releases Escape. While captured, it cancels listening,
+/// answering and speaking; otherwise other apps get it as usual.
+pub fn set_escape(app: &AppHandle, on: bool) {
+    {
+        let state = app.state::<Hotkeys>();
+        let mut wanted = state.escape.lock().unwrap();
+        if *wanted == on {
+            return;
+        }
+        *wanted = on;
+    }
+    // This is often called from inside a hotkey handler. The plugin waits on
+    // the main thread to (un)register, which that handler is blocking, so
+    // doing it here would deadlock. Apply it from another thread instead.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // A later call may have changed its mind already.
+        if *app.state::<Hotkeys>().escape.lock().unwrap() != on {
+            return;
+        }
+        let gs = app.global_shortcut();
+        let result = if on {
+            gs.register(escape_shortcut())
+        } else {
+            gs.unregister(escape_shortcut())
+        };
+        if let Err(e) = result {
+            log::warn!(
+                "couldn't {} Escape: {e}",
+                if on { "capture" } else { "release" }
+            );
+        }
+    });
 }
 
 pub fn parse(accel: &str) -> Result<Shortcut, String> {
@@ -213,11 +255,17 @@ pub fn sync(app: &AppHandle, settings: &Settings) {
 
     *state.by_id.lock().unwrap() = by_id;
     *state.status.lock().unwrap() = statuses.clone();
+    if *state.escape.lock().unwrap() {
+        let _ = gs.register(escape_shortcut());
+    }
     let _ = app.emit(STATUS_EVENT, statuses);
 }
 
 pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
-    if event.state != ShortcutState::Pressed {
+    if shortcut.id() == escape_shortcut().id() {
+        if event.state == ShortcutState::Pressed {
+            crate::voice::cancel(app);
+        }
         return;
     }
     let Some(action) = app
@@ -230,6 +278,17 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     else {
         return;
     };
+    // Push-to-talk needs the key release too; everything else acts on press.
+    if action == "voiceAsk" {
+        match event.state {
+            ShortcutState::Pressed => crate::voice::hotkey_pressed(app),
+            ShortcutState::Released => crate::voice::hotkey_released(app),
+        }
+        return;
+    }
+    if event.state != ShortcutState::Pressed {
+        return;
+    }
     match action {
         "openSettings" => crate::windows::show_settings(app),
         "textAsk" => crate::windows::show_ask(app),

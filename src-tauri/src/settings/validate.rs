@@ -153,6 +153,57 @@ fn validate_ai(s: &Settings, errors: &mut Vec<FieldError>) {
         ));
     }
 
+    let vi = &s.voice_input;
+    check_range(
+        errors,
+        "voiceInput.silenceSeconds",
+        vi.silence_seconds,
+        0.0,
+        10.0,
+    );
+    if vi.language != "auto" && !is_language_tag(&vi.language) {
+        errors.push(FieldError::new(
+            "voiceInput.language",
+            "Use \"auto\" or a language code such as en or de",
+        ));
+    }
+    if vi.wake_word && !(2..=40).contains(&vi.wake_phrase.trim().chars().count()) {
+        errors.push(FieldError::new(
+            "voiceInput.wakePhrase",
+            "Use a short phrase of 2 to 40 characters",
+        ));
+    }
+    if vi.whisper_model.trim().is_empty() {
+        errors.push(FieldError::new("voiceInput.whisperModel", "Choose a model"));
+    }
+    let vo = &s.voice_output;
+    check_range(errors, "voiceOutput.speed", vo.speed, 0.5, 2.0);
+    check_range(errors, "voiceOutput.volume", vo.volume, 0.0, 1.0);
+    // Cloud speech borrows the key of an OpenAI-style provider.
+    for (path, id) in [
+        ("voiceInput.openaiProviderId", &vi.openai_provider_id),
+        ("voiceOutput.openaiProviderId", &vo.openai_provider_id),
+    ] {
+        if let Some(id) = id {
+            match ai.provider(id) {
+                None => errors.push(FieldError::new(path, "That provider isn't set up any more")),
+                Some(p)
+                    if !matches!(
+                        p.kind,
+                        super::schema::ProviderKind::OpenAi
+                            | super::schema::ProviderKind::OpenAiCompatible
+                    ) =>
+                {
+                    errors.push(FieldError::new(
+                        path,
+                        "Pick an OpenAI or OpenAI-compatible provider",
+                    ))
+                }
+                Some(_) => {}
+            }
+        }
+    }
+
     let l = &s.limits;
     check_range(errors, "limits.maxRetries", l.max_retries as f64, 0.0, 10.0);
     check_range(

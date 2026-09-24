@@ -7,6 +7,7 @@ import type { Hotkeys } from "./Hotkeys";
 import type { Limits } from "./Limits";
 import type { Privacy } from "./Privacy";
 import type { Profiles } from "./Profiles";
+import type { VoiceInput } from "./VoiceInput";
 import type { VoiceOutput } from "./VoiceOutput";
 
-export type Settings = { general: General, profiles: Profiles, buddy: Buddy, hotkeys: Hotkeys, voiceOutput: VoiceOutput, privacy: Privacy, ai: Ai, answerStyle: AnswerStyle, limits: Limits, };
+export type Settings = { general: General, profiles: Profiles, buddy: Buddy, hotkeys: Hotkeys, voiceInput: VoiceInput, voiceOutput: VoiceOutput, privacy: Privacy, ai: Ai, answerStyle: AnswerStyle, limits: Limits, };

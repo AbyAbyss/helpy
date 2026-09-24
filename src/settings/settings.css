@@ -1585,3 +1585,186 @@ select {
 .meter--hot span {
   background: var(--err);
 }
+
+/* ---------- Voice ---------- */
+
+.text-input {
+  height: 34px;
+  min-width: 200px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  color: var(--ink);
+  outline: none;
+  user-select: text;
+}
+
+.text-input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus);
+}
+
+.text-input.is-invalid {
+  border-color: var(--err);
+  background: var(--err-soft);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 320px;
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.models {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.models > .select {
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+
+.model {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px 150px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+
+.model.is-current {
+  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+  background: color-mix(in srgb, var(--ok-soft) 60%, transparent);
+}
+
+.model__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.model__name {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.model__size {
+  color: var(--ink-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.model__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.dl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 140px;
+}
+
+.dl__bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.dl__bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 200ms ease;
+}
+
+.dl__bar span.is-indeterminate {
+  animation: slide 1.1s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+.dl__text {
+  width: 3.5em;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.mic {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.mic__err {
+  max-width: 300px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--err);
+  text-align: right;
+}
+
+.level {
+  display: flex;
+  gap: 3px;
+}
+
+.level span {
+  width: 9px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background 60ms linear;
+}
+
+.level span.is-on {
+  background: var(--ok);
+}
+
+.level span.is-hot {
+  background: var(--warn);
+}
+
+.sample {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 2px 2px;
+}
+
+/* Device and voice names can be very long; don't let one stretch the row. */
+.row__control .select select {
+  max-width: 340px;
+  text-overflow: ellipsis;
+}

@@ -4,6 +4,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Ai } from "../bindings/Ai";
 import type { HotkeyStatus } from "../bindings/HotkeyStatus";
 import type { UsageToday } from "../bindings/UsageToday";
+import type { VoiceSupport } from "../bindings/VoiceSupport";
 import type { PlatformInfo } from "../bindings/PlatformInfo";
 import type { Settings } from "../bindings/Settings";
 import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } from "../lib/ipc";
@@ -14,6 +15,7 @@ import { FallbackEditor, RoutingEditor } from "./ai/Routing";
 import { allModels, refKey } from "./ai/routing";
 import { HotkeyField, MoneyField, NumberField, Segmented, Select, Slider, TextArea, Toggle } from "./controls";
 import { FIELDS, SECTIONS, searchFields, type Field, type SectionId } from "./registry";
+import { DeepgramField, MicPicker, PiperVoicePicker, ProviderSelect, SampleButton, SystemVoiceSelect, TextInput, WhisperModels } from "./VoiceControls";
 
 type Errors = Record<string, string>;
 
@@ -26,6 +28,7 @@ export function App() {
   const [drafts, setDrafts] = useState<Record<string, unknown>>({});
   const [hotkeys, setHotkeys] = useState<HotkeyStatus[]>([]);
   const [platform, setPlatform] = useState<PlatformInfo | null>(null);
+  const [support, setSupport] = useState<VoiceSupport>({ piper: true });
   const [toast, setToast] = useState<{ text: string; tone: "ok" | "err" } | null>(null);
   const customSrc = useCustomBuddy();
   const search = useRef<HTMLInputElement>(null);
@@ -37,6 +40,7 @@ export function App() {
   useEffect(() => {
     api.hotkeyStatus().then(setHotkeys);
     api.platform().then(setPlatform);
+    api.voiceSupport().then(setSupport);
     const off = listen<HotkeyStatus[]>(EVENTS.hotkeyStatus, (e) => setHotkeys(e.payload));
     return () => void off.then((f) => f());
   }, []);
@@ -155,10 +159,11 @@ export function App() {
 
   if (!settings) return <div className="app app--loading" />;
 
-  const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, update, commitAi, onError: (m) => setToast({ text: m, tone: "err" }) };
+  const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, support, update, commitAi, onError: (m) => setToast({ text: m, tone: "err" }) };
   const extras: Record<string, React.ReactNode> = {
     "Retries and daily budget": <UsageLine settings={settings} />,
     "Your screen": <ScreenRecipients settings={settings} />,
+    Voice: <SampleButton />,
   };
   const results = searchFields(query);
   const current = SECTIONS.find((s) => s.id === section)!;
@@ -260,6 +265,7 @@ type RowContext = {
   drafts: Record<string, unknown>;
   hotkeys: HotkeyStatus[];
   customSrc: string | null;
+  support: VoiceSupport;
   update: <P extends SettingPath>(path: P, value: ValueAt<P>) => void;
   commitAi: (ai: Ai) => Promise<string | null>;
   onError: (message: string) => void;
@@ -325,7 +331,7 @@ function Row({ field, ctx }: { field: Field; ctx: RowContext }) {
   const error = ctx.errors[field.path];
   const status = field.control.kind === "hotkey" ? ctx.hotkeys.find((h) => h.action === field.path.split(".")[1]) : undefined;
   const warning = !error ? status?.warning ?? (status?.state === "failed" ? status.error : null) : null;
-  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea"].includes(field.control.kind);
+  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice"].includes(field.control.kind);
 
   return (
     <div className={`row${wide ? " row--wide" : ""}${error ? " has-error" : ""}`}>
@@ -373,7 +379,8 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
     case "toggle":
       return <Toggle id={id} checked={value as boolean} onChange={set} />;
     case "segmented":
-      return <Segmented id={id} value={value as string} options={c.options} onChange={set} />;
+      // Options this computer can't use are hidden, not shown and then failing.
+      return <Segmented id={id} value={value as string} options={c.options.filter((o) => !o.requires || ctx.support[o.requires])} onChange={set} />;
     case "select":
       return <Select id={id} value={value as string} options={c.options} onChange={set} />;
     case "slider":
@@ -396,6 +403,20 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
       return <TextArea id={id} value={saved as string} placeholder={c.placeholder} max={c.max} onCommit={set} />;
     case "money":
       return <MoneyField id={id} value={saved as number | null} emptyLabel={c.emptyLabel} invalid={!!ctx.errors[path]} onChange={set} />;
+    case "text":
+      return <TextInput id={id} value={saved as string} placeholder={c.placeholder} invalid={!!ctx.errors[path]} onCommit={set} />;
+    case "whisperModels":
+      return <WhisperModels value={saved as string} onChange={set} />;
+    case "micPicker":
+      return <MicPicker value={saved as string | null} denoise={ctx.settings.voiceInput.noiseSuppression} onChange={set} />;
+    case "providerSelect":
+      return <ProviderSelect id={id} settings={ctx.settings} value={saved as string | null} onChange={set} />;
+    case "deepgram":
+      return <DeepgramField model={saved as string} invalid={!!ctx.errors[path]} onModel={set} />;
+    case "systemVoice":
+      return <SystemVoiceSelect id={id} value={saved as string | null} onChange={set} />;
+    case "piperVoice":
+      return <PiperVoicePicker value={saved as string} onChange={set} />;
     case "providers":
       return <ProvidersEditor ai={ctx.settings.ai} commit={ctx.commitAi} />;
     case "routing":
@@ -509,6 +530,13 @@ function SectionIcon({ id }: { id: SectionId }) {
       </>
     ),
     answerStyle: <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM7 10h10M7 13h6" />,
+    voiceInput: (
+      <>
+        <rect x="9" y="3" width="6" height="11" rx="3" />
+        <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+      </>
+    ),
+    voiceOutput: <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />,
   };
   return (
     <svg className="nav__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">

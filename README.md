@@ -6,15 +6,16 @@ Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first c
 
 The full phase plan, crate list and platform risks are in [docs/PLAN.md](docs/PLAN.md).
 
-## What works today (Phases 1 and 2)
+## What works today (Phases 1 to 3)
 
 - **Cursor buddy.** A small character follows the pointer on every monitor, with per-monitor DPI handled in Rust. Three built-in styles (Pip, Spark, Dot) or your own SVG/PNG. Size, opacity, offset and follow smoothness are adjustable. It auto-hides in fullscreen apps and, optionally, when the mouse rests.
 - **Overlays.** One transparent, always-on-top, click-through window per monitor. They're hidden from the taskbar and excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE` on Windows, `NSWindowSharingNone` on macOS). They are rebuilt when monitors are plugged in or removed.
 - **Tray.** Toggle the buddy, toggle voice guidance, pause screen capture, switch behavior profile, open settings, quit. The icon changes when capture is paused. Agent panel and approval inbox are shown but disabled until their phase.
-- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (text ask, open settings, pause capture, clear annotations) are registered with the OS. The others are saved and marked "Not active yet".
+- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (voice ask, text ask, open settings, pause capture, clear annotations) are registered with the OS. The others are saved and marked "Not active yet".
 - **Settings window.** Search (Ctrl/Cmd+F), instant apply, per-section reset, JSON import/export, inline validation, and light/dark/system theme. Sections: General, Cursor buddy (with a live preview that follows your mouse), Hotkeys, AI providers, Answer style.
 - **AI providers.** Anthropic, OpenAI, Google Gemini, Ollama, LM Studio, llama.cpp server and any OpenAI-compatible endpoint, all streaming. Add a provider from a preset, find local models with one click, load a provider's model list, test the connection, and choose which model each feature uses. API keys go in the OS keychain.
 - **Text questions (Alt+Shift+T).** A panel opens next to the cursor. Answers stream in, and follow-ups keep the context until you close it (Esc). Answer style decides whether Helpy sends a screenshot with every question, asks you first, or lets the model decide. Screenshots are of the monitor under the cursor, downscaled to 1568 px, and never include Helpy's own windows.
+- **Voice (Alt+Shift+Space).** Hold to talk, or press to start and stop. A small glowing waveform appears by the cursor, shows what you're saying, then a short caption of the answer; click it for the full conversation. Speech recognition runs on your computer with Whisper, or through OpenAI or Deepgram. Answers are read aloud sentence by sentence as they arrive, in a system voice, a Piper voice or an OpenAI voice. Esc stops listening, answering and speaking. Optional wake word ("hey helpy"), noise suppression, auto-stop on silence, and a microphone picker with a live level meter.
 - **Retry and budget limits, enforced in Rust.** Timeouts, network errors, rate limits (honoring `retry-after`), provider 5xx errors and garbled output are retried with exponential backoff, up to 3 times by default. Bad keys, missing models and refusals are never retried on the same model. Fallback models get one attempt each and count toward the retry limit. A daily token limit (and an optional cost limit) is checked before every call, retries included, and spending is saved to disk so it survives restarts.
 
 ## Run it
@@ -23,10 +24,11 @@ Prerequisites: Node 20+, Rust stable, and the [Tauri system dependencies](https:
 
 ```sh
 sudo apt install libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev \
-  libayatana-appindicator3-dev librsvg2-dev libpipewire-0.3-dev libclang-dev
+  libayatana-appindicator3-dev librsvg2-dev libpipewire-0.3-dev libclang-dev \
+  libasound2-dev libspeechd-dev cmake
 ```
 
-PipeWire is used for screen capture on Wayland. API keys are stored through the Secret Service (GNOME Keyring or KWallet), so one of those needs to be running to save keys on Linux; local providers work without it.
+PipeWire is used for screen capture on Wayland, ALSA for the microphone, speech-dispatcher for system voices, and CMake builds whisper.cpp (on macOS and Windows too). API keys are stored through the Secret Service (GNOME Keyring or KWallet), so one of those needs to be running to save keys on Linux; local providers work without it.
 
 Then:
 
@@ -44,7 +46,8 @@ To ask questions, add a provider under **Settings → AI providers**. The quicke
 ```sh
 npm test                          # frontend: key handling, follow smoothing, settings registry
 cd src-tauri && cargo test        # backend: settings, hotkeys, monitor math, provider request mapping,
-                                  # SSE parsing, screenshot mapping, and the retry/budget limits
+                                  # SSE parsing, screenshot mapping, the retry/budget limits, and audio
+                                  # (resampling, silence detection, noise suppression, sentence splitting)
 ```
 
 ## Project layout
@@ -55,6 +58,8 @@ src-tauri/src/
   ai/           provider adapters (anthropic, openai, gemini), SSE, limits, ledger,
                 keychain secrets, and the ask flow
   capture.rs    screenshots of the cursor's monitor, and model-to-screen coordinate mapping
+  voice/        microphone, audio processing, Whisper and cloud speech to text, text to speech
+                (system, Piper, OpenAI), wake word, and the listening session
   overlay.rs    per-monitor overlay windows
   cursor.rs     cursor polling, per-monitor coordinates, buddy visibility
   fullscreen/   fullscreen-app detection for Windows, macOS and X11
@@ -65,6 +70,7 @@ src/
   buddy/        the buddy character and smoothing, shared by overlay and settings
   overlay/      overlay window app
   ask/          the ask panel
+  pill/         the compact voice waveform
   settings/     settings window app; registry.ts lists every setting's label and control
 design/         source SVGs for the app and tray icons
 ```

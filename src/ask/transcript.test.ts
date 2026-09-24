@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { AskEvent } from "../bindings/AskEvent";
 import { apply, waiting, type Item } from "./transcript";
 
-const run = (events: AskEvent[], start: Item[] = [{ kind: "user", text: "q" }]) => events.reduce(apply, start);
+const run = (events: AskEvent[], start: Item[] = [{ kind: "user", text: "q", voice: false }]) => events.reduce(apply, start);
 
 describe("ask transcript", () => {
+  it("adds typed and spoken questions as user messages", () => {
+    const items = run([{ type: "question", text: "Where is spam?", voice: true }], []);
+    expect(items).toEqual([{ kind: "user", text: "Where is spam?", voice: true }]);
+  });
+
   it("streams text into one answer", () => {
     const items = run([{ type: "text", text: "Open " }, { type: "text", text: "Junk Email." }, { type: "checkpoint" }]);
     expect(items[1]).toEqual({ kind: "assistant", text: "Open Junk Email.", final: true });
@@ -34,8 +39,8 @@ describe("ask transcript", () => {
   });
 
   it("shows the thinking dots only while nothing is streaming", () => {
-    expect(waiting([{ kind: "user", text: "q" }], true)).toBe(true);
-    expect(waiting([{ kind: "user", text: "q" }], false)).toBe(false);
+    expect(waiting([{ kind: "user", text: "q", voice: false }], true)).toBe(true);
+    expect(waiting([{ kind: "user", text: "q", voice: false }], false)).toBe(false);
     expect(waiting(run([{ type: "text", text: "a" }]), true)).toBe(false);
     expect(waiting(run([{ type: "screenPermission", id: 1 }]), true)).toBe(false);
   });
