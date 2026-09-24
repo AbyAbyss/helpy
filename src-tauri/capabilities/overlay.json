@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay",
+  "description": "Overlay windows: read events and call Helpy's own commands only. No file pickers.",
+  "windows": ["overlay-*"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default"
+  ]
+}

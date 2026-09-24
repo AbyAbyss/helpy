@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "general": {
+    "launchAtLogin": false,
+    "startMinimized": true,
+    "theme": "system",
+    "interfaceLanguage": "en",
+    "responseLanguage": "auto",
+    "checkForUpdates": true
+  },
+  "buddy": {
+    "enabled": true,
+    "style": "pip",
+    "customImage": null,
+    "size": 36,
+    "opacity": 1.0,
+    "offsetX": 22,
+    "offsetY": 20,
+    "smoothness": 0.2,
+    "showStateAnimations": true,
+    "showAgentBadge": true,
+    "hideInFullscreen": true,
+    "hideWhenIdle": false,
+    "idleSeconds": 20
+  },
+  "hotkeys": {
+    "voiceAsk": "Alt+Shift+H",
+    "voiceMode": "pushToTalk",
+    "textAsk": "Alt+Shift+T",
+    "circleToExplain": "Alt+Shift+E",
+    "clearAnnotations": "Alt+Shift+X",
+    "pauseCapture": "Alt+Shift+P",
+    "openAgentPanel": "Alt+Shift+A",
+    "openApprovalInbox": "Alt+Shift+I",
+    "pauseAllAgents": "Alt+Shift+Z",
+    "openSettings": "Alt+Shift+Comma"
+  },
+  "voiceOutput": {
+    "guidanceEnabled": true
+  }
+}

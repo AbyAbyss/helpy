@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Pip: Helpy's cursor buddy. The tip at top-left leans toward the pointer. -->
+  <path d="M9 9 C 17 10.5 24 12.5 28.5 15.5 C 31 14.6 33.5 14 36 14 C 48.2 14 58 23.8 58 36 C 58 48.2 48.2 58 36 58 C 23.8 58 14 48.2 14 36 C 14 33 14.6 30.2 15.6 27.6 C 12.6 22.8 10.4 16.4 9 9 Z" fill="#FF6A4D"/>
+  <path d="M22 26 C 25 20 31 17.5 36 17.5" fill="none" stroke="#FFFFFF" stroke-opacity=".45" stroke-width="3" stroke-linecap="round"/>
+  <ellipse cx="30" cy="36" rx="3.2" ry="4.4" fill="#1B1F1E"/>
+  <ellipse cx="42.5" cy="36" rx="3.2" ry="4.4" fill="#1B1F1E"/>
+</svg>

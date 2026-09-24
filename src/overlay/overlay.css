@@ -1,0 +1,94 @@
+.ov {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ov-buddy {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  transition: opacity 180ms var(--ease-out);
+}
+
+.ov-notice-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.ov-notice {
+  transform: translateY(-50%);
+  max-width: 280px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: rgb(18 24 22 / 0.92);
+  color: #f1f5f3;
+  font: 500 12.5px/1.35 var(--font-ui);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.28);
+  animation: ov-notice-in 220ms var(--ease-spring);
+  width: max-content;
+}
+
+@keyframes ov-notice-in {
+  from { opacity: 0; transform: translate(-6px, -50%) scale(0.96); }
+  to { opacity: 1; transform: translate(0, -50%) scale(1); }
+}
+
+/* Alignment check: a frame drawn exactly on the monitor edges. */
+.ov-check {
+  position: absolute;
+  inset: 0;
+  border: 3px solid #19b39a;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.6);
+  animation: ov-fade 200ms var(--ease-out);
+}
+
+.ov-check-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 4px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: rgb(18 24 22 / 0.9);
+  color: #f1f5f3;
+  text-align: center;
+  font: 500 13px/1.4 var(--font-ui);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 0.35);
+}
+
+.ov-check-label strong {
+  font: 650 20px/1.2 var(--font-display);
+}
+
+.ov-check-label span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #9fe3d5;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-check-label em {
+  font-style: normal;
+  color: #b9c4bf;
+}
+
+.ov-check-corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 0 solid #19b39a;
+}
+.ov-check-corner.tl { top: 8px; left: 8px; border-top-width: 3px; border-left-width: 3px; }
+.ov-check-corner.tr { top: 8px; right: 8px; border-top-width: 3px; border-right-width: 3px; }
+.ov-check-corner.bl { bottom: 8px; left: 8px; border-bottom-width: 3px; border-left-width: 3px; }
+.ov-check-corner.br { bottom: 8px; right: 8px; border-bottom-width: 3px; border-right-width: 3px; }
+
+@keyframes ov-fade {
+  from { opacity: 0; }
+}

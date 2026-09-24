@@ -1,0 +1,181 @@
+/* Buddy visuals. Every animation is transform/opacity only, so it stays on the compositor. */
+
+.bd {
+  position: relative;
+  display: block;
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.35)) drop-shadow(0 3px 8px rgb(0 0 0 / 0.18));
+}
+
+.bd-body {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 80%;
+}
+
+.bd-body svg,
+.bd-body img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  object-fit: contain;
+}
+
+.bd[data-flipped="yes"] .bd-body {
+  transform: scaleX(-1);
+}
+
+.bd-eyes,
+.bd-mouth,
+.bd-think,
+.bd-core,
+.bd-spark,
+.bd-orbit {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.bd-orbit {
+  transform-box: view-box;
+  transform-origin: 34px 34px;
+}
+
+.bd-mouth,
+.bd-think {
+  opacity: 0;
+}
+
+/* Ring shown while listening, shared by every style. */
+.bd-ring {
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  border: 2px solid #19b39a;
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.bd-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #1f2a27;
+  color: #fff;
+  border: 1.5px solid #fff;
+  font: 700 10px/14px var(--font-ui);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.bd-attn {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #f2a516;
+  border: 1.5px solid #fff;
+}
+
+/* ------------------------------------------------------------ animated states */
+
+.bd[data-animate="on"][data-activity="idle"] .bd-body {
+  animation: bd-bob 3.2s ease-in-out infinite;
+}
+.bd[data-animate="on"][data-activity="idle"] .bd-eyes {
+  animation: bd-blink 4.6s infinite;
+}
+.bd[data-animate="on"][data-activity="idle"] .bd-orbit {
+  animation: bd-spin 6s linear infinite;
+}
+
+.bd[data-activity="listening"] .bd-ring {
+  opacity: 1;
+  transform: scale(1);
+}
+.bd[data-animate="on"][data-activity="listening"] .bd-ring {
+  animation: bd-listen 1.3s var(--ease-out) infinite;
+}
+.bd[data-activity="listening"] .bd-eyes {
+  transform: scale(1.15);
+}
+.bd[data-animate="on"][data-activity="listening"] .bd-orbit {
+  animation: bd-spin 2.4s linear infinite;
+}
+.bd[data-animate="on"][data-activity="listening"] .bd-spark {
+  animation: bd-pulse 1.3s ease-in-out infinite;
+}
+
+.bd[data-activity="thinking"] .bd-think {
+  opacity: 1;
+}
+.bd[data-activity="thinking"] .bd-eyes {
+  transform: translate(1.5px, -2.5px);
+}
+.bd[data-animate="on"][data-activity="thinking"] .bd-think circle {
+  animation: bd-dot 1.1s ease-in-out infinite;
+}
+.bd[data-animate="on"][data-activity="thinking"] .bd-think circle:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.bd[data-animate="on"][data-activity="thinking"] .bd-think circle:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.bd[data-animate="on"][data-activity="thinking"] .bd-orbit {
+  animation: bd-spin 0.9s linear infinite;
+}
+.bd[data-animate="on"][data-activity="thinking"] .bd-spark {
+  animation: bd-spin 2.2s linear infinite;
+}
+
+.bd[data-activity="speaking"] .bd-mouth {
+  opacity: 1;
+}
+.bd[data-animate="on"][data-activity="speaking"] .bd-mouth {
+  animation: bd-talk 0.36s ease-in-out infinite alternate;
+}
+.bd[data-animate="on"][data-activity="speaking"] .bd-core,
+.bd[data-animate="on"][data-activity="speaking"] .bd-spark {
+  animation: bd-pulse 0.5s ease-in-out infinite alternate;
+}
+
+.bd[data-animate="on"] .bd-attn {
+  animation: bd-attn 1.6s ease-in-out infinite;
+}
+
+@keyframes bd-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4%); }
+}
+@keyframes bd-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+@keyframes bd-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes bd-listen {
+  0% { transform: scale(0.8); opacity: 0.9; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+@keyframes bd-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+@keyframes bd-dot {
+  0%, 100% { transform: translateY(0); opacity: 0.45; }
+  50% { transform: translateY(-2px); opacity: 1; }
+}
+@keyframes bd-talk {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1.25); }
+}
+@keyframes bd-attn {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
