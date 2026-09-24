@@ -105,6 +105,50 @@ Crates: `cron`, `notify` (folder watch), `chromiumoxide`.
 
 Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessibility-sys`, AT-SPI via `atspi`), privacy features (blocklist, password field blur, offline mode), usage tracking, behavior profiles, onboarding.
 
+## Additional requirements (added by the user after Phase 2)
+
+These come on top of the original brief. Each one names the phase that builds it, and those phases must not ship without it. Reference screenshots of the intended look were shared in the conversation; the descriptions below capture them.
+
+### R1. Agents that act on the computer
+
+- "My desktop looks cluttered, can you clean it up?" spawns a file-organizer agent that sorts the Desktop into folders. It works only in folders the user approved (the Desktop is offered on first use), keeps a backup of every move so the whole cleanup can be undone in one click, and shows its plan before moving anything. **Phase 6** (file tools, backups) with the template in **Phase 8**.
+- "I have a meeting tomorrow at 3, remind me" creates a real reminder or calendar event in the OS:
+  - macOS: Reminders and Calendar through AppleScript/JXA (`osascript`), which asks for Automation permission the first time.
+  - Windows: an Outlook event through its COM interface when Outlook desktop is installed; otherwise a Helpy-scheduled reminder with a Windows notification.
+  - Linux: a Helpy-scheduled reminder with a desktop notification (no standard reminders app to write to).
+  - **Phase 6**, as OS-action tools behind the normal approval rules.
+- **Capability registry:** every OS action declares which operating systems support it. Actions that can't work on the current OS are hidden everywhere (plan cards, templates, settings, suggestions) instead of failing later. **Phase 6.**
+
+### R2. Agent dock and hover cards (refines 7.6 floating cards)
+
+- Running agents show as a vertical stack of small rounded chips at the screen edge. Each chip holds a pointer-shaped mark and glows in its status colour, with a small dot when there's something unseen.
+- Status colours: **blue** working, **green** done, **yellow** has a question or needs a choice (with the choices as buttons), **red** error, warning or needs permission.
+- Hovering a chip slides out a dark card beside it, pointing at the chip:
+  - While running: title in caps, status pill, the current step or command in monospace with a terminal icon, and a thin progress bar.
+  - When done: a one-paragraph result, "Suggested next" action chips (for example "Open the app folder", "Show tomorrow's reminders"), and "Follow up" with Text and Voice buttons.
+- Only the chips and the open card capture the mouse; everything around them stays clickable. **Phase 6.**
+
+### R3. Extract data from a web page into a CSV
+
+- "Pull the prices from this page into a CSV" spawns a scraping agent for the page on screen (URL read from the browser through the accessibility tree, or asked for).
+- Scraping uses a stealth-capable scraper such as Scrapling or Botasaurus, run in a Python environment Helpy manages, so pages that block plain HTTP clients still load. It only fetches pages the user points it at, rate-limits itself, and the user stays responsible for respecting each site's terms.
+- The CSV is saved to the projects folder, previewed in the agent card, and can be opened directly. **Phase 8** (with the headless browser).
+
+### R4. Build apps and sites
+
+- "Build me a Mac app that controls my local Spotify with a custom UI" or "Make a web app and launch it" runs a builder agent: an external coding agent (Claude Code, headless) or Helpy's own tools, working in a new folder inside the projects folder, then launching the result.
+- Settings: a default projects folder (for example `~/Helpy Projects`) that the user can change, plus per-task subfolders. **Phase 8** (external runners); the folder setting lands in **Phase 6**.
+
+### R5. Agents that stay open for follow-ups
+
+- Tasks without a natural end (an app, a site) don't disappear when a round finishes. The agent waits in a "ready for changes" state. The user says or types the change and the same agent continues with its context.
+- Context stays bounded: older turns and large tool outputs are replaced by rolling summaries, with a per-agent context cap, so a long-lived agent never overflows. Summaries are saved with the agent's state. **Phase 6** (state and summaries), **Phase 8** (builder agents).
+
+### R6. Compact voice UI and the hand-off animation
+
+- The voice hotkey shows only a small glowing waveform beside the cursor, with no panel. Clicking it opens the full ask panel with the conversation. **Phase 3.**
+- When a request turns out to be an agent task, the waveform slides to the dock and morphs into that agent's chip, taking on its status glow. **Phase 6.**
+
 ## Platform risks
 
 1. **macOS transparency needs `macOSPrivateApi: true`.** That flag blocks Mac App Store distribution. Direct download is fine.
