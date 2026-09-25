@@ -5,7 +5,7 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "voiceInput" | "voiceOutput";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "voiceInput" | "voiceOutput";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, appearance and language." },
@@ -14,6 +14,7 @@ export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "ai", title: "AI providers", blurb: "The models Helpy talks to, what each one is used for, and how much it may spend." },
   { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
   { id: "guidance", title: "Visual guidance", blurb: "How Helpy points things out on your screen, and how walkthroughs move from step to step." },
+  { id: "circle", title: "Circle to explain", blurb: "Draw around anything on screen to have it explained, labelled, copied or translated." },
   { id: "voiceInput", title: "Voice input", blurb: "How Helpy hears you: the microphone, the speech engine, and when it stops listening." },
   { id: "voiceOutput", title: "Voice output", blurb: "Whether Helpy reads answers aloud, and in which voice." },
 ];
@@ -481,6 +482,50 @@ FIELDS.push(
     path: "guidance.showCoordinates", section: "guidance", group: "Troubleshooting", label: "Show raw coordinates",
     help: "Prints the model's numbers next to each mark, to check where it thinks things are.",
     keywords: "debug coordinates pixels position", control: { kind: "toggle" },
+  },
+
+  // Circle to explain
+  {
+    path: "circle.defaultShape", section: "circle", group: "Selecting", label: "Shape",
+    help: "You can switch between them while selecting.", keywords: "rectangle box freehand lasso circle shape",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "rectangle", label: "Box" },
+        { value: "freehand", label: "Freehand" },
+      ],
+    },
+  },
+  {
+    path: "circle.defaultAction", section: "circle", group: "Selecting", label: "After selecting",
+    help: "What happens as soon as you let go. The other actions stay one click away.",
+    keywords: "default action explain ocr copy text translate summarize menu",
+    control: {
+      kind: "select",
+      options: [
+        { value: "explain", label: "Explain it" },
+        { value: "copyText", label: "Copy the text in it" },
+        { value: "translate", label: "Translate it" },
+        { value: "summarize", label: "Summarize it" },
+        { value: "menu", label: "Ask me what to do" },
+      ],
+    },
+  },
+  {
+    path: "circle.labelDetail", section: "circle", group: "Answers", label: "Diagram labels",
+    help: "Click a label for the full explanation of that part.", keywords: "label detail diagram parts notes",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "names", label: "Names" },
+        { value: "namesAndNotes", label: "Names and short notes" },
+      ],
+    },
+  },
+  {
+    path: "circle.translateTo", section: "circle", group: "Answers", label: "Translate into",
+    keywords: "translate translation language target",
+    control: { kind: "select", options: RESPONSE_LANGUAGES.filter((l) => l.value !== "auto") },
   },
 
   // Voice output

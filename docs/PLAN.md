@@ -2,7 +2,7 @@
 
 Helpy is built phase by phase. Each phase ends with an app that runs (`npm run tauri dev`) and does something useful on its own. This file lists what each phase delivers, the crates and plugins it pulls in, and the platform risks that could change the design.
 
-Status: **Phases 1 to 4 are implemented.** Phases 5 to 9 are planned, plus the additional requirements R1 to R7 below.
+Status: **Phases 1 to 5 are implemented.** Phases 6 to 9 are planned, plus the additional requirements R1 to R7 below.
 
 ## Architecture in one paragraph
 
@@ -72,13 +72,17 @@ Crates: `rodio` (playback, and its cpal for capture), `whisper-rs`, `nnnoiseless
 
 Crates: `rdev`.
 
-## Phase 5: circle to explain
+## Phase 5: circle to explain (done)
 
 - Selection mode flips the overlay of the cursor's monitor to capture input. Rectangle and freehand lasso, crop via the Phase 2 capture module.
 - Label placement around the selection: greedy angular placement with collision checks, leader lines drawn in SVG.
 - OCR via the vision model (no separate OCR engine in v1).
+- As built: the screen is captured at full resolution when selection starts, so the selection is made on a still frame and cropped from it. Diagram parts come back after a `PARTS:` line as JSON in crop pixels, which works the same for models with and without tool calling. Actions: explain, copy text, translate (into a set language), summarize, and follow-up questions, all in one conversation per selection. The overlay takes the mouse and keyboard only while Circle to explain is open. "Send to agent as task context" arrives with agents in **Phase 6**.
+- Every model call (questions, walkthroughs, circle to explain) now goes through one function, `ai::call::stream`, so the retry, fallback and budget limits can't be skipped by a new feature.
 
 ## Phase 6: agent core
+
+- Circle to explain gets its "Send to agent" action (and the matching default-action option) once agents exist.
 
 - Agent runtime on `tokio`. Each agent is a state machine persisted to SQLite after every step (queue, retry counts, budget spent, pending approvals), so restarts resume without resetting limits.
 - Limits enforced in Rust: max steps, max tool calls, repeat detection (hash of tool name + args), no-progress detection, per-agent/batch/day budgets checked before each model call.

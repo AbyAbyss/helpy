@@ -102,6 +102,12 @@
     "maxSteps": 12,
     "showCoordinates": false
   },
+  "circle": {
+    "defaultShape": "rectangle",
+    "defaultAction": "explain",
+    "labelDetail": "names",
+    "translateTo": "en"
+  },
   "limits": {
     "maxRetries": 3,
     "backoffBaseMs": 2000,

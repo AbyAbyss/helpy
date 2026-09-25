@@ -21,6 +21,7 @@ pub struct Settings {
     pub ai: Ai,
     pub answer_style: AnswerStyle,
     pub guidance: Guidance,
+    pub circle: Circle,
     pub limits: Limits,
 }
 
@@ -37,6 +38,7 @@ pub const SECTIONS: &[&str] = &[
     "ai",
     "answerStyle",
     "guidance",
+    "circle",
     "limits",
 ];
 
@@ -615,6 +617,62 @@ impl Default for Guidance {
             reduce_motion: false,
             max_steps: 12,
             show_coordinates: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SelectionShape {
+    #[default]
+    Rectangle,
+    Freehand,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum CircleAction {
+    #[default]
+    Explain,
+    /// Copy the text in the selection (OCR by the vision model).
+    CopyText,
+    Translate,
+    Summarize,
+    /// Show the actions and let the user pick.
+    Menu,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum LabelDetail {
+    /// Just the part's name.
+    #[default]
+    Names,
+    /// The name and a short note.
+    NamesAndNotes,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Circle {
+    pub default_shape: SelectionShape,
+    pub default_action: CircleAction,
+    pub label_detail: LabelDetail,
+    /// Language code that Translate translates into.
+    pub translate_to: String,
+}
+
+impl Default for Circle {
+    fn default() -> Self {
+        Self {
+            default_shape: SelectionShape::Rectangle,
+            default_action: CircleAction::Explain,
+            label_detail: LabelDetail::Names,
+            translate_to: "en".into(),
         }
     }
 }

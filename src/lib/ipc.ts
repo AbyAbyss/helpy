@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AskStatus } from "../bindings/AskStatus";
 import type { CardView } from "../bindings/CardView";
+import type { CircleAction } from "../bindings/CircleAction";
 import type { LocalServer } from "../bindings/LocalServer";
 import type { ModelInfo } from "../bindings/ModelInfo";
 import type { ProviderConfig } from "../bindings/ProviderConfig";
@@ -34,6 +35,7 @@ export const EVENTS = {
   guideMarks: "guide://marks",
   guideCard: "guide://card",
   clearAnnotations: "overlay://clear",
+  circle: "circle://event",
 } as const;
 
 type Section = keyof Settings;
@@ -115,6 +117,13 @@ export const api = {
   guideCard: () => invoke<CardView | null>("guide_card"),
   /** The OS glass behind the step card: "macos", "windows", or null when opaque. */
   guideCardGlass: () => invoke<"macos" | "windows" | null>("guide_card_glass"),
+
+  // Circle to explain. Progress arrives as EVENTS.circle events.
+  /** Rejects with a message when the selection can't be used (too small). */
+  circleSelect: (points: [number, number][]) => invoke<void>("circle_select", { points }),
+  circleAction: (action: CircleAction, question: string | null = null) => invoke<void>("circle_action", { action, question }),
+  circleClose: () => invoke<void>("circle_close"),
+  circleCopy: (text: string) => invoke<void>("circle_copy", { text }),
 };
 
 export function asFieldErrors(e: unknown): FieldError[] {

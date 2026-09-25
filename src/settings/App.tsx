@@ -539,6 +539,12 @@ function SectionIcon({ id }: { id: SectionId }) {
         <path d="M13 15l7 2.6-3 1.1-1.1 3z" />
       </>
     ),
+    circle: (
+      <>
+        <path d="M12 4.5c5 0 8.5 2.6 8.5 6.6 0 4-3.8 6.9-8.8 6.9-5 0-8.2-2.7-8.2-6.4 0-3.3 2.6-5.7 6.5-6.6" />
+        <path d="M10.5 11.5h3" />
+      </>
+    ),
     answerStyle: <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM7 10h10M7 13h6" />,
     voiceInput: (
       <>

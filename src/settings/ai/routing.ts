@@ -12,7 +12,12 @@ export const ROUTES: { key: keyof Routing; label: string; built: boolean; help?:
     built: true,
     help: "Runs walkthroughs after the first step. Needs a model that can read images. Empty uses the questions model.",
   },
-  { key: "circleToExplain", label: "Circle to explain", built: false },
+  {
+    key: "circleToExplain",
+    label: "Circle to explain",
+    built: true,
+    help: "Needs a model that can read images. Empty uses the questions model.",
+  },
   { key: "agentPlanning", label: "Agent planning", built: false },
   { key: "agentOrchestrator", label: "Agent orchestrators", built: false },
   { key: "agentWorker", label: "Agent workers", built: false },

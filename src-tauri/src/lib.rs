@@ -1,6 +1,7 @@
 mod ai;
 mod buddy;
 mod capture;
+mod circle;
 mod cursor;
 mod fullscreen;
 mod guide;
@@ -71,11 +72,13 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(hotkeys::Hotkeys::default())
         .manage(overlay::Overlays::default())
         .manage(cursor::CursorShared::default())
         .manage(ai::ask::AskState::default())
         .manage(guide::GuideState::default())
+        .manage(circle::CircleState::default())
         .setup(|app| {
             // A tray app: no Dock icon on macOS.
             #[cfg(target_os = "macos")]
@@ -146,6 +149,10 @@ pub fn run() {
             guide::guide_action,
             guide::guide_card,
             guide::guide_card_glass,
+            circle::circle_select,
+            circle::circle_action,
+            circle::circle_close,
+            circle::circle_copy,
             voice::voice_input_devices,
             voice::voice_meter_start,
             voice::voice_meter_stop,

@@ -6,6 +6,7 @@ import type { Mark } from "../bindings/Mark";
 import type { MarksView } from "../bindings/MarksView";
 import { Buddy } from "../buddy/Buddy";
 import { followStep, type Point } from "../buddy/follow";
+import { CircleLayer } from "../circle/CircleLayer";
 import { Annotations } from "../guide/Annotations";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings } from "../lib/useSettings";
@@ -17,6 +18,7 @@ export function Overlay() {
   const [inside, setInside] = useState(false);
   const [customSrc, setCustomSrc] = useState<string | null>(null);
   const [marks, setMarks] = useState<{ id: number; marks: Mark[] }>({ id: 0, marks: [] });
+  const [circling, setCircling] = useState(false);
   const el = useRef<HTMLDivElement>(null);
   const target = useRef<Point | null>(null);
   const pos = useRef<Point | null>(null);
@@ -79,7 +81,8 @@ export function Overlay() {
 
   if (!settings) return null;
   const b = settings.buddy;
-  const shown = visible && inside;
+  // The buddy steps aside while a selection is being drawn over its spot.
+  const shown = visible && inside && !circling;
 
   return (
     <>
@@ -87,6 +90,7 @@ export function Overlay() {
         // Keyed per step so its draw-in animation plays again on Repeat.
         <Annotations key={marks.id} marks={marks.marks} width={window.innerWidth} height={window.innerHeight} look={settings.guidance} />
       )}
+      <CircleLayer color={settings.guidance.highlightColor} onOpen={setCircling} />
       <div ref={el} className="overlay-buddy" style={{ opacity: shown ? b.opacity : 0 }}>
         <div style={{ transform: `translate(${b.offsetX}px, ${b.offsetY}px)` }}>
           <Buddy

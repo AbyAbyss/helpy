@@ -85,7 +85,7 @@ pub fn fit(width: u32, height: u32) -> (u32, u32) {
     )
 }
 
-fn jpeg(img: &DynamicImage, quality: u8) -> Vec<u8> {
+pub fn jpeg(img: &DynamicImage, quality: u8) -> Vec<u8> {
     let mut out = Vec::new();
     let encoder =
         image::codecs::jpeg::JpegEncoder::new_with_quality(Cursor::new(&mut out), quality);
@@ -117,10 +117,33 @@ fn paused() -> ProviderError {
     )
 }
 
+/// A full-resolution capture of one monitor.
+pub struct Frame {
+    pub image: RgbaImage,
+    pub monitor: MonitorRect,
+    pub name: String,
+}
+
 /// Captures the monitor the cursor is on. Helpy's own windows are left out:
 /// Windows and macOS exclude them from capture; on Linux they're hidden for
 /// the moment of the capture.
 pub async fn capture_cursor_monitor(app: &AppHandle) -> Result<Shot, ProviderError> {
+    let frame = grab_cursor_monitor(app).await?;
+    let monitor = frame.monitor;
+    let (jpeg_base64, thumbnail_data_url, meta) =
+        tokio::task::spawn_blocking(move || encode(frame.image, &monitor))
+            .await
+            .map_err(|e| ProviderError::new(ErrorKind::Setup, e.to_string()))?;
+    Ok(Shot {
+        jpeg_base64,
+        thumbnail_data_url,
+        meta,
+        monitor_name: frame.name,
+    })
+}
+
+/// The cursor's monitor at full resolution, for cropping.
+pub async fn grab_cursor_monitor(app: &AppHandle) -> Result<Frame, ProviderError> {
     if app.state::<SettingsStore>().get().privacy.capture_paused {
         return Err(paused());
     }
@@ -143,16 +166,12 @@ pub async fn capture_cursor_monitor(app: &AppHandle) -> Result<Shot, ProviderErr
     #[cfg(target_os = "linux")]
     restore_own_windows(hidden);
 
-    let (raw, name) = result.map_err(|e| ProviderError::new(ErrorKind::Setup, e.to_string()))??;
-    let (jpeg_base64, thumbnail_data_url, meta) =
-        tokio::task::spawn_blocking(move || encode(raw, &monitor))
-            .await
-            .map_err(|e| ProviderError::new(ErrorKind::Setup, e.to_string()))?;
-    Ok(Shot {
-        jpeg_base64,
-        thumbnail_data_url,
-        meta,
-        monitor_name: name,
+    let (image, name) =
+        result.map_err(|e| ProviderError::new(ErrorKind::Setup, e.to_string()))??;
+    Ok(Frame {
+        image,
+        monitor,
+        name,
     })
 }
 

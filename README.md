@@ -6,17 +6,18 @@ Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first c
 
 The full phase plan, crate list and platform risks are in [docs/PLAN.md](docs/PLAN.md).
 
-## What works today (Phases 1 to 4)
+## What works today (Phases 1 to 5)
 
 - **Cursor buddy.** A small character follows the pointer on every monitor, with per-monitor DPI handled in Rust. Three built-in styles (Pip, Spark, Dot) or your own SVG/PNG. Size, opacity, offset and follow smoothness are adjustable. It auto-hides in fullscreen apps and, optionally, when the mouse rests.
 - **Overlays.** One transparent, always-on-top, click-through window per monitor. They're hidden from the taskbar and excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE` on Windows, `NSWindowSharingNone` on macOS). They are rebuilt when monitors are plugged in or removed.
-- **Tray.** Toggle the buddy, toggle voice guidance, pause screen capture, switch behavior profile, open settings, quit. The icon changes when capture is paused. Agent panel and approval inbox are shown but disabled until their phase.
-- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (voice ask, text ask, open settings, pause capture, clear annotations) are registered with the OS. The others are saved and marked "Not active yet".
-- **Settings window.** Search (Ctrl/Cmd+F), instant apply, per-section reset, JSON import/export, inline validation, and light/dark/system theme. Sections: General, Cursor buddy (with a live preview that follows your mouse), Hotkeys, AI providers, Answer style, Visual guidance (with a live preview), Voice input, Voice output.
+- **Tray.** Toggle the buddy, toggle voice guidance, pause screen capture, circle to explain, switch behavior profile, open settings, quit. The icon changes when capture is paused. Agent panel and approval inbox are shown but disabled until their phase.
+- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (voice ask, text ask, circle to explain, open settings, pause capture, clear annotations) are registered with the OS. The others are saved and marked "Not active yet".
+- **Settings window.** Search (Ctrl/Cmd+F), instant apply, per-section reset, JSON import/export, inline validation, and light/dark/system theme. Sections: General, Cursor buddy (with a live preview that follows your mouse), Hotkeys, AI providers, Answer style, Visual guidance (with a live preview), Circle to explain, Voice input, Voice output.
 - **AI providers.** Anthropic, OpenAI, Google Gemini, Ollama, LM Studio, llama.cpp server and any OpenAI-compatible endpoint, all streaming. Add a provider from a preset, find local models with one click, load a provider's model list, test the connection, and choose which model each feature uses. API keys go in the OS keychain.
 - **Text questions (Alt+Shift+T).** A panel opens next to the cursor. Answers stream in, and follow-ups keep the context until you close it (Esc). Answer style decides whether Helpy sends a screenshot with every question, asks you first, or lets the model decide. Screenshots are of the monitor under the cursor, downscaled to 1568 px, and never include Helpy's own windows.
 - **Voice (Alt+Shift+Space).** Hold to talk, or press to start and stop. A small glowing waveform appears by the cursor, shows what you're saying, then a short caption of the answer; click it for the full conversation. Speech recognition runs on your computer with Whisper, or through OpenAI or Deepgram. Answers are read aloud sentence by sentence as they arrive, in a system voice, a Piper voice or an OpenAI voice. Esc stops listening, answering and speaking. Optional wake word ("hey helpy"), noise suppression, auto-stop on silence, and a microphone picker with a live level meter.
 - **Visual guidance.** Ask "where is…" or "how do I…" about the app in front of you and Helpy shows you instead of only telling you: it highlights the control (optionally dimming the rest of the screen), points at it with a labelled pointer, or draws an arrow, all on the click-through overlay. Walkthroughs go one step at a time. A small step card ("Step 2 of 4", Next, Repeat, Stop) is the only clickable part. Click the highlighted spot (or press Next) and Helpy takes a fresh screenshot to check the result before showing the next step. Esc or Stop ends it. Steps are read aloud when voice guidance is on, which you can switch from the card. Models with tool calling use a `show_step` tool; others reply with a JSON step, which is validated the same way. Coordinates outside the screenshot are sent back to the model to correct. A walkthrough stops after 12 steps by default.
+- **Circle to explain (Alt+Shift+C).** The screen freezes under a light dim, and you drag a box or draw freehand around anything. Helpy explains what's in it. For diagrams, pictures and busy interfaces it also labels the parts, textbook style, with labels placed around the selection that never overlap each other or the card; click a label for more about that part. The other actions are one click away: copy the text in it (read by the vision model, straight to the clipboard), translate it, summarize it, or ask your own follow-up questions about it. Only while this is open does the overlay take the mouse, and only on that monitor; Esc, the close button or a click outside gives every click back to your apps. It uses the model routed to Circle to explain, or the questions model.
 - **Retry and budget limits, enforced in Rust.** Timeouts, network errors, rate limits (honoring `retry-after`), provider 5xx errors and garbled output are retried with exponential backoff, up to 3 times by default. Bad keys, missing models and refusals are never retried on the same model. Fallback models get one attempt each and count toward the retry limit. A daily token limit (and an optional cost limit) is checked before every call, retries included, and spending is saved to disk so it survives restarts.
 
 ## Run it
@@ -49,7 +50,8 @@ npm test                          # frontend: key handling, follow smoothing, se
 cd src-tauri && cargo test        # backend: settings, hotkeys, monitor math, provider request mapping,
                                   # SSE parsing, screenshot mapping, the retry/budget limits, and audio
                                   # (resampling, silence detection, noise suppression, sentence splitting),
-                                  # and guidance steps (validation, overlay mapping, click hit-testing)
+                                  # guidance steps (validation, overlay mapping, click hit-testing), and
+                                  # circle to explain (cropping, the PARTS reply, model choice)
 ```
 
 ## Project layout
@@ -61,6 +63,7 @@ src-tauri/src/
                 keychain secrets, and the ask flow
   capture.rs    screenshots of the cursor's monitor, and model-to-screen coordinate mapping
   guide/        guidance steps (schema, validation, mapping), the step card, click detection
+  circle/       circle to explain: selection mode, cropping, the PARTS reply, actions
   voice/        microphone, audio processing, Whisper and cloud speech to text, text to speech
                 (system, Piper, OpenAI), wake word, and the listening session
   overlay.rs    per-monitor overlay windows
@@ -76,6 +79,7 @@ src/
   pill/         the compact voice waveform
   guide/        highlights, pointers and arrows, shared by the overlay and the settings preview
   step/         the walkthrough step card
+  circle/       selection, the result card, and diagram label placement
   settings/     settings window app; registry.ts lists every setting's label and control
 design/         source SVGs for the app and tray icons
 ```
@@ -89,5 +93,6 @@ design/         source SVGs for the app and tray icons
 ## Platform notes
 
 - **macOS:** transparent windows need `macOSPrivateApi`, which rules out the Mac App Store. Direct downloads are fine. Screenshots need the Screen Recording permission (onboarding for it arrives in Phase 9; until then macOS asks on first capture).
+- **The step card is frosted glass** on macOS (vibrancy) and Windows 11 22H2 or later (Acrylic). On Linux and older Windows it's an opaque dark card.
 - **Clicks during walkthroughs** are observed with a listen-only mouse hook (`rdev`); the click still reaches your app. On macOS this needs the Accessibility permission, and on Wayland it isn't available. Without it, the step card asks you to press Next instead.
 - **Linux:** overlays need a compositing window manager to be transparent; the settings page warns when none is running. On Wayland, Helpy runs through XWayland when it can. The General section lists what won't work in your session.

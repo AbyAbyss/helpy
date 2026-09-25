@@ -46,6 +46,13 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
         ));
     }
 
+    if s.circle.translate_to == "auto" || !is_language_tag(&s.circle.translate_to) {
+        errors.push(FieldError::new(
+            "circle.translateTo",
+            "Use a language code such as en, de or pt-BR",
+        ));
+    }
+
     if !INTERFACE_LANGUAGES.contains(&s.general.interface_language.as_str()) {
         errors.push(FieldError::new(
             "general.interfaceLanguage",
@@ -417,6 +424,17 @@ mod tests {
             ]
         );
         assert!(is_hex_color("#0aF3c9") && !is_hex_color("#abc"));
+    }
+
+    #[test]
+    fn translation_needs_a_real_language() {
+        let mut s = Settings::default();
+        for bad in ["auto", "German", ""] {
+            s.circle.translate_to = bad.into();
+            assert_eq!(validate(&s)[0].path, "circle.translateTo", "{bad}");
+        }
+        s.circle.translate_to = "pt-BR".into();
+        assert_eq!(validate(&s), vec![]);
     }
 
     #[test]

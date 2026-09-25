@@ -7,7 +7,6 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::json;
@@ -16,16 +15,13 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
+use super::call;
 use super::error::{ErrorKind, ProviderError};
-use super::ledger::{self, Ledger};
-use super::limits::{self, Policy};
+use super::ledger::Ledger;
 use super::types::*;
-use super::{provider, secrets};
 use crate::capture::{self, CaptureMeta, Shot};
 use crate::guide::{self, step};
-use crate::settings::schema::{
-    Ai, AnswerStyle, Detail, ModelConfig, ModelRef, ProviderConfig, ScreenAccess, Tone,
-};
+use crate::settings::schema::{Ai, AnswerStyle, Detail, ModelRef, ScreenAccess, Tone};
 use crate::settings::{Settings, SettingsStore};
 
 pub const VIEW_SCREEN: &str = "view_screen";
@@ -398,13 +394,6 @@ impl Turn<'_> {
         let _ = self.app.emit(EVENT, e);
     }
 
-    fn describe(&self, r: &ModelRef) -> String {
-        match self.settings.ai.model(r) {
-            Some((p, _)) => format!("{} · {}", r.model, p.name),
-            None => r.model.clone(),
-        }
-    }
-
     /// Screenshot for the model, or the reason there isn't one.
     async fn screen(&self, ask_first: bool) -> Result<Shot, String> {
         let state = self.app.state::<AskState>();
@@ -456,7 +445,6 @@ impl Turn<'_> {
         sentinel: bool,
         guiding: bool,
     ) -> Result<Completion, ProviderError> {
-        let ai_state: &AiState = self.app.state::<AiState>().inner();
         let ai = &self.settings.ai;
         let has_images = messages.iter().any(Message::has_images);
         let models = candidates(ai, &self.plan, has_images, !tools.is_empty(), guiding);
@@ -474,103 +462,50 @@ impl Turn<'_> {
             max_tokens: ai.max_response_tokens,
             temperature: ai.temperature,
         };
-        let estimate = base.estimated_tokens();
-        let idle = Duration::from_secs(ai.timeout_secs as u64);
-        let lookup = |r: &ModelRef| -> (ProviderConfig, ModelConfig) {
-            let (p, m) = ai.model(r).expect("candidates are configured models");
-            (p.clone(), m.clone())
-        };
-
-        let result = limits::run_step(
-            &Policy::from(&self.settings.limits),
-            &models,
-            &self.cancel,
-            |r| {
-                ai_state
-                    .ledger
-                    .check(&self.settings.limits, estimate, &lookup(r).1)
-            },
-            |r| {
-                let (p, m) = lookup(r);
-                let req = ChatRequest {
-                    model: m.id.clone(),
-                    ..base.clone()
-                };
-                let key_name = format!("ask · {} · {}", p.name, m.id);
-                async move {
-                    let key = secrets::key_for(&p)?;
-                    self.send(AskEvent::Started {
-                        model: format!("{} · {}", m.id, p.name),
-                    });
-                    let json = self.plan.guide == GuideMode::Json;
-                    let mut filter = SentinelFilter::new(sentinel, json);
-                    let mut on_text = |piece: &str| {
-                        if let Some(t) = filter.push(piece) {
-                            self.send(AskEvent::Text { text: t });
-                        }
-                    };
-                    let result = provider::stream_chat(
-                        &ai_state.http,
-                        &p,
-                        key.as_deref(),
-                        &req,
-                        idle,
-                        &self.cancel,
-                        &mut on_text,
-                    )
-                    .await;
-                    if let Some(rest) = filter.finish().filter(|_| result.is_ok()) {
-                        self.send(AskEvent::Text { text: rest });
-                    }
-                    match &result {
-                        Ok(c) => {
-                            ai_state
-                                .ledger
-                                .record(&key_name, c.usage, ledger::price(&m, c.usage))
-                        }
-                        // The provider may have processed (and billed) the input.
-                        Err(e)
-                            if matches!(
-                                e.kind,
-                                ErrorKind::Timeout
-                                    | ErrorKind::Network
-                                    | ErrorKind::Server
-                                    | ErrorKind::Malformed
-                                    | ErrorKind::Refused
-                            ) =>
-                        {
-                            let usage = Usage {
-                                input_tokens: estimate - req.max_tokens as u64,
-                                output_tokens: 0,
-                            };
-                            ai_state
-                                .ledger
-                                .record(&key_name, usage, ledger::price(&m, usage));
-                        }
-                        Err(_) => {}
-                    }
-                    result
-                }
-            },
-            |n| {
-                self.send(AskEvent::Retry {
-                    retry: n.retry,
-                    limit: n.max_retries,
-                    reason: n.reason,
-                    wait: n.wait.as_millis() as u32,
-                    model: self.describe(&n.next),
-                })
-            },
-        )
-        .await;
-
-        result.map_err(|f| {
-            let mut e = f.error;
-            if f.attempts > 1 {
-                e.message = format!("Tried {} times. {}", f.attempts, e.message);
+        let json = self.plan.guide == GuideMode::Json;
+        let filter = Mutex::new(SentinelFilter::new(sentinel, json));
+        let on = |p: call::Progress| match p {
+            call::Progress::Started(model) => {
+                *filter.lock().unwrap() = SentinelFilter::new(sentinel, json);
+                self.send(AskEvent::Started {
+                    model: model.to_string(),
+                });
             }
-            e
-        })
+            call::Progress::Text(piece) => {
+                let shown = filter.lock().unwrap().push(piece);
+                if let Some(text) = shown {
+                    self.send(AskEvent::Text { text });
+                }
+            }
+            call::Progress::Retry {
+                retry,
+                limit,
+                reason,
+                wait,
+                model,
+            } => self.send(AskEvent::Retry {
+                retry,
+                limit,
+                reason,
+                wait: wait.as_millis() as u32,
+                model,
+            }),
+        };
+        let completion = call::stream(
+            self.app,
+            &self.settings,
+            "ask",
+            &models,
+            base,
+            &self.cancel,
+            &on,
+        )
+        .await?;
+        let rest = filter.lock().unwrap().finish();
+        if let Some(text) = rest {
+            self.send(AskEvent::Text { text });
+        }
+        Ok(completion)
     }
 
     /// The screenshot as message parts, with its size so the model can give
@@ -750,7 +685,7 @@ impl Turn<'_> {
     }
 }
 
-fn action_for(kind: &ErrorKind) -> Option<AskAction> {
+pub(crate) fn action_for(kind: &ErrorKind) -> Option<AskAction> {
     match kind {
         ErrorKind::Budget => Some(AskAction::OpenLimits),
         ErrorKind::Auth | ErrorKind::NotFound | ErrorKind::Permission | ErrorKind::Billing => {
@@ -901,7 +836,7 @@ pub fn ask_status(store: tauri::State<SettingsStore>) -> AskStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::schema::{ProviderConfig, ProviderKind};
+    use crate::settings::schema::{ModelConfig, ProviderConfig, ProviderKind};
 
     fn model(id: &str, vision: bool, tools: bool) -> ModelConfig {
         ModelConfig {

@@ -23,6 +23,7 @@ const WIRED: &[&str] = &[
     "openSettings",
     "pauseCapture",
     "clearAnnotations",
+    "circleToExplain",
     "textAsk",
     "voiceAsk",
 ];
@@ -54,7 +55,7 @@ pub struct HotkeyStatus {
 pub struct Hotkeys {
     by_id: Mutex<HashMap<u32, &'static str>>,
     status: Mutex<Vec<HotkeyStatus>>,
-    /// Escape is captured only while voice is active.
+    /// Escape is captured only while something of Helpy's is open.
     escape: Mutex<bool>,
 }
 
@@ -264,7 +265,13 @@ pub fn sync(app: &AppHandle, settings: &Settings) {
 pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     if shortcut.id() == escape_shortcut().id() {
         if event.state == ShortcutState::Pressed {
-            crate::voice::cancel(app);
+            // Esc closes Circle to explain first; otherwise it stops voice,
+            // answers and walkthroughs.
+            if crate::circle::active(app) {
+                crate::circle::end(app);
+            } else {
+                crate::voice::cancel(app);
+            }
         }
         return;
     }
@@ -292,6 +299,7 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     match action {
         "openSettings" => crate::windows::show_settings(app),
         "textAsk" => crate::windows::show_ask(app),
+        "circleToExplain" => crate::circle::toggle(app),
         "pauseCapture" => {
             let s = app.state::<SettingsStore>().get();
             let _ = settings::settings_set(
