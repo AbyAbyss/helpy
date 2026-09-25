@@ -68,7 +68,30 @@
         "minWidth": 760,
         "minHeight": 480,
         "visible": false,
-        "center": true
+        "center": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      },
+      {
+        "label": "dockcard",
+        "url": "dockcard.html",
+        "title": "Helpy agent",
+        "width": 360,
+        "height": 240,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": true,
+        "shadow": false,
+        "visible": false,
+        "focus": false,
+        "focusable": false,
+        "contentProtected": true,
+        "visibleOnAllWorkspaces": true,
+        "minWidth": 1,
+        "minHeight": 1
       },
       {
         "label": "dock",

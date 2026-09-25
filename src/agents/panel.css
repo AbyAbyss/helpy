@@ -1152,3 +1152,45 @@ body {
 .result .afiles__table {
   font-size: 13px;
 }
+
+
+/* ---------- Native glass (macOS vibrancy, Windows 11 Mica) ----------
+   The window is the frosted material; the page keeps only a tint of its
+   gradients so the desktop shows through. */
+
+html[data-glass] body {
+  background: transparent;
+}
+
+html[data-glass] {
+  --side-bg: linear-gradient(185deg, rgba(251, 217, 201, 0.62) 0%, rgba(248, 230, 220, 0.5) 45%, rgba(241, 237, 233, 0.35) 100%);
+  --main-bg: radial-gradient(55% 45% at 100% 0%, rgba(206, 214, 255, 0.35), transparent 70%),
+    radial-gradient(45% 40% at 95% 100%, rgba(196, 232, 246, 0.4), transparent 70%), rgba(251, 251, 252, 0.72);
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-glass]:not([data-theme="light"]) {
+    --side-bg: linear-gradient(185deg, rgba(31, 54, 168, 0.62) 0%, rgba(26, 38, 114, 0.5) 45%, rgba(18, 21, 31, 0.3) 100%);
+    --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.26), transparent 72%),
+      radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.22), transparent 72%), rgba(20, 22, 28, 0.66);
+  }
+}
+
+html[data-glass][data-theme="dark"] {
+  --side-bg: linear-gradient(185deg, rgba(31, 54, 168, 0.62) 0%, rgba(26, 38, 114, 0.5) 45%, rgba(18, 21, 31, 0.3) 100%);
+  --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.26), transparent 72%),
+    radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.22), transparent 72%), rgba(20, 22, 28, 0.66);
+}
+
+html[data-glass] .ap {
+  background: none;
+}
+
+html[data-glass] .ap__detail {
+  background: var(--main-bg);
+}
+
+/* macOS: the traffic lights float over the sidebar (overlay title bar). */
+html[data-mac] .ap__head {
+  padding-top: 42px;
+}

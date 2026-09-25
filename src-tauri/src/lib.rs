@@ -7,6 +7,7 @@ mod circle;
 mod connectors;
 mod cursor;
 mod fullscreen;
+mod glass;
 mod guide;
 mod hotkeys;
 mod mcp;
@@ -27,6 +28,9 @@ use settings::{Settings, SettingsStore};
 /// Reacts to a saved settings change. Windows pick changes up themselves from
 /// the `settings://changed` event.
 pub(crate) fn on_settings_changed(app: &AppHandle, prev: &Settings, next: &Settings) {
+    if prev.general.theme != next.general.theme {
+        glass::follow_theme(app, next.general.theme);
+    }
     if prev.hotkeys != next.hotkeys {
         hotkeys::sync(app, next);
     }
@@ -92,6 +96,8 @@ pub fn run() {
         .manage(cursor::CursorShared::default())
         .manage(ai::ask::AskState::default())
         .manage(guide::GuideState::default())
+        .manage(glass::Glass::default())
+        .manage(windows::DockCard::default())
         .manage(circle::CircleState::default())
         .setup(|app| {
             // A tray app: no Dock icon on macOS.
@@ -122,6 +128,7 @@ pub fn run() {
             cursor::spawn(handle.clone());
             voice::setup(&handle);
             guide::setup(&handle);
+            glass::setup(&handle);
             agents::setup(&handle);
             agents::triggers::setup(&handle);
             if handle.autolaunch().is_enabled().unwrap_or(false) != s.general.launch_at_login {
@@ -226,7 +233,13 @@ pub fn run() {
             agents::triggers::agents_trigger_resume,
             agents::templates::agents_template_plan,
             agents::templates::agents_save_template,
-            windows::dock_focus,
+            windows::dock_card_show,
+            windows::dock_card_hover,
+            windows::dock_card_layout,
+            windows::dock_card_pin,
+            windows::dock_card_close,
+            windows::dock_card_current,
+            glass::window_glass,
             agents::planner::agents_plan_current,
             agents::planner::agents_plan_start,
             agents::planner::agents_plan_cancel,

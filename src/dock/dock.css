@@ -16,7 +16,8 @@ body,
    by default; light glass in the light theme. R2 status colours: blue
    working, green done, yellow a question, red needs permission or went
    wrong, grey paused or waiting. */
-.dock {
+.dock,
+.cardwin {
   --glass-top: rgba(44, 48, 61, 0.9);
   --glass-bottom: rgba(20, 23, 31, 0.93);
   --glass-tint: 24%;
@@ -41,18 +42,32 @@ body,
   position: fixed;
   top: 0;
   left: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
   width: max-content;
-  /* Room for glows, ripples and shadows inside the window. */
-  padding: 22px 20px;
   font: 500 13px/1.5 var(--font-ui);
   color: var(--card-ink);
   -webkit-font-smoothing: antialiased;
 }
 
-:root[data-theme="light"] .dock {
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Room for glows, ripples and shadows inside the window. */
+  padding: 22px 20px;
+}
+
+/* The card's own window: room for its CSS shadow where there's no native
+   glass; with native glass the window is exactly the card. */
+.cardwin {
+  padding: 20px 18px;
+}
+
+.cardwin[data-glass] {
+  padding: 0;
+}
+
+:root[data-theme="light"] .dock,
+:root[data-theme="light"] .cardwin {
   --glass-top: rgba(255, 255, 255, 0.95);
   --glass-bottom: rgba(244, 245, 249, 0.93);
   --glass-tint: 20%;
@@ -73,7 +88,8 @@ body,
 }
 
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .dock {
+  :root:not([data-theme="dark"]) .dock,
+  :root:not([data-theme="dark"]) .cardwin {
     --glass-top: rgba(255, 255, 255, 0.95);
     --glass-bottom: rgba(244, 245, 249, 0.93);
     --glass-tint: 20%;
@@ -256,7 +272,7 @@ body,
   animation: pop-in 520ms var(--spring) both;
 }
 
-.dock--left .card {
+.cardwin[data-side="left"] .card {
   transform-origin: left center;
   animation-name: pop-in-left;
 }
@@ -724,7 +740,8 @@ body,
   display: block;
 }
 
-.dock button:focus-visible {
+.dock button:focus-visible,
+.cardwin button:focus-visible {
   outline: 2px solid var(--tone, #ff6166);
   outline-offset: 2px;
 }
@@ -879,4 +896,59 @@ body,
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ---------- Native glass (macOS vibrancy, Windows Acrylic) ----------
+   The window itself is the frosted material, so the card only adds a light
+   wash and its status colour, and the follow-up bar sits inside it. */
+
+.cardwin[data-glass] {
+  --wash: rgba(18, 21, 29, 0.28);
+}
+
+:root[data-theme="light"] .cardwin[data-glass] {
+  --wash: rgba(255, 255, 255, 0.34);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .cardwin[data-glass] {
+    --wash: rgba(255, 255, 255, 0.34);
+  }
+}
+
+.stack--merged {
+  gap: 0;
+}
+
+.cardwin[data-glass] .card {
+  border-radius: 20px;
+  border-color: transparent;
+  background:
+    radial-gradient(120% 80% at 100% 100%, color-mix(in srgb, var(--tone) var(--glass-tint), transparent), transparent 62%),
+    radial-gradient(90% 60% at 0% 0%, color-mix(in srgb, var(--tone) 8%, transparent), transparent 70%),
+    var(--wash);
+  box-shadow: inset 0 1px 0 var(--card-sheen);
+  /* The window appears at once; the content does the settling. */
+  animation: glass-settle 420ms var(--out) both;
+}
+
+@keyframes glass-settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+}
+
+.followbar--inset {
+  height: 46px;
+  padding: 0 5px 0 14px;
+  border-radius: 23px;
+  background: var(--soft);
+  box-shadow: none;
+  animation: rise-in 520ms var(--spring) 80ms both;
+}
+
+.followbar--inset .round {
+  width: 36px;
+  height: 36px;
 }

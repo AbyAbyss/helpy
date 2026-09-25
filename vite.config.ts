@@ -19,6 +19,7 @@ export default defineConfig(() => ({
         step: "step.html",
         plan: "plan.html",
         dock: "dock.html",
+        dockcard: "dockcard.html",
         agents: "agents.html",
       },
     },

@@ -13,6 +13,10 @@ pub const STEP: &str = "step";
 pub const PLAN: &str = "plan";
 /// The agent dock at the screen edge.
 pub const DOCK: &str = "dock";
+/// The card that slides out of the dock for one agent.
+pub const DOCK_CARD: &str = "dockcard";
+/// Which agent the dock card shows (None: it's closed).
+pub const DOCK_CARD_EVENT: &str = "dock://card";
 /// The agent panel.
 pub const AGENTS: &str = "agents";
 pub const AGENTS_FOCUS_EVENT: &str = "agents://focus";
@@ -241,16 +245,176 @@ pub fn dock_layout(app: AppHandle, width: f64, height: f64) {
     }
 }
 
-/// Lets the dock take typing (a follow-up, an answer) while an input is
-/// in use, and gives focus back afterwards.
+/// The dock card's state: which agent, where it points, and whether the
+/// mouse is over the chips or the card (it closes shortly after it's over
+/// neither, unless the user is typing in it).
+#[derive(Default)]
+pub struct DockCard {
+    inner: std::sync::Mutex<CardState>,
+}
+
+#[derive(Default)]
+struct CardState {
+    open: Option<String>,
+    /// The hovered chip's centre, in logical pixels from the dock's top.
+    anchor: f64,
+    /// The card's size in logical pixels, as the page last reported it.
+    size: (f64, f64),
+    over_dock: bool,
+    over_card: bool,
+    pinned: bool,
+    /// Bumped on every change, so a pending close can tell it's stale.
+    generation: u64,
+}
+
+/// Gap between the dock and its card, logical pixels.
+const CARD_GAP: f64 = 10.0;
+/// How long the card stays after the mouse leaves it and the chips.
+const CARD_LINGER: std::time::Duration = std::time::Duration::from_millis(260);
+
+fn emit_card(app: &AppHandle, open: &Option<String>) {
+    let _ = app.emit(DOCK_CARD_EVENT, open);
+}
+
+/// Puts the card beside the dock, level with its chip, inside the monitor.
+fn place_card(app: &AppHandle, st: &CardState) {
+    let (Some(card), Some(dock), Some(m)) = (
+        app.get_webview_window(DOCK_CARD),
+        app.get_webview_window(DOCK),
+        dock_monitor(app),
+    ) else {
+        return;
+    };
+    let (Ok(dp), Ok(ds)) = (dock.outer_position(), dock.outer_size()) else {
+        return;
+    };
+    if st.open.is_none() || st.size.0 < 1.0 || st.size.1 < 1.0 {
+        let _ = card.hide();
+        return;
+    }
+    let (w, h) = (st.size.0 * m.scale, st.size.1 * m.scale);
+    let left = app
+        .state::<crate::settings::SettingsStore>()
+        .get()
+        .agents
+        .dock_side
+        == crate::settings::schema::DockSide::Left;
+    let gap = CARD_GAP * m.scale;
+    let x = if left {
+        dp.x as f64 + ds.width as f64 + gap
+    } else {
+        dp.x as f64 - w - gap
+    };
+    let y = dp.y as f64 + st.anchor * m.scale - h / 2.0;
+    let edge = 8.0 * m.scale;
+    let y = y.clamp(
+        m.y as f64 + edge,
+        (m.y as f64 + m.height as f64 - h - edge).max(m.y as f64),
+    );
+    let _ = card.set_size(PhysicalSize::new(w.round() as u32, h.round() as u32));
+    let _ = card.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+    if !card.is_visible().unwrap_or(false) {
+        let _ = card.show();
+        let _ = card.set_always_on_top(true);
+    }
+}
+
+/// Closes the card after a moment unless the mouse comes back or the user
+/// is typing in it.
+fn close_soon(app: &AppHandle, st: &mut CardState) {
+    st.generation += 1;
+    if st.over_dock || st.over_card || st.pinned || st.open.is_none() {
+        return;
+    }
+    let generation = st.generation;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(CARD_LINGER).await;
+        let state = app.state::<DockCard>();
+        let mut st = state.inner.lock().unwrap();
+        if st.generation == generation {
+            close(&app, &mut st);
+        }
+    });
+}
+
+fn close(app: &AppHandle, st: &mut CardState) {
+    st.open = None;
+    st.pinned = false;
+    st.generation += 1;
+    emit_card(app, &st.open);
+    if let Some(w) = app.get_webview_window(DOCK_CARD) {
+        let _ = w.set_focusable(false);
+        let _ = w.hide();
+    }
+}
+
+/// A chip was hovered: show that agent's card level with it.
 #[tauri::command]
-pub fn dock_focus(app: AppHandle, on: bool) {
-    if let Some(w) = app.get_webview_window(DOCK) {
+pub fn dock_card_show(app: AppHandle, id: String, anchor: f64) {
+    let state = app.state::<DockCard>();
+    let mut st = state.inner.lock().unwrap();
+    st.over_dock = true;
+    st.anchor = anchor;
+    st.generation += 1;
+    if st.open.as_deref() != Some(id.as_str()) {
+        if st.pinned {
+            return;
+        }
+        st.open = Some(id);
+        emit_card(&app, &st.open);
+    }
+    place_card(&app, &st);
+}
+
+/// The mouse entered or left the chips ("dock") or the card ("card").
+#[tauri::command]
+pub fn dock_card_hover(app: AppHandle, from: String, inside: bool) {
+    let state = app.state::<DockCard>();
+    let mut st = state.inner.lock().unwrap();
+    if from == "dock" {
+        st.over_dock = inside;
+    } else {
+        st.over_card = inside;
+    }
+    close_soon(&app, &mut st);
+}
+
+/// The card page reports its size; it's placed (and shown) from that.
+#[tauri::command]
+pub fn dock_card_layout(app: AppHandle, width: f64, height: f64) {
+    let state = app.state::<DockCard>();
+    let mut st = state.inner.lock().unwrap();
+    st.size = (width, height);
+    place_card(&app, &st);
+}
+
+/// Lets the card take typing while its input is in use, and keeps it open.
+#[tauri::command]
+pub fn dock_card_pin(app: AppHandle, on: bool) {
+    let state = app.state::<DockCard>();
+    let mut st = state.inner.lock().unwrap();
+    st.pinned = on;
+    if let Some(w) = app.get_webview_window(DOCK_CARD) {
         let _ = w.set_focusable(on);
         if on {
             let _ = w.set_focus();
         }
     }
+    close_soon(&app, &mut st);
+}
+
+#[tauri::command]
+pub fn dock_card_close(app: AppHandle) {
+    let state = app.state::<DockCard>();
+    let mut st = state.inner.lock().unwrap();
+    close(&app, &mut st);
+}
+
+/// The agent the card shows, for a card page that loads late.
+#[tauri::command]
+pub fn dock_card_current(state: tauri::State<DockCard>) -> Option<String> {
+    state.inner.lock().unwrap().open.clone()
 }
 
 /// The hand-off (R6): the voice pill glides to the dock and becomes the new

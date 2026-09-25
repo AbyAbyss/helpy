@@ -54,6 +54,13 @@ export function Panel() {
       .sort((a, b) => (b.batch?.created ?? 0) - (a.batch?.created ?? 0));
   }, [agents, batches, filter]);
 
+  // Native glass (macOS vibrancy, Windows Mica) shows through when it's on.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (navigator.platform.includes("Mac")) root.setAttribute("data-mac", "");
+    api.windowGlass().then((g) => g && root.setAttribute("data-glass", g), () => {});
+  }, []);
+
   const current = selected ? agents.get(selected) : undefined;
   const waiting = [...agents.values()].filter((a) => a.pending?.type === "approval").length;
   useEffect(() => {
@@ -63,7 +70,7 @@ export function Panel() {
   return (
     <div className="ap">
       <aside className="ap__list">
-        <header className="ap__head">
+        <header className="ap__head" data-tauri-drag-region>
           <h1>Agents</h1>
           <div className="seg" role="radiogroup" aria-label="Show">
             {(["active", "finished", "all"] as const).map((f) => (
