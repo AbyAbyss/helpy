@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pill",
+  "description": "The voice pill: follows voice and answer events, and can open the ask panel. No file or dialog access.",
+  "windows": [
+    "pill"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-size"
+  ]
+}

@@ -1,0 +1,60 @@
+.buddy {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  /* Readable over any app: a light rim plus a soft shadow. */
+  filter: drop-shadow(0 2px 3px rgba(10, 12, 20, 0.35));
+}
+.buddy svg { overflow: visible; }
+.buddy__img { width: 100%; height: 100%; object-fit: contain; }
+
+.buddy__fill { fill: var(--buddy-body); stroke: var(--buddy-rim); stroke-width: 2; stroke-linejoin: round; }
+.buddy__dot-ring { fill: none; stroke: var(--buddy-body); stroke-width: 6; }
+.buddy__eyes ellipse { fill: var(--buddy-eye); }
+.buddy__eyes { transform-box: fill-box; transform-origin: center; transition: transform 200ms ease; }
+.buddy__mouth { fill: var(--buddy-eye); opacity: 0; transform-box: fill-box; transform-origin: center; }
+.buddy__ring { fill: none; stroke: var(--buddy-body); stroke-width: 2.5; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.buddy__dots circle { fill: var(--buddy-body); stroke: var(--buddy-rim); stroke-width: 1; opacity: 0; }
+.buddy__body { transform-box: fill-box; transform-origin: center; }
+
+.buddy__badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--buddy-eye);
+  color: #fff;
+  border: 1.5px solid var(--buddy-rim);
+  font: 700 10px/13px var(--font-ui);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* State shapes, shown even with animations off. */
+.buddy--listening .buddy__ring { opacity: 0.6; }
+.buddy--listening .buddy__eyes { transform: scale(1.15); }
+.buddy--thinking .buddy__eyes { transform: translate(2px, -2px); }
+.buddy--thinking .buddy__dots circle { opacity: 1; }
+.buddy--speaking .buddy__mouth { opacity: 1; }
+
+/* Motion, only when state animations are on. */
+.buddy--animate.buddy--idle .buddy__eyes { animation: buddy-blink 5s infinite; }
+.buddy--animate.buddy--listening .buddy__ring { animation: buddy-pulse 1.3s ease-out infinite; }
+.buddy--animate.buddy--thinking .buddy__dots circle { animation: buddy-think 1.2s ease-in-out infinite; }
+.buddy--animate.buddy--thinking .buddy__dots circle:nth-child(2) { animation-delay: 0.15s; }
+.buddy--animate.buddy--thinking .buddy__dots circle:nth-child(3) { animation-delay: 0.3s; }
+.buddy--animate.buddy--thinking.buddy--spark .buddy__body { animation: buddy-spin 3s linear infinite; }
+.buddy--animate.buddy--speaking .buddy__mouth { animation: buddy-talk 0.32s ease-in-out infinite alternate; }
+
+@keyframes buddy-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes buddy-pulse { from { transform: scale(0.85); opacity: 0.7; } to { transform: scale(1.35); opacity: 0; } }
+@keyframes buddy-think { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes buddy-spin { to { transform: rotate(360deg); } }
+@keyframes buddy-talk { from { transform: scaleY(0.6); } to { transform: scaleY(2); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .buddy--animate * { animation: none !important; }
+}

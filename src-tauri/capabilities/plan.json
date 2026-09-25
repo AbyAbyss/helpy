@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "plan",
+  "description": "The agents plan card: shows a plan and starts or drops it. No file or dialog access.",
+  "windows": [
+    "plan"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-size"
+  ]
+}

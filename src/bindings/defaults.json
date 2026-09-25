@@ -1,0 +1,189 @@
+{
+  "general": {
+    "launchAtLogin": false,
+    "startMinimized": true,
+    "theme": "system",
+    "interfaceLanguage": "en",
+    "responseLanguage": "auto",
+    "checkForUpdates": true,
+    "onboarded": false
+  },
+  "profiles": {
+    "active": "beginner"
+  },
+  "buddy": {
+    "enabled": true,
+    "style": "pip",
+    "size": 36,
+    "opacity": 1.0,
+    "offsetX": 18,
+    "offsetY": 20,
+    "smoothness": 0.35,
+    "showStateAnimations": true,
+    "showAgentBadge": true,
+    "hideInFullscreen": true,
+    "hideWhenIdle": false,
+    "idleSeconds": 10
+  },
+  "hotkeys": {
+    "voiceAsk": "Alt+Shift+Space",
+    "voiceMode": "pushToTalk",
+    "textAsk": "Alt+Shift+T",
+    "circleToExplain": "Alt+Shift+C",
+    "clearAnnotations": "Alt+Shift+X",
+    "pauseCapture": "Alt+Shift+P",
+    "openAgentPanel": "Alt+Shift+A",
+    "openApprovalInbox": "Alt+Shift+I",
+    "pauseAllAgents": "Alt+Shift+Z",
+    "openSettings": "Alt+Shift+S"
+  },
+  "voiceInput": {
+    "engine": "whisper",
+    "whisperModel": "base",
+    "openaiProviderId": null,
+    "openaiModel": "whisper-1",
+    "deepgramModel": "nova-3",
+    "microphone": null,
+    "language": "auto",
+    "silenceSeconds": 1.5,
+    "noiseSuppression": true,
+    "wakeWord": false,
+    "wakePhrase": "hey helpy"
+  },
+  "voiceOutput": {
+    "voiceGuidance": true,
+    "engine": "system",
+    "systemVoice": null,
+    "piperVoice": "en_US-lessac-medium",
+    "openaiProviderId": null,
+    "openaiModel": "tts-1",
+    "openaiVoice": "alloy",
+    "speed": 1.0,
+    "volume": 1.0,
+    "readAloud": "fullAnswers",
+    "announceAgents": true
+  },
+  "privacy": {
+    "capturePaused": false,
+    "blockedApps": [
+      "1Password",
+      "Bitwarden",
+      "KeePass",
+      "Keychain Access",
+      "Dashlane",
+      "LastPass",
+      "Enpass",
+      "Proton Pass",
+      "NordPass",
+      "RoboForm"
+    ],
+    "blurPasswords": true,
+    "offline": false
+  },
+  "ai": {
+    "providers": [],
+    "routing": {
+      "ask": null,
+      "visualGuidance": null,
+      "circleToExplain": null,
+      "agentPlanning": null,
+      "agentOrchestrator": null,
+      "agentWorker": null,
+      "visionFallback": null
+    },
+    "fallbackChain": [],
+    "temperature": 0.7,
+    "maxResponseTokens": 16000,
+    "timeoutSecs": 60,
+    "customInstructions": ""
+  },
+  "answerStyle": {
+    "detail": "normal",
+    "tone": "casual",
+    "screenAccess": "whenNeeded"
+  },
+  "guidance": {
+    "highlightColor": "#e5484d",
+    "highlightThickness": 3,
+    "glow": true,
+    "dim": 0.25,
+    "labelStyle": "accent",
+    "arrowStyle": "curved",
+    "advance": "onClick",
+    "annotationSeconds": 0,
+    "cardPosition": "nearTarget",
+    "animationSpeed": 1.0,
+    "reduceMotion": false,
+    "maxSteps": 12,
+    "showCoordinates": false,
+    "snapToControls": true,
+    "doItForMe": false
+  },
+  "circle": {
+    "defaultShape": "rectangle",
+    "defaultAction": "explain",
+    "labelDetail": "names",
+    "translateTo": "en"
+  },
+  "agents": {
+    "maxRunning": 3,
+    "defaultMode": "auto",
+    "confirmPlans": "always",
+    "approvals": {
+      "fileChanges": "allow",
+      "fileDeletes": "ask",
+      "reminders": "ask",
+      "browserForms": "ask",
+      "builds": "ask"
+    },
+    "tools": {
+      "webSearch": true,
+      "fetch": true,
+      "files": true,
+      "shell": true,
+      "reminders": true,
+      "browser": true,
+      "build": true
+    },
+    "approvedFolders": [],
+    "projectsFolder": "",
+    "backupDays": 14,
+    "shellPolicy": "ask",
+    "shellAllowlist": [],
+    "searchEngine": "auto",
+    "searxngUrl": "",
+    "timeLimitMinutes": 30,
+    "agentTokenBudget": 400000,
+    "agentCostBudget": null,
+    "batchTokenBudget": 1000000,
+    "batchCostBudget": null,
+    "onFailure": "stop",
+    "maxSteps": 25,
+    "maxToolCalls": 50,
+    "repeatThreshold": 3,
+    "noProgressSteps": 8,
+    "contextTokens": 60000,
+    "dock": true,
+    "dockSide": "right",
+    "speakStatus": false,
+    "doneSeconds": 60,
+    "notifications": true,
+    "historyDays": 30,
+    "templates": [],
+    "triggers": [],
+    "builder": "auto",
+    "builderCommand": ""
+  },
+  "connectors": {
+    "apps": {},
+    "builtin": {},
+    "mcp": []
+  },
+  "limits": {
+    "maxRetries": 3,
+    "backoffBaseMs": 2000,
+    "backoffMaxMs": 30000,
+    "dailyTokenBudget": 2000000,
+    "dailyCostBudget": null
+  }
+}

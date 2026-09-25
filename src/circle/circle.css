@@ -1,0 +1,528 @@
+/* Circle to explain. The only overlay UI that takes the mouse, and only
+   while it's open. Dark like every card Helpy floats over other apps. */
+.circle {
+  --card: rgba(18, 21, 29, 0.95);
+  --card-ink: #eef1f6;
+  --card-ink-2: #aab2c0;
+  --card-line: rgba(255, 255, 255, 0.1);
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+  font: 500 13px/1.45 var(--font-ui);
+  color: var(--card-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.circle--select {
+  cursor: crosshair;
+}
+
+.circle__svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.circle__scrim {
+  fill: rgba(8, 10, 14, 0.32);
+  animation: c-fade 160ms ease-out both;
+}
+
+.circle--select .circle__scrim {
+  fill: rgba(8, 10, 14, 0.18);
+}
+
+.circle__outline {
+  fill: none;
+  stroke: var(--mark);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px var(--mark));
+}
+
+.circle--select .circle__outline {
+  stroke-dasharray: 7 5;
+}
+
+/* ---------- Selection toolbar ---------- */
+
+.circle-bar {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 6px 6px 6px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.7);
+  cursor: default;
+  white-space: nowrap;
+  animation: c-drop 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.circle-bar__hint {
+  color: var(--card-ink-2);
+  padding-right: 4px;
+}
+
+.circle-bar__problem {
+  padding-left: 8px;
+  color: #ffb4b7;
+}
+
+.seg {
+  display: flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--card-ink-2);
+  font: 600 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.seg button[aria-checked="true"] {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--card-ink);
+}
+
+.seg svg,
+.ccard__close svg,
+.ccard__send svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---------- Buttons ---------- */
+
+.cbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--card-line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--card-ink);
+  font: 600 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.cbtn:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.cbtn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--card-ink-2);
+}
+
+.cbtn--primary {
+  border-color: transparent;
+  background: var(--mark);
+  color: #fff;
+}
+
+.cbtn--small {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.circle kbd {
+  font: 600 10px var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--card-line);
+  color: var(--card-ink-2);
+}
+
+.circle button:focus-visible {
+  outline: 2px solid var(--mark);
+  outline-offset: 2px;
+}
+
+.circle input:focus {
+  outline: none;
+  border-color: var(--mark);
+}
+
+/* ---------- Diagram labels ---------- */
+
+.circle__leaders line {
+  stroke: var(--mark);
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+
+.circle__leaders circle {
+  fill: var(--mark);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.circle__leaders .is-on line {
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.clabel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-line);
+  background: var(--card);
+  color: var(--card-ink);
+  text-align: left;
+  font: 500 11px/1.2 var(--font-ui);
+  box-shadow:
+    inset 3px 0 0 var(--mark),
+    0 6px 16px -6px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  animation: c-fade 220ms ease-out both;
+}
+
+.clabel:hover,
+.clabel[aria-pressed="true"] {
+  background: #252a36;
+}
+
+.clabel[aria-pressed="true"] {
+  border-color: var(--mark);
+}
+
+.clabel__name {
+  font: 650 12.5px/1.2 var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clabel__note {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--card-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Result card ---------- */
+
+.ccard {
+  position: absolute;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  box-shadow:
+    0 20px 44px -16px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(0, 0, 0, 0.25);
+  cursor: default;
+  animation: c-rise 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.ccard__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 8px 12px;
+  border-bottom: 1px solid var(--card-line);
+}
+
+.ccard__head > svg {
+  flex: none;
+}
+
+.ccard__actions {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.chipb {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 13px;
+  border: 1px solid var(--card-line);
+  background: transparent;
+  color: var(--card-ink-2);
+  font: 600 11.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.chipb:hover:not(:disabled) {
+  color: var(--card-ink);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.chipb[aria-pressed="true"] {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--card-ink);
+}
+
+.chipb:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ccard__close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--card-ink-2);
+  cursor: pointer;
+}
+
+.ccard__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--card-ink);
+}
+
+.ccard__body {
+  flex: 1;
+  min-height: 60px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  user-select: text;
+}
+
+.ccard__empty {
+  margin: 8px 0;
+  color: var(--card-ink-2);
+}
+
+.ccard__part h3 {
+  margin: 6px 0 4px;
+  font: 650 15px var(--font-ui);
+}
+
+.ccard__part p {
+  margin: 0;
+}
+
+.ccard__back {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--card-ink-2);
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.turn__title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--card-ink-2);
+}
+
+.turn__q {
+  margin: 0 0 6px;
+  color: var(--card-ink-2);
+  font-style: italic;
+}
+
+.turn__md > :first-child {
+  margin-top: 0;
+}
+
+.turn__md > :last-child {
+  margin-bottom: 0;
+}
+
+.turn__md p,
+.turn__md ul,
+.turn__md ol {
+  margin: 0 0 8px;
+}
+
+.turn__md ul,
+.turn__md ol {
+  padding-left: 18px;
+}
+
+.turn__md code {
+  font: 12px var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+.turn__text {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  font: 12px/1.5 var(--font-mono);
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.turn__wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--card-ink-2);
+}
+
+.turn__ok {
+  margin: 8px 0 0;
+  color: #7ee0ae;
+  font-size: 12px;
+}
+
+.turn .cbtn--small {
+  margin-top: 8px;
+}
+
+.turn__err {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 90, 95, 0.12);
+  color: #ffb4b7;
+}
+
+.turn__err p {
+  margin: 0;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--mark);
+  animation: c-spin 800ms linear infinite;
+}
+
+.ccard__ask {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--card-line);
+}
+
+.ccard__ask input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--card-ink);
+  font: 500 13px var(--font-ui);
+}
+
+.ccard__ask input::placeholder {
+  color: #7f8797;
+}
+
+.ccard__agent {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-line);
+  background: rgba(77, 141, 255, 0.16);
+  color: #b6cdff;
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ccard__agent:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ccard__send {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--mark);
+  color: #fff;
+  cursor: pointer;
+}
+
+.ccard__send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@keyframes c-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes c-drop {
+  from {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+
+@keyframes c-rise {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+@keyframes c-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .circle * {
+    animation-duration: 1ms !important;
+  }
+  .spinner {
+    animation-duration: 800ms !important;
+  }
+}

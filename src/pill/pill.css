@@ -1,0 +1,147 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Status colours match the agent dock: blue working, green done, red error. */
+.pill {
+  --glow: #4d8dff;
+  --glow-soft: rgba(77, 141, 255, 0.55);
+  /* Lay out at natural width, not the window's current width; the window
+     is then resized to fit this. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: max-content;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  /* Room for the glow inside the window. */
+  padding: 14px;
+  max-width: 300px;
+  cursor: pointer;
+  font: 500 13px/1.4 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pill--done {
+  --glow: #3ecf8e;
+  --glow-soft: rgba(62, 207, 142, 0.5);
+}
+
+.pill--error {
+  --glow: #ff5a5f;
+  --glow-soft: rgba(255, 90, 95, 0.5);
+}
+
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+  padding: 0 2px;
+  filter: drop-shadow(0 0 6px var(--glow-soft)) drop-shadow(0 0 2px var(--glow-soft));
+}
+
+.wave span {
+  display: block;
+  width: 3.5px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--glow) 55%, white), var(--glow));
+  transform-origin: center;
+  transform: scaleY(0.12);
+  transition: background 300ms ease;
+}
+
+.pill--message:not(.pill--error) .wave span {
+  background: #8a93a6;
+}
+
+.caption {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 272px;
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: rgba(16, 19, 26, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.55);
+  color: #eef1f6;
+  animation: rise 160ms ease-out;
+}
+
+.caption__text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pill--listening .caption__text {
+  color: #c3cad6;
+  font-style: italic;
+}
+
+.pill--error .caption {
+  border-color: rgba(255, 90, 95, 0.4);
+}
+
+.caption__open {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--glow);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption {
+    animation: none;
+  }
+}
+
+/* The hand-off (R6): while the window glides to the dock, the waveform
+   folds into the glowing chip the new agent gets there. */
+.pill--handoff {
+  --glow: #4d8dff;
+  --glow-soft: rgba(77, 141, 255, 0.6);
+}
+
+.pill--handoff .wave {
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(18, 21, 29, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 18px var(--glow-soft);
+  transition:
+    width 260ms ease,
+    height 260ms ease,
+    border-radius 260ms ease;
+}
+
+.pill--handoff .wave span {
+  transform: scaleY(0.2) !important;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}

@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-label="Helpy: an AI companion that lives next to your cursor">
+  <defs>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+    <clipPath id="frame">
+      <rect width="1280" height="400" rx="28"/>
+    </clipPath>
+    <linearGradient id="card" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#2c303d" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#14171f" stop-opacity="0.94"/>
+    </linearGradient>
+    <radialGradient id="cardtint" cx="1" cy="1" r="1">
+      <stop offset="0" stop-color="#4ade99" stop-opacity="0.28"/>
+      <stop offset="0.65" stop-color="#4ade99" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1280" height="400" fill="#121520"/>
+    <g filter="url(#soft)">
+      <circle cx="170" cy="120" r="230" fill="#3548d6"/>
+      <circle cx="930" cy="10" r="220" fill="#d0506f"/>
+      <circle cx="1170" cy="400" r="230" fill="#1fae7a"/>
+      <circle cx="520" cy="430" r="170" fill="#6b3fa0"/>
+    </g>
+
+    <!-- The Helpy mark -->
+    <g transform="translate(96 120) scale(2.3)">
+      <path d="M6 6 L26 13.5 A22 22 0 1 1 13.5 26 Z" fill="#ff6166"/>
+      <ellipse cx="29" cy="33" rx="3.2" ry="4.4" fill="#141821"/>
+      <ellipse cx="41" cy="33" rx="3.2" ry="4.4" fill="#141821"/>
+    </g>
+
+    <text x="270" y="200" fill="#f4f6fb" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="92" font-weight="700" letter-spacing="-2">Helpy</text>
+    <text x="274" y="252" fill="#c9cfdc" font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="27" font-weight="500">An AI companion that lives next to your cursor.</text>
+
+    <g font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#e8ebf1">
+      <rect x="274" y="286" width="118" height="38" rx="19" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.14"/>
+      <text x="333" y="311" text-anchor="middle">Ask</text>
+      <rect x="402" y="286" width="118" height="38" rx="19" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.14"/>
+      <text x="461" y="311" text-anchor="middle">Show me</text>
+      <rect x="530" y="286" width="118" height="38" rx="19" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.14"/>
+      <text x="589" y="311" text-anchor="middle">Circle it</text>
+      <rect x="658" y="286" width="136" height="38" rx="19" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.14"/>
+      <text x="726" y="311" text-anchor="middle">Hand it off</text>
+    </g>
+
+    <!-- A dock card and its chips -->
+    <g filter="url(#shadow)">
+      <rect x="880" y="104" width="270" height="176" rx="22" fill="url(#card)"/>
+      <rect x="880" y="104" width="270" height="176" rx="22" fill="url(#cardtint)"/>
+      <rect x="880.5" y="104.5" width="269" height="175" rx="21.5" fill="none" stroke="#ffffff" stroke-opacity="0.1"/>
+    </g>
+    <g font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+      <rect x="898" y="122" width="30" height="30" rx="9" fill="#ffffff" fill-opacity="0.08"/>
+      <circle cx="913" cy="137" r="6" fill="#4ade99"/>
+      <text x="940" y="134" fill="#f1f3f8" font-size="15" font-weight="700">Desktop tidy</text>
+      <text x="940" y="151" fill="#4ade99" font-size="12.5" font-weight="600">Done · 7s</text>
+      <text x="898" y="183" fill="#dfe3ea" font-size="13.5">Sorted 2 files into Documents</text>
+      <text x="898" y="201" fill="#dfe3ea" font-size="13.5">and Images.</text>
+      <rect x="898" y="216" width="234" height="44" rx="12" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.08"/>
+      <text x="912" y="243" fill="#e8ebf1" font-size="13">Sort Downloads too</text>
+      <text x="1116" y="243" fill="#8a92a3" font-size="13" text-anchor="end">→</text>
+    </g>
+
+    <g>
+      <rect x="1176" y="90" width="52" height="52" rx="15" fill="#6ea2ff" filter="url(#glow)" opacity="0.55"/>
+      <rect x="1176" y="90" width="52" height="52" rx="15" fill="#1b1f29"/>
+      <path transform="translate(1188 102) scale(0.44)" d="M8 8 L27 15 A21 21 0 1 1 15 27 Z" fill="#6ea2ff"/>
+
+      <rect x="1176" y="162" width="52" height="52" rx="15" fill="#4ade99" filter="url(#glow)" opacity="0.6"/>
+      <rect x="1176" y="162" width="52" height="52" rx="15" fill="#1b1f29"/>
+      <path transform="translate(1188 174) scale(0.44)" d="M8 8 L27 15 A21 21 0 1 1 15 27 Z" fill="#4ade99"/>
+
+      <rect x="1176" y="234" width="52" height="52" rx="15" fill="#f5c542" filter="url(#glow)" opacity="0.5"/>
+      <rect x="1176" y="234" width="52" height="52" rx="15" fill="#1b1f29"/>
+      <path transform="translate(1188 246) scale(0.44)" d="M8 8 L27 15 A21 21 0 1 1 15 27 Z" fill="#f5c542"/>
+    </g>
+  </g>
+</svg>

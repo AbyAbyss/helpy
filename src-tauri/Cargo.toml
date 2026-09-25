@@ -1,0 +1,88 @@
+[package]
+name = "helpy"
+version = "0.1.0"
+description = "Helpy, an AI screen tutor and assistant"
+authors = ["Helpy contributors"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "helpy_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-log = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = { version = "10", features = ["serde-json-impl"] }
+log = "0.4"
+base64 = "0.22"
+tokio = { version = "1.53.1", features = ["process", "time", "sync", "macros", "rt", "fs", "io-util"] }
+tokio-util = "0.7.19"
+futures-util = "0.3.34"
+thiserror = "2.0.21"
+chrono = "0.4.45"
+xcap = "0.9.8"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "http2", "multipart"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+bytes = "1.12.1"
+rodio = { version = "0.22.2", default-features = false, features = ["playback"] }
+whisper-rs = "0.16.0"
+nnnoiseless = "0.5.2"
+tts = "0.26.3"
+flate2 = "1.1.10"
+tar = "0.4.46"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+rdev = "0.5"
+tauri-plugin-clipboard-manager = "2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tauri-plugin-notification = "2"
+scraper = "0.20"
+html2text = "0.12"
+rmcp = { version = "3.4.1", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest"] }
+sha2 = "0.10"
+url = "2"
+getrandom = "0.3"
+tauri-plugin-opener = "2"
+cron = "0.15"
+enigo = "0.6"
+notify = "8"
+chromiumoxide = { version = "0.9.1", features = ["fetcher", "rustls", "zip8"] }
+
+[target.'cfg(windows)'.dependencies]
+uiautomation = "0.25"
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_Registry"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+core-graphics = "0.24"
+accessibility-sys = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.13"
+atspi = { version = "0.30", default-features = false, features = ["connection", "proxies", "tokio", "zbus"] }
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1.53.1", features = ["process", "test-util", "rt-multi-thread"] }

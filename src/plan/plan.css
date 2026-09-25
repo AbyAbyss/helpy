@@ -1,0 +1,348 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+/* The same dark card as the step card and circle to explain. */
+.plan {
+  --card: rgba(18, 21, 29, 0.985);
+  --card-ink: #eef1f6;
+  --card-ink-2: #aab2c0;
+  --card-line: rgba(255, 255, 255, 0.1);
+  --accent: #ff6166;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 460px;
+  padding: 8px 20px 34px;
+  font: 500 13px/1.45 var(--font-ui);
+  color: var(--card-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pcard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  box-shadow:
+    0 14px 26px -10px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(0, 0, 0, 0.25);
+  animation: p-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.pcard__head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.pcard__head svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.pcard h1 {
+  margin: 0;
+  font: 650 16px/1.3 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.pcard__request {
+  margin: 3px 0 0;
+  color: var(--card-ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.seg {
+  display: flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  align-self: flex-start;
+}
+
+.seg button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--card-ink-2);
+  font: 600 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.seg button[aria-checked="true"] {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--card-ink);
+}
+
+.plist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.pagent {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-line);
+}
+
+.pagent__num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(77, 141, 255, 0.18);
+  color: #8fb6ff;
+  font: 700 11.5px var(--font-ui);
+}
+
+.pagent__num:empty {
+  /* A single agent: a working-blue dot instead of a number. */
+  width: 10px;
+  height: 10px;
+  margin: 6px;
+  background: #4d8dff;
+  box-shadow: 0 0 8px rgba(77, 141, 255, 0.8);
+}
+
+/* One after another: a line joins the numbers. */
+.plist--seq .pagent:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  top: 34px;
+  bottom: -10px;
+  width: 2px;
+  background: rgba(77, 141, 255, 0.35);
+}
+
+.pagent__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.pagent__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pagent__top strong {
+  font: 650 13.5px var(--font-ui);
+}
+
+.pagent__goal {
+  margin: 3px 0 0;
+  color: #cfd5df;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pagent__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--card-ink-2);
+  font: 600 11px var(--font-ui);
+}
+
+.tag--open {
+  background: rgba(62, 207, 142, 0.14);
+  color: #7ee0ae;
+}
+
+.pnotes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--card-ink-2);
+  font-size: 12.5px;
+}
+
+.pnotes li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.pnotes b {
+  color: var(--card-ink);
+  font-weight: 650;
+}
+
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: translateY(-1px);
+}
+
+/* Needs permission is red, like the dock. */
+.dot--ask {
+  background: #ff5a5f;
+  box-shadow: 0 0 6px rgba(255, 90, 95, 0.8);
+}
+
+.dot--folder {
+  background: #f5c542;
+}
+
+.dot--image {
+  background: #8fb6ff;
+}
+
+.dot--connect {
+  background: #c9a3ff;
+}
+
+.linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.linkbtn:hover {
+  text-decoration: underline;
+}
+
+.pcard__err {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 90, 95, 0.12);
+  color: #ffb4b7;
+}
+
+.pcard__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pcard__hint {
+  flex: 1;
+  color: #7f8797;
+  font-size: 12px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--card-line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--card-ink);
+  font: 650 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--card-ink-2);
+}
+
+.btn--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #1a0d0e;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #ff7a7e;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+}
+
+.btn:focus-visible,
+.seg button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+kbd {
+  font: 600 10px var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  opacity: 0.8;
+}
+
+.btn--quiet kbd {
+  border-color: var(--card-line);
+}
+
+@keyframes p-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pcard {
+    animation: none;
+  }
+}
+
+.tag--after {
+  background: rgba(143, 182, 255, 0.14);
+  color: #9fb6ff;
+}
