@@ -24,17 +24,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Status colours, as in the dock (R2), and the panel's ambient light:
-   warm in the light theme, deep blue with coloured glows in the dark. */
+/* Status colours, as in the dock (R2), and the panel's plain backgrounds:
+   neutral in both themes, so only the desktop adds colour. */
 :root {
   --work: #3a7bf0;
   --done: var(--ok);
   --question: #c98f06;
   --alert: var(--err);
   --idle: var(--ink-3);
-  --side-bg: linear-gradient(185deg, #fbd9c9 0%, #f8e6dc 38%, #f1ede9 72%, #eef0f3 100%);
-  --main-bg: radial-gradient(55% 45% at 100% 0%, rgba(206, 214, 255, 0.45), transparent 70%),
-    radial-gradient(45% 40% at 95% 100%, rgba(196, 232, 246, 0.5), transparent 70%), #fbfbfc;
+  --side-bg: #eeeff2;
+  --main-bg: #fbfbfc;
   --glass: rgba(255, 255, 255, 0.62);
   --glass-strong: rgba(255, 255, 255, 0.86);
   --glass-line: rgba(23, 27, 38, 0.07);
@@ -46,9 +45,8 @@ body {
   :root:not([data-theme="light"]) {
     --work: #6ea2ff;
     --question: #f5c542;
-    --side-bg: linear-gradient(185deg, #1f36a8 0%, #1a2672 38%, #151b3f 72%, #12151f 100%);
-    --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.3), transparent 72%),
-      radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.26), transparent 72%), #14161c;
+    --side-bg: #131519;
+    --main-bg: #111317;
     --glass: rgba(255, 255, 255, 0.055);
     --glass-strong: rgba(255, 255, 255, 0.085);
     --glass-line: rgba(255, 255, 255, 0.1);
@@ -58,9 +56,8 @@ body {
 :root[data-theme="dark"] {
   --work: #6ea2ff;
   --question: #f5c542;
-  --side-bg: linear-gradient(185deg, #1f36a8 0%, #1a2672 38%, #151b3f 72%, #12151f 100%);
-  --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.3), transparent 72%),
-    radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.26), transparent 72%), #14161c;
+  --side-bg: #131519;
+  --main-bg: #111317;
   --glass: rgba(255, 255, 255, 0.055);
   --glass-strong: rgba(255, 255, 255, 0.085);
   --glass-line: rgba(255, 255, 255, 0.1);
@@ -1154,19 +1151,18 @@ body {
 }
 
 /* ---------- The two looks ----------
-   Light: a warm peach sidebar beside a white page, coral actions, stats in
-   a grid. Dark: near-black throughout (the sidebar isn't blue; with native
-   glass only the desktop's own colour shows through), green actions,
-   inline stats. The page carries data-look="light|dark". */
+   Light: a pale grey sidebar beside a white page, coral actions, stats in
+   a grid. Dark: near-black throughout, green actions, inline stats. Neither
+   paints a tint; with native glass only the desktop's own colour shows
+   through. The page carries data-look="light|dark". */
 
 :root[data-look="light"] {
   --accent: #e26d6a;
   --accent-hover: #d65b58;
   --accent-ink: #ffffff;
   --accent-soft: #fbe7e6;
-  --side-bg: linear-gradient(185deg, #f9d5c3 0%, #f7e3d8 40%, #f2ece8 75%, #eff0f2 100%);
-  --main-bg: radial-gradient(55% 45% at 100% 0%, rgba(214, 220, 255, 0.4), transparent 70%),
-    radial-gradient(45% 40% at 95% 100%, rgba(200, 232, 246, 0.45), transparent 70%), #fbfbfc;
+  --side-bg: #eeeff2;
+  --main-bg: #fbfbfc;
 }
 
 :root[data-look="dark"] {
@@ -1175,16 +1171,15 @@ body {
   --accent-ink: #06140d;
   --accent-soft: rgba(62, 224, 143, 0.14);
   --focus: 0 0 0 3px rgba(62, 224, 143, 0.28);
-  --side-bg: linear-gradient(180deg, #17191f 0%, #131519 100%);
-  --main-bg: radial-gradient(50% 40% at 100% 0%, rgba(170, 45, 80, 0.16), transparent 72%),
-    radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.14), transparent 72%), #111317;
+  --side-bg: #131519;
+  --main-bg: #111317;
   --glass: rgba(255, 255, 255, 0.045);
   --glass-strong: rgba(255, 255, 255, 0.07);
   --glass-line: rgba(255, 255, 255, 0.09);
 }
 
-/* Native glass: the window is the frosted material; the page is a tinted
-   veil over it, near-black in the dark look. */
+/* Native glass: the window is the frosted material; the page is a neutral
+   veil over it, thin on the sidebar, denser behind text. */
 html[data-glass] body {
   background: transparent;
 }
@@ -1198,13 +1193,13 @@ html[data-glass] .ap__detail {
 }
 
 html[data-glass][data-look="light"] {
-  --side-bg: linear-gradient(185deg, rgba(249, 213, 195, 0.62) 0%, rgba(247, 227, 216, 0.5) 45%, rgba(242, 236, 232, 0.38) 100%);
-  --main-bg: radial-gradient(55% 45% at 100% 0%, rgba(214, 220, 255, 0.3), transparent 70%), rgba(251, 251, 252, 0.8);
+  --side-bg: rgba(246, 246, 248, 0.45);
+  --main-bg: rgba(252, 252, 253, 0.78);
 }
 
 html[data-glass][data-look="dark"] {
-  --side-bg: rgba(16, 18, 23, 0.5);
-  --main-bg: radial-gradient(50% 40% at 100% 0%, rgba(170, 45, 80, 0.12), transparent 72%), rgba(16, 18, 23, 0.7);
+  --side-bg: rgba(20, 22, 27, 0.45);
+  --main-bg: rgba(20, 22, 27, 0.68);
 }
 
 /* macOS: the traffic lights float over the sidebar (overlay title bar). */
