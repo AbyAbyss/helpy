@@ -114,7 +114,8 @@ impl SentenceSplitter {
         let b = self.buf.as_bytes();
         let mut in_code = false;
         for i in 0..b.len() {
-            if self.buf[i..].starts_with("```") {
+            // Bytes, not str: `i` can be inside a multi-byte character.
+            if b[i..].starts_with(b"```") {
                 in_code = !in_code;
             }
             if in_code {
@@ -204,6 +205,17 @@ mod tests {
             steps_only("Spam lives in Junk Email.\n\nMore detail here."),
             "Spam lives in Junk Email."
         );
+    }
+
+    #[test]
+    fn splits_text_with_emoji_and_other_multibyte_characters() {
+        let mut s = SentenceSplitter::default();
+        // Streamed piece by piece, as a model sends it.
+        let mut out = s.push("😊");
+        out.extend(s.push(" Glad I could help! Café é"));
+        out.extend(s.push("tait 🎉 done. Next"));
+        assert_eq!(out, vec!["😊 Glad I could help!", "Café était 🎉 done."]);
+        assert_eq!(s.finish().as_deref(), Some("Next"));
     }
 
     #[test]
