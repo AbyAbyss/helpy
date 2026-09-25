@@ -21,6 +21,7 @@ const MODE_LABEL = { single: "One agent", parallel: "All at once", sequential: "
 export function Panel() {
   const [settings] = useSettings();
   useTheme(settings);
+  useLook(settings?.general.theme);
   const { agents, batches, live } = useAgents();
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<string | null>(null);
@@ -211,6 +212,12 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
     }
   };
 
+  const undoAll = () =>
+    run(async () => {
+      const problems = await api.agentUndo(a.id);
+      if (problems.length) throw new Error(`Some changes couldn't be undone: ${problems.join("; ")}`);
+    }, "Every file change was put back.");
+
   const exportMd = async () => {
     const path = await save({ defaultPath: `${a.name}.md`, filters: [{ name: "Markdown", extensions: ["md"] }] });
     if (path) run(() => api.agentExport(a.id, path), "Saved.");
@@ -395,6 +402,7 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
             <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
               <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />
             </svg>
+            <span className="sendbtn__label">Send</span>
           </button>
         </form>
       )}
@@ -406,17 +414,18 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
           <Stat label="Tokens" value={tokens(a.counters.tokens)} />
           <Stat label="Cost" value={a.counters.costKnown ? `$${a.counters.cost.toFixed(3)}` : "Unknown"} />
           <Stat label="Time" value={duration(a.activeMs)} />
-          {a.changes > 0 && <Stat label="File changes" value={String(a.changes)} />}
+          {a.changes > 0 && (
+            <Stat label="File changes" value={String(a.changes)} className="stat--changes">
+              {finished && (
+                <button type="button" className="stat__undo" onClick={undoAll}>
+                  Undo all
+                </button>
+              )}
+            </Stat>
+          )}
         </dl>
         {a.changes > 0 && finished && (
-          <button
-            type="button"
-            className="btn btn--soft"
-            onClick={() => run(async () => {
-              const problems = await api.agentUndo(a.id);
-              if (problems.length) throw new Error(`Some changes couldn't be undone: ${problems.join("; ")}`);
-            }, "Every file change was put back.")}
-          >
+          <button type="button" className="btn btn--soft undoall" onClick={undoAll}>
             Undo all {a.changes} file changes
           </button>
         )}
@@ -429,9 +438,8 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
             <li key={a.log.length - i} className={`tl tl--${l.kind}`}>
               <i className="tl__dot" aria-hidden="true" />
               <time>{new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
-              <span className="tl__what">
-                <span className="tl__kind">{KIND[l.kind]}</span> {l.kind === "tool" ? <code>{l.text}</code> : l.text}
-              </span>
+              <span className="tl__kind">{KIND[l.kind]}</span>
+              <span className="tl__what">{l.kind === "tool" ? <code>{l.text}</code> : l.text}</span>
             </li>
           ))}
         </ol>
@@ -450,13 +458,34 @@ const KIND: Record<LogKind, string> = {
   note: "Note",
 };
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, className, children }: { label: string; value: string; className?: string; children?: React.ReactNode }) {
   return (
-    <div className="stat">
+    <div className={`stat${className ? ` ${className}` : ""}`}>
       <dt>{label}</dt>
-      <dd>{value}</dd>
+      <dd>
+        {value}
+        {children}
+      </dd>
     </div>
   );
+}
+
+/**
+ * The light and dark panels differ in layout, not only colour (image-3
+ * light, image-4 dark), so the page carries the look that's actually in
+ * use: the setting, or the system's when it's "system".
+ */
+function useLook(theme: string | undefined) {
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const dark = theme === "dark" || ((!theme || theme === "system") && media.matches);
+      document.documentElement.setAttribute("data-look", dark ? "dark" : "light");
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [theme]);
 }
 
 function firstLine(t: string) {
