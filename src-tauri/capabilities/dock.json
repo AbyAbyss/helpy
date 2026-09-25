@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "dock",
+  "description": "The agent dock: follows agent events and sends the user's replies. No file or dialog access.",
+  "windows": [
+    "dock"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

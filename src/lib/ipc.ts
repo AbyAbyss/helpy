@@ -3,6 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AskStatus } from "../bindings/AskStatus";
 import type { CardView } from "../bindings/CardView";
 import type { CircleAction } from "../bindings/CircleAction";
+import type { AgentList } from "../bindings/AgentList";
+import type { Answer } from "../bindings/Answer";
+import type { Plan } from "../bindings/Plan";
+import type { RunMode } from "../bindings/RunMode";
 import type { LocalServer } from "../bindings/LocalServer";
 import type { ModelInfo } from "../bindings/ModelInfo";
 import type { ProviderConfig } from "../bindings/ProviderConfig";
@@ -36,6 +40,13 @@ export const EVENTS = {
   guideCard: "guide://card",
   clearAnnotations: "overlay://clear",
   circle: "circle://event",
+  agentUpdate: "agents://update",
+  agentRemoved: "agents://removed",
+  agentLive: "agents://live",
+  agentBatch: "agents://batch",
+  agentCount: "agents://count",
+  agentPlan: "agents://plan",
+  agentsFocus: "agents://focus",
 } as const;
 
 type Section = keyof Settings;
@@ -124,6 +135,35 @@ export const api = {
   circleAction: (action: CircleAction, question: string | null = null) => invoke<void>("circle_action", { action, question }),
   circleClose: () => invoke<void>("circle_close"),
   circleCopy: (text: string) => invoke<void>("circle_copy", { text }),
+  circleToAgent: (task: string) => invoke<void>("circle_to_agent", { task }),
+
+  // Agents. Changes arrive as EVENTS.agentUpdate and friends.
+  agents: () => invoke<AgentList>("agents_list"),
+  agentAnswer: (id: string, answer: Answer) => invoke<void>("agents_answer", { id, answer }),
+  agentPause: (id: string) => invoke<void>("agents_pause", { id }),
+  agentResume: (id: string) => invoke<void>("agents_resume", { id }),
+  agentCancel: (id: string) => invoke<void>("agents_cancel", { id }),
+  agentRetry: (id: string) => invoke<void>("agents_retry", { id }),
+  agentRaise: (id: string) => invoke<void>("agents_raise", { id }),
+  agentFollowUp: (id: string, text: string) => invoke<void>("agents_follow_up", { id, text }),
+  agentUndo: (id: string) => invoke<string[]>("agents_undo", { id }),
+  agentRename: (id: string, name: string) => invoke<void>("agents_rename", { id, name }),
+  agentDismiss: (id: string) => invoke<void>("agents_dismiss", { id }),
+  agentSeen: (id: string) => invoke<void>("agents_seen", { id }),
+  agentDelete: (id: string) => invoke<void>("agents_delete", { id }),
+  agentDuplicate: (id: string) => invoke<void>("agents_duplicate", { id }),
+  agentExport: (id: string, path: string) => invoke<void>("agents_export", { id, path }),
+  setBraveKey: (key: string) => invoke<void>("agents_set_brave_key", { key }),
+  hasBraveKey: () => invoke<boolean>("agents_has_brave_key"),
+  plan: (request: string) => invoke<Plan>("agents_plan", { request }),
+  planCurrent: () => invoke<Plan | null>("agents_plan_current"),
+  planStart: (id: string, mode: RunMode) => invoke<void>("agents_plan_start", { id, mode }),
+  planCancel: () => invoke<void>("agents_plan_cancel"),
+  /** Opens the agent panel, at one agent if given. */
+  openAgentPanel: (id?: string) => invoke<void>("agents_open_panel", { id: id ?? null }),
+  agentVoiceFollowUp: (id: string) => invoke<void>("agents_voice_follow_up", { id }),
+  dockLayout: (width: number, height: number) => invoke<void>("dock_layout", { width, height }),
+  dockFocus: (on: boolean) => invoke<void>("dock_focus", { on }),
 };
 
 export function asFieldErrors(e: unknown): FieldError[] {

@@ -2,6 +2,7 @@
 //! approvals, persistence, and what the dock, cards and panel show.
 
 pub mod model;
+pub mod planner;
 pub mod runner;
 pub mod store;
 pub mod tools;
@@ -69,6 +70,10 @@ pub struct AgentsState {
     agents: Mutex<HashMap<String, Agent>>,
     batches: Mutex<HashMap<String, Batch>>,
     handles: Mutex<HashMap<String, Handle>>,
+    /// The plan on the card, with any picture that goes along.
+    plan: Mutex<Option<(planner::Plan, Option<String>)>>,
+    /// The agent the next voice question is a follow-up for.
+    voice_target: Mutex<Option<String>>,
     backups: PathBuf,
     http: reqwest::Client,
 }
@@ -77,7 +82,7 @@ fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-fn new_id(prefix: &str) -> String {
+pub(crate) fn new_id(prefix: &str) -> String {
     use std::sync::atomic::{AtomicU32, Ordering};
     static N: AtomicU32 = AtomicU32::new(0);
     format!("{prefix}{}{}", now_ms(), N.fetch_add(1, Ordering::Relaxed))
@@ -89,24 +94,32 @@ impl AgentsState {
     pub fn load(data_dir: PathBuf) -> Self {
         let store = Store::open(&data_dir.join("agents.db")).unwrap_or_else(|e| {
             log::error!("couldn't open the agents database: {e}; using a temporary one");
-            Store::open(&std::env::temp_dir().join("helpy-agents.db")).expect("temporary agents database")
+            Store::open(&std::env::temp_dir().join("helpy-agents.db"))
+                .expect("temporary agents database")
         });
         let mut agents = HashMap::new();
         for mut a in store.agents() {
             if !a.status.is_finished() && a.status != Status::Ready && a.status != Status::Paused {
                 a.status = Status::Paused;
                 a.pending = None;
-                a.status_line = "Paused because Helpy closed while it was working. Resume to carry on.".into();
+                a.status_line =
+                    "Paused because Helpy closed while it was working. Resume to carry on.".into();
                 store.save_agent(&a);
             }
             agents.insert(a.id.clone(), a);
         }
-        let batches = store.batches().into_iter().map(|b| (b.id.clone(), b)).collect();
+        let batches = store
+            .batches()
+            .into_iter()
+            .map(|b| (b.id.clone(), b))
+            .collect();
         Self {
             store,
             agents: Mutex::new(agents),
             batches: Mutex::new(batches),
             handles: Mutex::new(HashMap::new()),
+            plan: Mutex::new(None),
+            voice_target: Mutex::new(None),
             backups: data_dir.join("backups"),
             http: tools::web::client(),
         }
@@ -154,7 +167,9 @@ fn commit(app: &AppHandle, a: &Agent) {
         && before.is_some_and(|b| b.status_line != a.status_line)
         && !a.status_line.is_empty()
     {
-        app.state::<crate::voice::VoiceState>().speaker.say(a.status_line.clone());
+        app.state::<crate::voice::VoiceState>()
+            .speaker
+            .say(a.status_line.clone());
     }
 }
 
@@ -171,9 +186,13 @@ fn announce(app: &AppHandle, a: &Agent, s: &Settings) {
         Status::Approval | Status::Question => (
             format!("{} needs you", a.name),
             match &a.pending {
-                Some(Pending::Approval { summary, .. }) => format!("Waiting for your OK: {summary}"),
+                Some(Pending::Approval { summary, .. }) => {
+                    format!("Waiting for your OK: {summary}")
+                }
                 Some(Pending::Question { question, .. }) => question.clone(),
-                Some(Pending::Failure { message, .. }) => format!("{message} Retry, skip or cancel?"),
+                Some(Pending::Failure { message, .. }) => {
+                    format!("{message} Retry, skip or cancel?")
+                }
                 None => return,
             },
         ),
@@ -181,10 +200,16 @@ fn announce(app: &AppHandle, a: &Agent, s: &Settings) {
             format!("{} finished", a.name),
             first(a.result.as_deref().unwrap_or("")),
         ),
-        Status::Failed => (format!("{} failed", a.name), a.error.clone().unwrap_or_default()),
+        Status::Failed => (
+            format!("{} failed", a.name),
+            a.error.clone().unwrap_or_default(),
+        ),
         Status::Stopped => (
             format!("{} stopped", a.name),
-            a.stop.as_ref().map(|s| s.message.clone()).unwrap_or_default(),
+            a.stop
+                .as_ref()
+                .map(|s| s.message.clone())
+                .unwrap_or_default(),
         ),
         _ => return,
     };
@@ -204,7 +229,10 @@ fn announce(app: &AppHandle, a: &Agent, s: &Settings) {
 /// model, then the fallback chain. All must call tools, and read images
 /// when the agent was given one.
 pub fn agent_models(ai: &Ai, needs_vision: bool) -> Result<Vec<ModelRef>, String> {
-    let ok = |r: &ModelRef| ai.model(r).is_some_and(|(_, m)| m.tools && (m.vision || !needs_vision));
+    let ok = |r: &ModelRef| {
+        ai.model(r)
+            .is_some_and(|(_, m)| m.tools && (m.vision || !needs_vision))
+    };
     let primary = [&ai.routing.agent_worker, &ai.routing.ask]
         .into_iter()
         .flatten()
@@ -268,7 +296,10 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
           the details the user needs, briefly. If useful, end with a line \"NEXT: first idea | second idea\" with up \
           to 3 short follow-up actions the user might want.";
     if s.general.response_language != "auto" {
-        p += &format!(" Write for the user in the language with code \"{}\".", s.general.response_language);
+        p += &format!(
+            " Write for the user in the language with code \"{}\".",
+            s.general.response_language
+        );
     }
     let custom = s.ai.custom_instructions.trim();
     if !custom.is_empty() {
@@ -333,7 +364,16 @@ impl Env for AppEnv {
     ) -> BoxFuture<'a, Result<Completion, ProviderError>> {
         Box::pin(async move {
             let feature = format!("agent {}", agent.name);
-            call::stream(&self.app, &self.settings, &feature, &self.models, req, &self.cancel, on).await
+            call::stream(
+                &self.app,
+                &self.settings,
+                &feature,
+                &self.models,
+                req,
+                &self.cancel,
+                on,
+            )
+            .await
         })
     }
 
@@ -341,7 +381,12 @@ impl Env for AppEnv {
         self.toolbox.gate(&agent.tools, tool, args)
     }
 
-    fn run_tool<'a>(&'a self, agent: &'a Agent, tool: &'a str, args: &'a Value) -> BoxFuture<'a, ToolOutcome> {
+    fn run_tool<'a>(
+        &'a self,
+        agent: &'a Agent,
+        tool: &'a str,
+        args: &'a Value,
+    ) -> BoxFuture<'a, ToolOutcome> {
         Box::pin(async move {
             let app = self.app.clone();
             let keep = move |r: HelpyReminder| app.state::<AgentsState>().store.add_reminder(&r);
@@ -351,7 +396,14 @@ impl Env for AppEnv {
 
     fn answer<'a>(&'a self, agent: &'a Agent) -> BoxFuture<'a, Answer> {
         let (tx, rx) = oneshot::channel();
-        if let Some(h) = self.app.state::<AgentsState>().handles.lock().unwrap().get_mut(&agent.id) {
+        if let Some(h) = self
+            .app
+            .state::<AgentsState>()
+            .handles
+            .lock()
+            .unwrap()
+            .get_mut(&agent.id)
+        {
             h.answer = Some(tx);
         }
         Box::pin(async move { rx.await.unwrap_or(Answer::Cancel) })
@@ -365,7 +417,9 @@ impl Env for AppEnv {
             .unwrap()
             .values()
             .filter(|a| a.batch == agent.batch && a.id != agent.id)
-            .fold((0, 0.0), |(t, c), a| (t + a.counters.tokens, c + a.counters.cost))
+            .fold((0, 0.0), |(t, c), a| {
+                (t + a.counters.tokens, c + a.counters.cost)
+            })
     }
 
     fn price(&self, _: &Agent, tokens: u64) -> Option<f64> {
@@ -415,19 +469,30 @@ pub fn schedule(app: &AppHandle) {
     let to_start: Vec<String> = {
         let agents = state.agents.lock().unwrap();
         let batches = state.batches.lock().unwrap();
-        let mut running = agents.values().filter(|a| a.status == Status::Running).count() as u32;
-        let mut queued: Vec<&Agent> = agents.values().filter(|a| a.status == Status::Queued).collect();
+        let mut running = agents
+            .values()
+            .filter(|a| a.status == Status::Running)
+            .count() as u32;
+        let mut queued: Vec<&Agent> = agents
+            .values()
+            .filter(|a| a.status == Status::Queued)
+            .collect();
         queued.sort_by_key(|a| (a.created, a.order));
         let mut out = Vec::new();
         for a in queued {
             if running >= s.agents.max_running {
                 break;
             }
-            if batches.get(&a.batch).is_some_and(|b| b.mode == RunMode::Sequential) {
+            if batches
+                .get(&a.batch)
+                .is_some_and(|b| b.mode == RunMode::Sequential)
+            {
                 // Only the first unfinished agent of the batch may run.
                 let first = agents
                     .values()
-                    .filter(|o| o.batch == a.batch && !o.status.is_finished() && o.status != Status::Ready)
+                    .filter(|o| {
+                        o.batch == a.batch && !o.status.is_finished() && o.status != Status::Ready
+                    })
                     .min_by_key(|o| o.order)
                     .map(|o| o.id.as_str());
                 if first != Some(a.id.as_str()) {
@@ -446,7 +511,9 @@ pub fn schedule(app: &AppHandle) {
 
 fn start(app: &AppHandle, id: &str) {
     let state = app.state::<AgentsState>();
-    let Some(mut agent) = state.get(id) else { return };
+    let Some(mut agent) = state.get(id) else {
+        return;
+    };
     let s = settings(app);
     let models = match agent_models(&s.ai, agent.image.is_some()) {
         Ok(m) => m,
@@ -483,7 +550,12 @@ fn start(app: &AppHandle, id: &str) {
     let id = id.to_string();
     tauri::async_runtime::spawn(async move {
         runner::run(&mut agent, &env, &lim, &cancel).await;
-        let handle = app.state::<AgentsState>().handles.lock().unwrap().remove(&id);
+        let handle = app
+            .state::<AgentsState>()
+            .handles
+            .lock()
+            .unwrap()
+            .remove(&id);
         if cancel.is_cancelled() {
             let pausing = handle.is_some_and(|h| h.pausing);
             agent.pending = None;
@@ -516,8 +588,15 @@ fn interrupt(app: &AppHandle, id: &str, pausing: bool) -> bool {
 }
 
 /// Changes a stored (not running) agent and re-schedules.
-fn update(app: &AppHandle, id: &str, f: impl FnOnce(&mut Agent) -> Result<(), String>) -> Result<(), String> {
-    let mut a = app.state::<AgentsState>().get(id).ok_or("That agent is gone")?;
+fn update(
+    app: &AppHandle,
+    id: &str,
+    f: impl FnOnce(&mut Agent) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut a = app
+        .state::<AgentsState>()
+        .get(id)
+        .ok_or("That agent is gone")?;
     f(&mut a)?;
     commit(app, &a);
     schedule(app);
@@ -536,7 +615,13 @@ pub struct NewAgent {
 }
 
 /// Creates a batch and queues its agents.
-pub fn create(app: &AppHandle, request: &str, mode: RunMode, agents: Vec<NewAgent>, image: Option<String>) -> Vec<String> {
+pub fn create(
+    app: &AppHandle,
+    request: &str,
+    mode: RunMode,
+    agents: Vec<NewAgent>,
+    image: Option<String>,
+) -> Vec<String> {
     let state = app.state::<AgentsState>();
     let now = now_ms();
     let batch = Batch {
@@ -546,7 +631,11 @@ pub fn create(app: &AppHandle, request: &str, mode: RunMode, agents: Vec<NewAgen
         created: now,
     };
     state.store.save_batch(&batch);
-    state.batches.lock().unwrap().insert(batch.id.clone(), batch.clone());
+    state
+        .batches
+        .lock()
+        .unwrap()
+        .insert(batch.id.clone(), batch.clone());
     let _ = app.emit(BATCH_EVENT, batch.clone());
     let mut ids = Vec::new();
     for (i, n) in agents.into_iter().enumerate() {
@@ -604,9 +693,18 @@ pub fn setup(app: &AppHandle) {
 // ---------- Commands ----------
 
 #[tauri::command]
-pub fn agents_list(state: tauri::State<AgentsState>, store: tauri::State<SettingsStore>) -> AgentList {
+pub fn agents_list(
+    state: tauri::State<AgentsState>,
+    store: tauri::State<SettingsStore>,
+) -> AgentList {
     let max = store.get().agents.max_steps;
-    let mut agents: Vec<AgentView> = state.agents.lock().unwrap().values().map(|a| a.view(max)).collect();
+    let mut agents: Vec<AgentView> = state
+        .agents
+        .lock()
+        .unwrap()
+        .values()
+        .map(|a| a.view(max))
+        .collect();
     agents.sort_by_key(|a| (a.created, a.order));
     let mut batches: Vec<Batch> = state.batches.lock().unwrap().values().cloned().collect();
     batches.sort_by_key(|b| b.created);
@@ -680,7 +778,12 @@ pub fn pause_all(app: &AppHandle) {
         .lock()
         .unwrap()
         .values()
-        .filter(|a| matches!(a.status, Status::Running | Status::Queued | Status::Approval | Status::Question))
+        .filter(|a| {
+            matches!(
+                a.status,
+                Status::Running | Status::Queued | Status::Approval | Status::Question
+            )
+        })
         .map(|a| a.id.clone())
         .collect();
     for id in ids {
@@ -693,7 +796,10 @@ pub fn pause_all(app: &AppHandle) {
 #[tauri::command]
 pub fn agents_retry(app: AppHandle, id: String) -> Result<(), String> {
     update(&app, &id, |a| {
-        if !matches!(a.status, Status::Failed | Status::Stopped | Status::Cancelled) {
+        if !matches!(
+            a.status,
+            Status::Failed | Status::Stopped | Status::Cancelled
+        ) {
             return Err("Only failed, stopped or cancelled agents can be retried".into());
         }
         a.new_round();
@@ -742,7 +848,8 @@ pub fn agents_follow_up(app: AppHandle, id: String, text: String) -> Result<(), 
             return Err("Follow-ups go to finished agents".into());
         }
         a.new_round();
-        a.messages.push(crate::ai::types::Message::user_text(text.clone()));
+        a.messages
+            .push(crate::ai::types::Message::user_text(text.clone()));
         a.status = Status::Queued;
         a.status_line = "Picking up your follow-up.".into();
         a.dismissed = false;
@@ -792,7 +899,9 @@ pub fn agents_dismiss(app: AppHandle, id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn agents_seen(app: AppHandle, id: String) -> Result<(), String> {
-    let Some(a) = app.state::<AgentsState>().get(&id) else { return Ok(()) };
+    let Some(a) = app.state::<AgentsState>().get(&id) else {
+        return Ok(());
+    };
     if !a.unseen {
         return Ok(());
     }
@@ -806,7 +915,9 @@ pub fn agents_seen(app: AppHandle, id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn agents_delete(app: AppHandle, id: String) -> Result<(), String> {
     let state = app.state::<AgentsState>();
-    let finished = state.get(&id).is_some_and(|a| a.status.is_finished() || a.status == Status::Ready);
+    let finished = state
+        .get(&id)
+        .is_some_and(|a| a.status.is_finished() || a.status == Status::Ready);
     if !finished {
         return Err("Stop the agent before removing it".into());
     }
@@ -819,7 +930,10 @@ pub fn agents_delete(app: AppHandle, id: String) -> Result<(), String> {
 /// Starts a fresh copy of an agent's task.
 #[tauri::command]
 pub fn agents_duplicate(app: AppHandle, id: String) -> Result<(), String> {
-    let a = app.state::<AgentsState>().get(&id).ok_or("That agent is gone")?;
+    let a = app
+        .state::<AgentsState>()
+        .get(&id)
+        .ok_or("That agent is gone")?;
     let request = app
         .state::<AgentsState>()
         .batches
@@ -843,6 +957,70 @@ pub fn agents_duplicate(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// "Follow up by voice" on a card: the next thing the user says goes to
+/// this agent instead of becoming a question.
+#[tauri::command]
+pub fn agents_voice_follow_up(app: AppHandle, id: String) {
+    *app.state::<AgentsState>().voice_target.lock().unwrap() = Some(id);
+    crate::voice::start(&app, crate::voice::Trigger::Toggle);
+}
+
+/// Hands spoken words to the agent waiting for a voice follow-up, if any.
+pub fn take_voice_follow_up(app: &AppHandle, text: &str) -> bool {
+    let Some(id) = app
+        .state::<AgentsState>()
+        .voice_target
+        .lock()
+        .unwrap()
+        .take()
+    else {
+        return false;
+    };
+    if let Err(e) = agents_follow_up(app.clone(), id, text.to_string()) {
+        log::warn!("voice follow-up: {e}");
+    }
+    true
+}
+
+/// What an agent did and found, as Markdown.
+pub fn markdown(a: &Agent) -> String {
+    let mut out = format!("# {}\n\n**Task:** {}\n\n", a.name, a.goal);
+    if let Some(r) = &a.result {
+        out += &format!("## Result\n\n{r}\n\n");
+    }
+    if let Some(s) = &a.stop {
+        out += &format!("**Stopped:** {}\n\n", s.message);
+    }
+    if let Some(e) = &a.error {
+        out += &format!("**Failed:** {e}\n\n");
+    }
+    out += "## Steps\n\n";
+    for l in &a.log {
+        let time = chrono::DateTime::from_timestamp_millis(l.at)
+            .map(|t| {
+                t.with_timezone(&chrono::Local)
+                    .format("%H:%M:%S")
+                    .to_string()
+            })
+            .unwrap_or_default();
+        let text = l.text.replace('\n', " ");
+        out += &match l.kind {
+            LogKind::Tool => format!("- {time} `{text}`\n"),
+            _ => format!("- {time} {text}\n"),
+        };
+    }
+    out
+}
+
+#[tauri::command]
+pub fn agents_export(app: AppHandle, id: String, path: String) -> Result<(), String> {
+    let a = app
+        .state::<AgentsState>()
+        .get(&id)
+        .ok_or("That agent is gone")?;
+    std::fs::write(&path, markdown(&a)).map_err(|e| format!("Couldn't save {path}: {e}"))
+}
+
 #[tauri::command]
 pub fn agents_set_brave_key(key: String) -> Result<(), String> {
     crate::ai::secrets::set_service("brave", &key).map_err(|e| e.message)
@@ -850,7 +1028,9 @@ pub fn agents_set_brave_key(key: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn agents_has_brave_key() -> Result<bool, String> {
-    crate::ai::secrets::get_service("brave").map(|k| k.is_some()).map_err(|e| e.message)
+    crate::ai::secrets::get_service("brave")
+        .map(|k| k.is_some())
+        .map_err(|e| e.message)
 }
 
 #[cfg(test)]
@@ -860,12 +1040,24 @@ mod tests {
 
     #[test]
     fn agents_need_a_model_that_uses_tools() {
-        let m = |id: &str, tools: bool, vision: bool| ModelConfig { id: id.into(), tools, vision, ..Default::default() };
-        let r = |id: &str| ModelRef { provider_id: "p".into(), model: id.into() };
+        let m = |id: &str, tools: bool, vision: bool| ModelConfig {
+            id: id.into(),
+            tools,
+            vision,
+            ..Default::default()
+        };
+        let r = |id: &str| ModelRef {
+            provider_id: "p".into(),
+            model: id.into(),
+        };
         let mut ai = Ai {
             providers: vec![ProviderConfig {
                 id: "p".into(),
-                models: vec![m("chat", false, true), m("worker", true, false), m("eyes", true, true)],
+                models: vec![
+                    m("chat", false, true),
+                    m("worker", true, false),
+                    m("eyes", true, true),
+                ],
                 ..Default::default()
             }],
             ..Default::default()
@@ -884,7 +1076,14 @@ mod tests {
     #[test]
     fn the_prompt_names_folders_and_guards_against_injected_instructions() {
         let s = Settings::default();
-        let mut a = Agent::new("a".into(), "b".into(), 0, "Tidy".into(), "Clean my desktop".into(), 0);
+        let mut a = Agent::new(
+            "a".into(),
+            "b".into(),
+            0,
+            "Tidy".into(),
+            "Clean my desktop".into(),
+            0,
+        );
         a.tools = vec!["files".into()];
         let p = system_prompt(&a, &s, &[PathBuf::from("/home/u/Desktop")]);
         assert!(p.contains("Clean my desktop") && p.contains("/home/u/Desktop"));

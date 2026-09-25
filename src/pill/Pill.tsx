@@ -21,6 +21,8 @@ export function Pill() {
   const [state, setState] = useState<PillState>(initial);
   const [speaking, setSpeaking] = useState(false);
   const [hover, setHover] = useState(false);
+  // The hand-off to the agent dock (R6): the waveform turns into a chip.
+  const [handoff, setHandoff] = useState(false);
   const level = useRef(0);
   const voiceTurn = useRef(false);
   const bars = useRef<(HTMLSpanElement | null)[]>([]);
@@ -33,13 +35,17 @@ export function Pill() {
   useEffect(() => {
     const offs = [
       listen<VoicePhase>(EVENTS.voiceState, (e) => {
-        if (e.payload.phase === "listening") voiceTurn.current = false;
+        if (e.payload.phase === "listening") {
+          voiceTurn.current = false;
+          setHandoff(false);
+        }
         setState((s) => onVoice(s, e.payload));
       }),
       listen<number>(EVENTS.voiceLevel, (e) => (level.current = e.payload)),
       listen<string>(EVENTS.voicePartial, (e) => setState((s) => onPartial(s, e.payload))),
       listen<boolean>(EVENTS.speaking, (e) => setSpeaking(e.payload)),
       listen<string>(EVENTS.speakError, (e) => setState({ mode: "message", caption: e.payload, tone: "error" })),
+      getCurrentWindow().listen("pill://handoff", () => setHandoff(true)),
       listen<AskEvent>(EVENTS.ask, ({ payload }) => {
         if (payload.type === "question") voiceTurn.current = payload.voice;
         setState((s) => onAsk(s, payload, voiceTurn.current));
@@ -113,7 +119,7 @@ export function Pill() {
   return (
     <div
       ref={root}
-      className={`pill pill--${tone} pill--${state.mode}`}
+      className={`pill pill--${tone} pill--${state.mode}${handoff ? " pill--handoff" : ""}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => api.voiceExpand()}
@@ -125,7 +131,7 @@ export function Pill() {
           <span key={i} ref={(el) => void (bars.current[i] = el)} />
         ))}
       </div>
-      {caption && (
+      {caption && !handoff && (
         <div className="caption">
           <span className="caption__text">{caption}</span>
           {hover && state.mode !== "listening" && <span className="caption__open">Open</span>}

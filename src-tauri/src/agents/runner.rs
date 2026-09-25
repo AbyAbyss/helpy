@@ -62,7 +62,10 @@ pub enum Gate {
 
 #[derive(Debug)]
 pub enum ToolOutcome {
-    Ok { text: String, ops: Vec<FileOp> },
+    Ok {
+        text: String,
+        ops: Vec<FileOp>,
+    },
     /// May pass on a retry (a timeout, a network error).
     Transient(String),
     /// Will fail the same way again (not found, not allowed).
@@ -78,7 +81,12 @@ pub trait Env: Sync {
         on: &'a (dyn Fn(Progress) + Sync),
     ) -> BoxFuture<'a, Result<Completion, ProviderError>>;
     fn gate(&self, agent: &Agent, tool: &str, args: &Value) -> Gate;
-    fn run_tool<'a>(&'a self, agent: &'a Agent, tool: &'a str, args: &'a Value) -> BoxFuture<'a, ToolOutcome>;
+    fn run_tool<'a>(
+        &'a self,
+        agent: &'a Agent,
+        tool: &'a str,
+        args: &'a Value,
+    ) -> BoxFuture<'a, ToolOutcome>;
     /// Waits for the user's reply to `agent.pending`.
     fn answer<'a>(&'a self, agent: &'a Agent) -> BoxFuture<'a, Answer>;
     /// Tokens and cost spent by the other agents of this agent's batch.
@@ -296,7 +304,9 @@ impl Run<'_> {
             return Some(self.stop(agent, Limit::AgentBudget, msg));
         }
         let (batch_tokens, batch_cost) = self.env.batch_spent(agent);
-        if lim.batch_tokens > 0 && batch_tokens + c.tokens + estimate > lim.batch_tokens + c.extra_tokens {
+        if lim.batch_tokens > 0
+            && batch_tokens + c.tokens + estimate > lim.batch_tokens + c.extra_tokens
+        {
             let msg = format!(
                 "Stopped at the batch's token budget: {} of {} tokens used by this batch.",
                 batch_tokens + c.tokens,
@@ -404,7 +414,11 @@ impl Run<'_> {
                 ))];
                 agent.messages.append(&mut kept);
                 let now = self.env.now_ms();
-                agent.log(now, LogKind::Note, "Summarized earlier work to keep the context small.");
+                agent.log(
+                    now,
+                    LogKind::Note,
+                    "Summarized earlier work to keep the context small.",
+                );
                 Ok(())
             }
             Err(e) if e.kind == ErrorKind::Cancelled => Err(Flow::Exit),
@@ -432,7 +446,12 @@ impl Run<'_> {
 
     /// After the last retry: fail, or (if set) ask whether to retry, skip or
     /// cancel. `on_skip` is what the model hears when the user skips.
-    async fn failure(&self, agent: &mut Agent, message: String, on_skip: Option<&mut Vec<Part>>) -> Flow {
+    async fn failure(
+        &self,
+        agent: &mut Agent,
+        message: String,
+        on_skip: Option<&mut Vec<Part>>,
+    ) -> Flow {
         if self.lim.on_failure == OnFailure::Stop {
             return self.fail(agent, message);
         }
@@ -449,7 +468,9 @@ impl Run<'_> {
                 Flow::Exit
             }
             Some(Answer::Skip) => {
-                let note = format!("That step failed ({message}). The user chose to skip it; carry on without it.");
+                let note = format!(
+                    "That step failed ({message}). The user chose to skip it; carry on without it."
+                );
                 match on_skip {
                     Some(parts) => parts.push(Part::Text(note)),
                     None => agent.messages.push(Message::user_text(note)),
@@ -462,13 +483,23 @@ impl Run<'_> {
     }
 
     /// Runs one tool call, retrying errors that may pass next time.
-    async fn tool(&self, agent: &mut Agent, name: &str, args: &Value) -> Result<(String, bool), Flow> {
+    async fn tool(
+        &self,
+        agent: &mut Agent,
+        name: &str,
+        args: &Value,
+    ) -> Result<(String, bool), Flow> {
         let now = self.env.now_ms();
         if name == ASK_USER {
             let question = args["question"].as_str().unwrap_or("").to_string();
             let options = args["options"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).take(4).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .take(4)
+                        .collect()
+                })
                 .unwrap_or_default();
             let pending = Pending::Question {
                 id: format!("q{now}"),
@@ -479,7 +510,10 @@ impl Run<'_> {
             return match self.wait(agent, pending, Status::Question).await {
                 Some(Answer::Choice { text }) => Ok((format!("The user answered: {text}"), false)),
                 Some(Answer::Cancel) | None => Err(Flow::Exit),
-                Some(_) => Ok(("The user didn't answer. Decide sensibly yourself.".into(), false)),
+                Some(_) => Ok((
+                    "The user didn't answer. Decide sensibly yourself.".into(),
+                    false,
+                )),
             };
         }
 
@@ -502,16 +536,26 @@ impl Run<'_> {
                 agent.status_line = format!("Needs your OK: {summary}");
                 match self.wait(agent, pending, Status::Approval).await {
                     Some(Answer::Approve) => {
-                        agent.log(self.env.now_ms(), LogKind::Approval, format!("Approved: {summary}"));
+                        agent.log(
+                            self.env.now_ms(),
+                            LogKind::Approval,
+                            format!("Approved: {summary}"),
+                        );
                     }
                     None => return Err(Flow::Exit),
                     Some(Answer::Cancel) => return Err(Flow::Exit),
                     Some(answer) => {
                         let note = match answer {
-                            Answer::Reject { note: Some(n) } if !n.trim().is_empty() => format!(" They said: {n}"),
+                            Answer::Reject { note: Some(n) } if !n.trim().is_empty() => {
+                                format!(" They said: {n}")
+                            }
                             _ => String::new(),
                         };
-                        agent.log(self.env.now_ms(), LogKind::Approval, format!("Rejected: {summary}"));
+                        agent.log(
+                            self.env.now_ms(),
+                            LogKind::Approval,
+                            format!("Rejected: {summary}"),
+                        );
                         return Ok((
                             format!("The user rejected this action.{note} Don't try it again; carry on without it or finish."),
                             true,
@@ -658,9 +702,15 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
                 agent.recent_outputs.drain(..n - lim.repeat as usize);
             }
             if agent.recent_outputs.len() == lim.repeat as usize
-                && agent.recent_outputs.iter().all(|o| *o == agent.recent_outputs[0])
+                && agent
+                    .recent_outputs
+                    .iter()
+                    .all(|o| *o == agent.recent_outputs[0])
             {
-                let msg = format!("Stopped as stuck: it said the same thing {} times in a row.", lim.repeat);
+                let msg = format!(
+                    "Stopped as stuck: it said the same thing {} times in a row.",
+                    lim.repeat
+                );
                 run.stop(agent, Limit::Repeat, msg);
                 return;
             }
@@ -683,7 +733,10 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
         let mut results = Vec::new();
         for (id, name, args) in calls {
             if agent.counters.tool_calls >= lim.max_tool_calls {
-                let msg = format!("Stopped after {} tool calls, its limit.", lim.max_tool_calls);
+                let msg = format!(
+                    "Stopped after {} tool calls, its limit.",
+                    lim.max_tool_calls
+                );
                 run.stop(agent, Limit::ToolCalls, msg);
                 return;
             }
@@ -699,14 +752,24 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
             }
             agent.repeats.insert(key, seen);
             agent.counters.tool_calls += 1;
-            agent.log(env.now_ms(), LogKind::Tool, format!("{name} {}", truncate(&canonical(&args), 300)));
+            agent.log(
+                env.now_ms(),
+                LogKind::Tool,
+                format!("{name} {}", truncate(&canonical(&args), 300)),
+            );
 
             let (output, is_error) = match run.tool(agent, &name, &args).await {
                 Ok(r) => r,
                 Err(_) => return,
             };
-            progress |= agent.seen.insert(stable_hash(&format!("{name}\u{0}{output}")));
-            let kind = if is_error { LogKind::Error } else { LogKind::Result };
+            progress |= agent
+                .seen
+                .insert(stable_hash(&format!("{name}\u{0}{output}")));
+            let kind = if is_error {
+                LogKind::Error
+            } else {
+                LogKind::Result
+            };
             agent.log(env.now_ms(), kind, truncate(&output, 300));
             results.push(Part::ToolResult {
                 id,
@@ -822,19 +885,32 @@ mod tests {
                 None => Gate::Allow,
             }
         }
-        fn run_tool<'a>(&'a self, _: &'a Agent, tool: &'a str, _: &'a Value) -> BoxFuture<'a, ToolOutcome> {
+        fn run_tool<'a>(
+            &'a self,
+            _: &'a Agent,
+            tool: &'a str,
+            _: &'a Value,
+        ) -> BoxFuture<'a, ToolOutcome> {
             Box::pin(async move {
                 self.tool_runs.lock().unwrap().push(tool.to_string());
-                self.tools.lock().unwrap().pop_front().unwrap_or(ToolOutcome::Ok {
-                    text: format!("result {}", rand_id()),
-                    ops: Vec::new(),
-                })
+                self.tools
+                    .lock()
+                    .unwrap()
+                    .pop_front()
+                    .unwrap_or(ToolOutcome::Ok {
+                        text: format!("result {}", rand_id()),
+                        ops: Vec::new(),
+                    })
             })
         }
         fn answer<'a>(&'a self, _: &'a Agent) -> BoxFuture<'a, Answer> {
             Box::pin(async move {
                 self.clock.fetch_add(self.answer_ms, Ordering::SeqCst);
-                self.answers.lock().unwrap().pop_front().expect("scripted answer")
+                self.answers
+                    .lock()
+                    .unwrap()
+                    .pop_front()
+                    .expect("scripted answer")
             })
         }
         fn batch_spent(&self, _: &Agent) -> (u64, f64) {
@@ -892,7 +968,14 @@ mod tests {
     }
 
     fn agent() -> Agent {
-        Agent::new("a1".into(), "b1".into(), 0, "Research".into(), "Find things".into(), 0)
+        Agent::new(
+            "a1".into(),
+            "b1".into(),
+            0,
+            "Research".into(),
+            "Find things".into(),
+            0,
+        )
     }
 
     fn script(f: &Fake, replies: Vec<Result<Completion, ProviderError>>) {
@@ -909,17 +992,27 @@ mod tests {
         script(
             &f,
             vec![
-                tool_call("I'm searching for accountants now.", "web_search", json!({"q": "uk"})),
+                tool_call(
+                    "I'm searching for accountants now.",
+                    "web_search",
+                    json!({"q": "uk"}),
+                ),
                 text("Found 5 accountants. Details follow.\nNEXT: Compare prices | Draft an email"),
             ],
         );
         let mut a = agent();
         go(&f, &mut a, &limits()).await;
         assert_eq!(a.status, Status::Done);
-        assert_eq!(a.result.as_deref(), Some("Found 5 accountants. Details follow."));
+        assert_eq!(
+            a.result.as_deref(),
+            Some("Found 5 accountants. Details follow.")
+        );
         assert_eq!(a.suggestions, ["Compare prices", "Draft an email"]);
         assert_eq!((a.counters.steps, a.counters.tool_calls), (2, 1));
-        assert!(a.log.iter().any(|l| l.text == "I'm searching for accountants now."));
+        assert!(a
+            .log
+            .iter()
+            .any(|l| l.text == "I'm searching for accountants now."));
     }
 
     #[tokio::test]
@@ -1086,7 +1179,10 @@ mod tests {
     #[tokio::test]
     async fn the_daily_budget_error_stops_without_retrying() {
         let f = Fake::default();
-        script(&f, vec![Err(ProviderError::new(ErrorKind::Budget, "Today's limit"))]);
+        script(
+            &f,
+            vec![Err(ProviderError::new(ErrorKind::Budget, "Today's limit"))],
+        );
         let mut lim = limits();
         lim.on_failure = OnFailure::Ask;
         let mut a = agent();
@@ -1121,7 +1217,9 @@ mod tests {
     async fn tool_errors_that_may_pass_are_retried_then_fail() {
         let f = Fake::default();
         script(&f, vec![tool_call("", "fetch", json!({}))]);
-        *f.tools.lock().unwrap() = (0..10).map(|_| ToolOutcome::Transient("timed out".into())).collect();
+        *f.tools.lock().unwrap() = (0..10)
+            .map(|_| ToolOutcome::Transient("timed out".into()))
+            .collect();
         let mut a = agent();
         go(&f, &mut a, &limits()).await;
         assert_eq!(a.status, Status::Failed);
@@ -1138,7 +1236,9 @@ mod tests {
             &f,
             vec![tool_call("", "fetch", json!({})), text("Done without it.")],
         );
-        *f.tools.lock().unwrap() = (0..4).map(|_| ToolOutcome::Transient("timed out".into())).collect();
+        *f.tools.lock().unwrap() = (0..4)
+            .map(|_| ToolOutcome::Transient("timed out".into()))
+            .collect();
         *f.answers.lock().unwrap() = vec![Answer::Skip].into();
         let mut lim = limits();
         lim.on_failure = OnFailure::Ask;
@@ -1199,7 +1299,11 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(said.contains("rejected") && said.contains("not that one") && said.contains("Not allowed"));
+        assert!(
+            said.contains("rejected")
+                && said.contains("not that one")
+                && said.contains("Not allowed")
+        );
     }
 
     #[tokio::test]
@@ -1230,7 +1334,10 @@ mod tests {
         assert_eq!(back.counters, a.counters);
         // After the restart 4000 of 6000 are used: one more step fits, then
         // the budget stops it.
-        script(&f, vec![tool_call("s9", "fetch", json!({"u": 9})), text("done")]);
+        script(
+            &f,
+            vec![tool_call("s9", "fetch", json!({"u": 9})), text("done")],
+        );
         go(&f, &mut back, &lim).await;
         assert_eq!(back.stop.as_ref().unwrap().limit, Limit::AgentBudget);
         assert_eq!(back.counters.steps, 4);
@@ -1274,7 +1381,10 @@ mod tests {
             other => panic!("{other:?}"),
         }
         // Every call, the summary included, was billed.
-        assert_eq!(a.counters.tokens, 100 * f.calls.load(Ordering::SeqCst) as u64);
+        assert_eq!(
+            a.counters.tokens,
+            100 * f.calls.load(Ordering::SeqCst) as u64
+        );
     }
 
     #[tokio::test]
@@ -1283,7 +1393,11 @@ mod tests {
         script(
             &f,
             vec![
-                tool_call("", ASK_USER, json!({"question": "Which folder?", "options": ["Desktop", "Downloads"]})),
+                tool_call(
+                    "",
+                    ASK_USER,
+                    json!({"question": "Which folder?", "options": ["Desktop", "Downloads"]}),
+                ),
                 text("Sorted Downloads."),
             ],
         );
@@ -1323,12 +1437,21 @@ mod tests {
 
     #[test]
     fn helpers() {
-        assert_eq!(canonical(&json!({"b": [{"d": 1, "c": 2}], "a": 1})), r#"{"a":1,"b":[{"c":2,"d":1}]}"#);
+        assert_eq!(
+            canonical(&json!({"b": [{"d": 1, "c": 2}], "a": 1})),
+            r#"{"a":1,"b":[{"c":2,"d":1}]}"#
+        );
         assert_eq!(stable_hash("abc"), stable_hash("abc"));
         assert_ne!(stable_hash("abc"), stable_hash("abd"));
-        assert_eq!(status_from("I'm on it. Next I'll check. Then more."), Some("I'm on it. Next I'll check.".into()));
+        assert_eq!(
+            status_from("I'm on it. Next I'll check. Then more."),
+            Some("I'm on it. Next I'll check.".into())
+        );
         assert_eq!(status_from("  "), None);
-        assert_eq!(split_suggestions("Done.\nNEXT: a|b | c | d"), ("Done.".into(), vec!["a".into(), "b".into(), "c".into()]));
+        assert_eq!(
+            split_suggestions("Done.\nNEXT: a|b | c | d"),
+            ("Done.".into(), vec!["a".into(), "b".into(), "c".into()])
+        );
         assert_eq!(split_suggestions("No list"), ("No list".into(), vec![]));
     }
 }

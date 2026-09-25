@@ -217,7 +217,7 @@ export function TextArea({ id, value, placeholder, max, onCommit }: { id: string
 }
 
 /** Optional dollar amount: empty means off. */
-export function MoneyField({ id, value, emptyLabel, invalid, onChange }: { id: string; value: number | null; emptyLabel: string; invalid: boolean; onChange: (v: number | null) => void }) {
+export function MoneyField({ id, value, emptyLabel, invalid, unit = "per day", onChange }: { id: string; value: number | null; emptyLabel: string; invalid: boolean; unit?: string; onChange: (v: number | null) => void }) {
   const [text, setText] = useState(value === null ? "" : String(value));
   useEffect(() => setText(value === null ? "" : String(value)), [value]);
   const commit = () => {
@@ -239,7 +239,7 @@ export function MoneyField({ id, value, emptyLabel, invalid, onChange }: { id: s
         onBlur={commit}
         onKeyDown={(e) => e.key === "Enter" && commit()}
       />
-      <span className="number__unit">per day</span>
+      <span className="number__unit">{unit}</span>
     </label>
   );
 }

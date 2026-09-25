@@ -294,7 +294,22 @@ function Card({ view, rect, part, onBack }: { view: CircleView; rect: Rect; part
           ask();
         }}
       >
-        <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask about this…" aria-label="Ask about this" autoFocus />
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="Ask about this, or give an agent a task…"
+          aria-label="Ask about this, or give an agent a task"
+          autoFocus
+        />
+        <button
+          type="button"
+          className="ccard__agent"
+          disabled={!question.trim()}
+          title="Send to an agent, with this selection"
+          onClick={() => api.circleToAgent(question).catch(() => {})}
+        >
+          To agent
+        </button>
         <button type="submit" className="ccard__send" disabled={busy || !question.trim()} aria-label="Ask">
           <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">
             <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />

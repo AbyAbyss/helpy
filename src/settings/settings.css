@@ -1826,3 +1826,115 @@ select {
   opacity: 0;
   cursor: pointer;
 }
+
+/* ---------- Agents ---------- */
+
+.rules,
+.toggles,
+.paths,
+.strings,
+.engine {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.rules__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rules__row + .rules__row {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.rules__label {
+  font-weight: 600;
+}
+
+.rules__help,
+.paths__empty,
+.engine__msg {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.toggles__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.paths__row,
+.paths--one {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.paths--one {
+  flex-direction: row;
+}
+
+.paths code,
+.strings code {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font: 12.5px var(--font-mono);
+  font-variant-ligatures: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.paths__default {
+  color: var(--ink-3);
+}
+
+.paths > .btn {
+  align-self: flex-start;
+}
+
+.strings__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.strings__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.strings__item code {
+  flex: none;
+}
+
+.strings__item button {
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.engine__key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.engine__key .text-input {
+  flex: 1;
+}

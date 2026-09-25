@@ -28,5 +28,7 @@ describe("settings registry", () => {
     expect(searchFields("  ")).toEqual([]);
     expect(searchFields("ollama").map((f) => f.path)).toEqual(["ai.providers"]);
     expect(searchFields("screenshot").map((f) => f.path)).toContain("answerStyle.screenAccess");
+    expect(searchFields("brave").map((f) => f.path)).toEqual(["agents.searchEngine"]);
+    expect(searchFields("desktop access").map((f) => f.path)).toEqual(["agents.approvedFolders"]);
   });
 });

@@ -29,12 +29,21 @@ pub fn verdict(policy: ShellPolicy, allowlist: &[String], cmd: &str) -> Verdict 
         return Verdict::Refuse("The command is empty.".into());
     }
     match policy {
-        ShellPolicy::Never => Verdict::Refuse("shell commands are turned off in Settings → Agents.".into()),
+        ShellPolicy::Never => {
+            Verdict::Refuse("shell commands are turned off in Settings → Agents.".into())
+        }
         ShellPolicy::Ask => Verdict::Ask,
         ShellPolicy::Allowlist => {
-            let listed = allowlist.iter().map(|a| a.trim()).filter(|a| !a.is_empty()).any(|a| {
-                cmd == a || cmd.strip_prefix(a).is_some_and(|rest| rest.starts_with(' '))
-            });
+            let listed = allowlist
+                .iter()
+                .map(|a| a.trim())
+                .filter(|a| !a.is_empty())
+                .any(|a| {
+                    cmd == a
+                        || cmd
+                            .strip_prefix(a)
+                            .is_some_and(|rest| rest.starts_with(' '))
+                });
             if listed && !chains(cmd) {
                 Verdict::Run
             } else {
@@ -57,9 +66,16 @@ pub async fn run(cmd: &str, cwd: &Path) -> ToolOutcome {
         c.arg("-c").arg(cmd);
         c
     };
-    c.current_dir(cwd).kill_on_drop(true).stdin(std::process::Stdio::null());
+    c.current_dir(cwd)
+        .kill_on_drop(true)
+        .stdin(std::process::Stdio::null());
     let out = match tokio::time::timeout(TIMEOUT, c.output()).await {
-        Err(_) => return ToolOutcome::Permanent(format!("The command ran over {} seconds and was stopped.", TIMEOUT.as_secs())),
+        Err(_) => {
+            return ToolOutcome::Permanent(format!(
+                "The command ran over {} seconds and was stopped.",
+                TIMEOUT.as_secs()
+            ))
+        }
         Ok(Err(e)) => return ToolOutcome::Permanent(format!("Couldn't run the command: {e}")),
         Ok(Ok(o)) => o,
     };
@@ -73,11 +89,18 @@ pub async fn run(cmd: &str, cwd: &Path) -> ToolOutcome {
         text += &format!("Errors:\n{}\n", stderr.trim_end());
     }
     if text.len() > MAX_OUTPUT {
-        let cut = text.char_indices().nth(MAX_OUTPUT).map(|(i, _)| i).unwrap_or(text.len());
+        let cut = text
+            .char_indices()
+            .nth(MAX_OUTPUT)
+            .map(|(i, _)| i)
+            .unwrap_or(text.len());
         text.truncate(cut);
         text += "\n[output cut]";
     }
-    ToolOutcome::Ok { text, ops: Vec::new() }
+    ToolOutcome::Ok {
+        text,
+        ops: Vec::new(),
+    }
 }
 
 #[cfg(test)]
@@ -88,11 +111,34 @@ mod tests {
     fn policy() {
         let list = vec!["ls".to_string(), "git status".to_string()];
         assert_eq!(verdict(ShellPolicy::Ask, &list, "rm -rf x"), Verdict::Ask);
-        assert!(matches!(verdict(ShellPolicy::Never, &list, "ls"), Verdict::Refuse(_)));
-        assert_eq!(verdict(ShellPolicy::Allowlist, &list, "ls -la"), Verdict::Run);
-        assert_eq!(verdict(ShellPolicy::Allowlist, &list, "git status"), Verdict::Run);
-        for sneaky in ["lsblk", "ls; rm -rf ~", "ls && curl x", "ls | sh", "ls $(rm x)", "ls > f", "git statusx"] {
-            assert!(matches!(verdict(ShellPolicy::Allowlist, &list, sneaky), Verdict::Refuse(_)), "{sneaky}");
+        assert!(matches!(
+            verdict(ShellPolicy::Never, &list, "ls"),
+            Verdict::Refuse(_)
+        ));
+        assert_eq!(
+            verdict(ShellPolicy::Allowlist, &list, "ls -la"),
+            Verdict::Run
+        );
+        assert_eq!(
+            verdict(ShellPolicy::Allowlist, &list, "git status"),
+            Verdict::Run
+        );
+        for sneaky in [
+            "lsblk",
+            "ls; rm -rf ~",
+            "ls && curl x",
+            "ls | sh",
+            "ls $(rm x)",
+            "ls > f",
+            "git statusx",
+        ] {
+            assert!(
+                matches!(
+                    verdict(ShellPolicy::Allowlist, &list, sneaky),
+                    Verdict::Refuse(_)
+                ),
+                "{sneaky}"
+            );
         }
     }
 
@@ -100,7 +146,8 @@ mod tests {
     #[tokio::test]
     async fn runs_and_reports_the_exit_code() {
         let dir = tempfile::tempdir().unwrap();
-        let ToolOutcome::Ok { text, .. } = run("echo hi; echo oops >&2; exit 3", dir.path()).await else {
+        let ToolOutcome::Ok { text, .. } = run("echo hi; echo oops >&2; exit 3", dir.path()).await
+        else {
             panic!()
         };
         assert!(text.contains("Exit code 3") && text.contains("hi") && text.contains("oops"));

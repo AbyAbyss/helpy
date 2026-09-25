@@ -5,7 +5,7 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "voiceInput" | "voiceOutput";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "agents" | "voiceInput" | "voiceOutput";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, appearance and language." },
@@ -14,6 +14,7 @@ export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "ai", title: "AI providers", blurb: "The models Helpy talks to, what each one is used for, and how much it may spend." },
   { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
   { id: "guidance", title: "Visual guidance", blurb: "How Helpy points things out on your screen, and how walkthroughs move from step to step." },
+  { id: "agents", title: "Agents", blurb: "Background agents: what they may do, where, and the limits they can never pass." },
   { id: "circle", title: "Circle to explain", blurb: "Draw around anything on screen to have it explained, labelled, copied or translated." },
   { id: "voiceInput", title: "Voice input", blurb: "How Helpy hears you: the microphone, the speech engine, and when it stops listening." },
   { id: "voiceOutput", title: "Voice output", blurb: "Whether Helpy reads answers aloud, and in which voice." },
@@ -31,7 +32,13 @@ export type Control =
   | { kind: "hotkey" }
   | { kind: "textarea"; placeholder: string; max: number }
   /** A dollar amount that can be left empty to turn it off. */
-  | { kind: "money"; emptyLabel: string }
+  | { kind: "money"; emptyLabel: string; unit?: string }
+  | { kind: "approvalRules" }
+  | { kind: "toolToggles" }
+  | { kind: "folderList" }
+  | { kind: "folder"; placeholder: string }
+  | { kind: "stringList"; placeholder: string }
+  | { kind: "searchEngine" }
   | { kind: "text"; placeholder: string }
   | { kind: "color"; swatches: string[] }
   | { kind: "buddyStyle" }
@@ -482,6 +489,181 @@ FIELDS.push(
     path: "guidance.showCoordinates", section: "guidance", group: "Troubleshooting", label: "Show raw coordinates",
     help: "Prints the model's numbers next to each mark, to check where it thinks things are.",
     keywords: "debug coordinates pixels position", control: { kind: "toggle" },
+  },
+
+  // Agents
+  {
+    path: "agents.maxRunning", section: "agents", group: "Running", label: "Agents at once",
+    help: "More wait in a queue.", keywords: "parallel concurrent limit queue",
+    control: { kind: "number", min: 1, max: 10, unit: "agents" },
+  },
+  {
+    path: "agents.defaultMode", section: "agents", group: "Running", label: "Several agents run",
+    help: "When the request doesn't say. You can change it on the plan card.", keywords: "run mode parallel sequential",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "auto", label: "Helpy decides" },
+        { value: "parallel", label: "All at once" },
+        { value: "sequential", label: "One after another" },
+      ],
+    },
+  },
+  {
+    path: "agents.confirmPlans", section: "agents", group: "Running", label: "Show the plan first",
+    help: "Plans that only search and read can start right away.", keywords: "plan card confirm",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "always", label: "Always" },
+        { value: "sideEffectsOnly", label: "Only if it changes things" },
+      ],
+    },
+  },
+  {
+    path: "agents.onFailure", section: "agents", group: "Running", label: "When a step keeps failing",
+    help: "After its retries run out.", keywords: "failure retry skip ask",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "stop", label: "Stop the agent" },
+        { value: "ask", label: "Ask me what to do" },
+      ],
+    },
+  },
+  {
+    path: "agents.approvals", section: "agents", group: "Approvals", label: "Before agents act",
+    help: "Commands follow the command setting under Tools.", keywords: "approval permission allow ask never delete",
+    control: { kind: "approvalRules" },
+  },
+  {
+    path: "agents.tools", section: "agents", group: "Tools", label: "Agents may use",
+    keywords: "tools enable disable web search fetch files shell reminders calendar",
+    control: { kind: "toolToggles" },
+  },
+  {
+    path: "agents.approvedFolders", section: "agents", group: "Tools", label: "Folders agents can use",
+    help: "They can't read or change anything outside these.", keywords: "approved folders desktop access files",
+    control: { kind: "folderList" },
+  },
+  {
+    path: "agents.projectsFolder", section: "agents", group: "Tools", label: "Projects folder",
+    help: "Where agents build apps and sites, each in its own folder.", keywords: "projects folder builder apps sites",
+    control: { kind: "folder", placeholder: "~/Helpy Projects" },
+  },
+  {
+    path: "agents.backupDays", section: "agents", group: "Tools", label: "Keep backups of changed files",
+    keywords: "backup undo retention", control: { kind: "number", min: 1, max: 365, unit: "days" },
+  },
+  {
+    path: "agents.shellPolicy", section: "agents", group: "Tools", label: "Shell commands",
+    keywords: "shell terminal command policy",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "never", label: "Never" },
+        { value: "ask", label: "Ask every time" },
+        { value: "allowlist", label: "Only these" },
+      ],
+    },
+  },
+  {
+    path: "agents.shellAllowlist", section: "agents", group: "Tools", label: "Allowed commands",
+    help: "Run without asking. Chained or redirected commands are never allowed this way.", keywords: "allowlist safe commands",
+    control: { kind: "stringList", placeholder: "Add a command, e.g. git status" }, when: (s) => s.agents.shellPolicy === "allowlist",
+  },
+  {
+    path: "agents.searchEngine", section: "agents", group: "Web search", label: "Search with",
+    help: "Automatic uses Brave when its key is saved, SearXNG when its address is set, and DuckDuckGo otherwise.",
+    keywords: "search engine duckduckgo brave searxng api key",
+    control: { kind: "searchEngine" },
+  },
+  {
+    path: "agents.searxngUrl", section: "agents", group: "Web search", label: "SearXNG address",
+    help: "Your own or a trusted instance, with JSON output turned on.", keywords: "searxng instance url",
+    control: { kind: "text", placeholder: "http://localhost:8888" },
+    when: (s) => s.agents.searchEngine === "searxng" || s.agents.searchEngine === "auto",
+  },
+  {
+    path: "agents.timeLimitMinutes", section: "agents", group: "Limits", label: "Time limit per agent",
+    help: "Time waiting for you doesn't count.", keywords: "time limit minutes",
+    control: { kind: "number", min: 1, max: 1440, unit: "min" },
+  },
+  {
+    path: "agents.agentTokenBudget", section: "agents", group: "Limits", label: "Tokens per agent",
+    help: "0 turns it off. Retries count.", keywords: "budget tokens agent",
+    control: { kind: "number", min: 0, max: 1000000000, unit: "tokens" },
+  },
+  {
+    path: "agents.agentCostBudget", section: "agents", group: "Limits", label: "Cost per agent",
+    keywords: "budget cost dollars agent", control: { kind: "money", emptyLabel: "Off", unit: "per agent" },
+  },
+  {
+    path: "agents.batchTokenBudget", section: "agents", group: "Limits", label: "Tokens per batch",
+    help: "For agents started together. 0 turns it off.", keywords: "budget tokens batch",
+    control: { kind: "number", min: 0, max: 1000000000, unit: "tokens" },
+  },
+  {
+    path: "agents.batchCostBudget", section: "agents", group: "Limits", label: "Cost per batch",
+    keywords: "budget cost dollars batch", control: { kind: "money", emptyLabel: "Off", unit: "per batch" },
+  },
+  {
+    path: "agents.maxSteps", section: "agents", group: "Limits", label: "Steps per agent",
+    help: "Retries and backoff follow Retries and daily budget under AI providers.", keywords: "max steps runaway",
+    control: { kind: "number", min: 1, max: 500, unit: "steps" },
+  },
+  {
+    path: "agents.maxToolCalls", section: "agents", group: "Limits", label: "Tool calls per agent",
+    keywords: "max tool calls runaway", control: { kind: "number", min: 1, max: 1000, unit: "calls" },
+  },
+  {
+    path: "agents.contextTokens", section: "agents", group: "Limits", label: "Summarize work past",
+    help: "Older steps are condensed so long-running agents stay within their model's memory.", keywords: "context summary compaction",
+    control: { kind: "number", min: 8000, max: 1000000, unit: "tokens" },
+  },
+  {
+    path: "agents.repeatThreshold", section: "agents", group: "Stuck detection", label: "Same action repeated",
+    help: "The same tool with the same input, or the same reply, this many times stops the agent.", keywords: "stuck loop repeat",
+    control: { kind: "number", min: 2, max: 20, unit: "times" },
+  },
+  {
+    path: "agents.noProgressSteps", section: "agents", group: "Stuck detection", label: "Steps without anything new",
+    keywords: "stuck no progress", control: { kind: "number", min: 2, max: 100, unit: "steps" },
+  },
+  {
+    path: "agents.dock", section: "agents", group: "Dock and notifications", label: "Agent dock",
+    help: "Glowing chips at the screen edge. Hover one for its card.", keywords: "dock chips floating cards",
+    control: { kind: "toggle" },
+  },
+  {
+    path: "agents.dockSide", section: "agents", group: "Dock and notifications", label: "Dock side",
+    keywords: "dock position left right",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "right", label: "Right" },
+        { value: "left", label: "Left" },
+      ],
+    },
+    when: (s) => s.agents.dock,
+  },
+  {
+    path: "agents.doneSeconds", section: "agents", group: "Dock and notifications", label: "Finished agents leave the dock after",
+    help: "0 keeps them until you dismiss them. Failures always stay.", keywords: "done fade dismiss",
+    control: { kind: "number", min: 0, max: 3600, unit: "sec" }, when: (s) => s.agents.dock,
+  },
+  {
+    path: "agents.speakStatus", section: "agents", group: "Dock and notifications", label: "Read status updates aloud",
+    keywords: "speak status voice auto play", control: { kind: "toggle" },
+  },
+  {
+    path: "agents.notifications", section: "agents", group: "Dock and notifications", label: "System notifications",
+    help: "When an agent finishes, fails, or needs you.", keywords: "notifications alerts",
+    control: { kind: "toggle" },
+  },
+  {
+    path: "agents.historyDays", section: "agents", group: "Dock and notifications", label: "Keep finished agents for",
+    keywords: "history retention logs", control: { kind: "number", min: 1, max: 365, unit: "days" },
   },
 
   // Circle to explain

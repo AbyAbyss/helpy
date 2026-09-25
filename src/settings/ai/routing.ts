@@ -18,9 +18,9 @@ export const ROUTES: { key: keyof Routing; label: string; built: boolean; help?:
     built: true,
     help: "Needs a model that can read images. Empty uses the questions model.",
   },
-  { key: "agentPlanning", label: "Agent planning", built: false },
+  { key: "agentPlanning", label: "Agent planning", built: true, help: "Turns a request into agents. Empty uses the questions model." },
   { key: "agentOrchestrator", label: "Agent orchestrators", built: false },
-  { key: "agentWorker", label: "Agent workers", built: false },
+  { key: "agentWorker", label: "Agent workers", built: true, help: "Does the agents' work. Needs a model that can use tools. Empty uses the questions model." },
 ];
 
 export const refKey = (r: ModelRef) => `${r.providerId}\u0000${r.model}`;

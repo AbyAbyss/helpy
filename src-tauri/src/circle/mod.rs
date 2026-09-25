@@ -409,6 +409,47 @@ async fn run(
     );
 }
 
+/// Hands the selection to background agents with the user's task. What
+/// Helpy already said about it goes along as context.
+#[tauri::command]
+pub async fn circle_to_agent(app: AppHandle, task: String) -> Result<(), String> {
+    let task = task.trim().to_string();
+    if task.is_empty() {
+        return Err("Say what the agent should do with this".into());
+    }
+    let (jpeg, notes) = {
+        let state = app.state::<CircleState>();
+        let guard = state.session.lock().unwrap();
+        let s = guard.as_ref().ok_or("Circle to explain isn't open")?;
+        let (_, jpeg) = s.crop.clone().ok_or("Select something first")?;
+        let notes: Vec<String> = s
+            .messages
+            .iter()
+            .filter(|m| m.role == Role::Assistant)
+            .map(|m| {
+                m.parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        Part::Text(t) => Some(t.clone()),
+                        _ => None,
+                    })
+                    .collect::<String>()
+            })
+            .collect();
+        (jpeg, notes)
+    };
+    let mut request = format!(
+        "{task}\n\nThis is about a part of the screen the user circled (attached as a picture)."
+    );
+    if !notes.is_empty() {
+        request += &format!(" Helpy already said this about it:\n{}", notes.join("\n"));
+    }
+    end(&app);
+    crate::agents::planner::plan(&app, &request, Some(jpeg))
+        .await
+        .map(|_| ())
+}
+
 /// Copies text the card shows (a translation, a summary).
 #[tauri::command]
 pub fn circle_copy(app: AppHandle, text: String) -> Result<(), String> {

@@ -110,11 +110,20 @@ pub fn windows_build() -> Option<u32> {
 #[cfg(windows)]
 pub fn outlook_installed() -> bool {
     use windows::core::w;
-    use windows::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, HKEY, HKEY_CLASSES_ROOT, KEY_READ};
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, HKEY, HKEY_CLASSES_ROOT, KEY_READ,
+    };
     let mut key = HKEY::default();
     // SAFETY: key is a valid out pointer; it's closed when opened.
     unsafe {
-        let ok = RegOpenKeyExW(HKEY_CLASSES_ROOT, w!("Outlook.Application"), 0, KEY_READ, &mut key).is_ok();
+        let ok = RegOpenKeyExW(
+            HKEY_CLASSES_ROOT,
+            w!("Outlook.Application"),
+            0,
+            KEY_READ,
+            &mut key,
+        )
+        .is_ok();
         if ok {
             let _ = RegCloseKey(key);
         }

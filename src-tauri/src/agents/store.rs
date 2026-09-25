@@ -36,7 +36,9 @@ impl Store {
     }
 
     pub fn save_agent(&self, a: &Agent) {
-        let Ok(data) = serde_json::to_string(a) else { return };
+        let Ok(data) = serde_json::to_string(a) else {
+            return;
+        };
         let r = self.db.lock().unwrap().execute(
             "INSERT OR REPLACE INTO agents (id, batch, created, data) VALUES (?1, ?2, ?3, ?4)",
             params![a.id, a.batch, a.created, data],
@@ -47,7 +49,9 @@ impl Store {
     }
 
     pub fn save_batch(&self, b: &Batch) {
-        let Ok(data) = serde_json::to_string(b) else { return };
+        let Ok(data) = serde_json::to_string(b) else {
+            return;
+        };
         let _ = self.db.lock().unwrap().execute(
             "INSERT OR REPLACE INTO batches (id, created, data) VALUES (?1, ?2, ?3)",
             params![b.id, b.created, data],
@@ -55,12 +59,18 @@ impl Store {
     }
 
     pub fn delete_agent(&self, id: &str) {
-        let _ = self.db.lock().unwrap().execute("DELETE FROM agents WHERE id = ?1", params![id]);
+        let _ = self
+            .db
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM agents WHERE id = ?1", params![id]);
     }
 
     fn rows<T: serde::de::DeserializeOwned>(&self, sql: &str) -> Vec<T> {
         let db = self.db.lock().unwrap();
-        let Ok(mut stmt) = db.prepare(sql) else { return Vec::new() };
+        let Ok(mut stmt) = db.prepare(sql) else {
+            return Vec::new();
+        };
         stmt.query_map([], |r| r.get::<_, String>(0))
             .map(|rows| {
                 rows.filter_map(Result::ok)
@@ -83,13 +93,21 @@ impl Store {
     pub fn prune(&self, finished_before: i64, ids: &[String]) {
         let db = self.db.lock().unwrap();
         for id in ids {
-            let _ = db.execute("DELETE FROM agents WHERE id = ?1 AND created < ?2", params![id, finished_before]);
+            let _ = db.execute(
+                "DELETE FROM agents WHERE id = ?1 AND created < ?2",
+                params![id, finished_before],
+            );
         }
-        let _ = db.execute("DELETE FROM batches WHERE id NOT IN (SELECT batch FROM agents)", []);
+        let _ = db.execute(
+            "DELETE FROM batches WHERE id NOT IN (SELECT batch FROM agents)",
+            [],
+        );
     }
 
     pub fn add_reminder(&self, r: &HelpyReminder) {
-        let Ok(data) = serde_json::to_string(r) else { return };
+        let Ok(data) = serde_json::to_string(r) else {
+            return;
+        };
         let _ = self.db.lock().unwrap().execute(
             "INSERT OR REPLACE INTO reminders (id, at, data) VALUES (?1, ?2, ?3)",
             params![r.id, r.at, data],
@@ -100,11 +118,16 @@ impl Store {
     pub fn take_due(&self, now: i64) -> Vec<HelpyReminder> {
         let due: Vec<HelpyReminder> = {
             let db = self.db.lock().unwrap();
-            let Ok(mut stmt) = db.prepare("SELECT data FROM reminders WHERE at <= ?1 ORDER BY at") else {
+            let Ok(mut stmt) = db.prepare("SELECT data FROM reminders WHERE at <= ?1 ORDER BY at")
+            else {
                 return Vec::new();
             };
             stmt.query_map(params![now], |r| r.get::<_, String>(0))
-                .map(|rows| rows.filter_map(Result::ok).filter_map(|d| serde_json::from_str(&d).ok()).collect())
+                .map(|rows| {
+                    rows.filter_map(Result::ok)
+                        .filter_map(|d| serde_json::from_str(&d).ok())
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         let db = self.db.lock().unwrap();
@@ -123,20 +146,48 @@ mod tests {
     #[test]
     fn agents_and_reminders_round_trip() {
         let s = Store::in_memory();
-        let mut a = Agent::new("a1".into(), "b1".into(), 0, "Research".into(), "Find".into(), 5);
+        let mut a = Agent::new(
+            "a1".into(),
+            "b1".into(),
+            0,
+            "Research".into(),
+            "Find".into(),
+            5,
+        );
         a.counters.steps = 7;
         s.save_agent(&a);
         a.counters.steps = 8;
         s.save_agent(&a);
-        s.save_batch(&Batch { id: "b1".into(), mode: RunMode::Single, request: "x".into(), created: 5 });
+        s.save_batch(&Batch {
+            id: "b1".into(),
+            mode: RunMode::Single,
+            request: "x".into(),
+            created: 5,
+        });
         let back = s.agents();
         assert_eq!(back.len(), 1);
         assert_eq!(back[0].counters.steps, 8);
         assert_eq!(s.batches().len(), 1);
 
-        s.add_reminder(&HelpyReminder { id: "r1".into(), at: 100, title: "Call".into(), notes: String::new() });
-        s.add_reminder(&HelpyReminder { id: "r2".into(), at: 900, title: "Later".into(), notes: String::new() });
-        assert_eq!(s.take_due(500).iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["r1"]);
+        s.add_reminder(&HelpyReminder {
+            id: "r1".into(),
+            at: 100,
+            title: "Call".into(),
+            notes: String::new(),
+        });
+        s.add_reminder(&HelpyReminder {
+            id: "r2".into(),
+            at: 900,
+            title: "Later".into(),
+            notes: String::new(),
+        });
+        assert_eq!(
+            s.take_due(500)
+                .iter()
+                .map(|r| r.id.as_str())
+                .collect::<Vec<_>>(),
+            ["r1"]
+        );
         assert!(s.take_due(500).is_empty());
 
         s.prune(10, &["a1".into()]);

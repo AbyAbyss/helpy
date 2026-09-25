@@ -23,7 +23,10 @@ pub enum Progress<'a> {
     Text(&'a str),
     /// An attempt was billed (or may have been): tokens and cost, if the
     /// model has a price. Failed attempts count too.
-    Spent { tokens: u64, cost: Option<f64> },
+    Spent {
+        tokens: u64,
+        cost: Option<f64>,
+    },
     /// The last attempt failed and another follows after `wait`.
     Retry {
         retry: u32,

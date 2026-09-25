@@ -19,6 +19,8 @@ export function Overlay() {
   const [customSrc, setCustomSrc] = useState<string | null>(null);
   const [marks, setMarks] = useState<{ id: number; marks: Mark[] }>({ id: 0, marks: [] });
   const [circling, setCircling] = useState(false);
+  // Agents at work, for the buddy's badge.
+  const [working, setWorking] = useState(0);
   const el = useRef<HTMLDivElement>(null);
   const target = useRef<Point | null>(null);
   const pos = useRef<Point | null>(null);
@@ -44,12 +46,15 @@ export function Overlay() {
       setMarks((m) => ({ id: m.id + 1, marks: payload.overlay === self ? payload.marks : [] })),
     );
     const offClear = listen(EVENTS.clearAnnotations, () => setMarks((m) => ({ id: m.id + 1, marks: [] })));
+    const offCount = listen<number>(EVENTS.agentCount, (e) => setWorking(e.payload));
+    api.agents().then((l) => setWorking(l.agents.filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status)).length));
     api.overlayReady().then(setVisible);
     return () => {
       offCursor.then((f) => f());
       offVisible.then((f) => f());
       offMarks.then((f) => f());
       offClear.then((f) => f());
+      offCount.then((f) => f());
     };
   }, []);
 
@@ -98,6 +103,7 @@ export function Overlay() {
             size={b.size}
             state="idle"
             animate={b.showStateAnimations}
+            badge={b.showAgentBadge && working > 0 ? working : null}
             customSrc={customSrc}
           />
         </div>

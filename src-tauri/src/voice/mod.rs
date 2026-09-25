@@ -322,6 +322,20 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
             },
         );
     }
+    // A follow-up for an agent, or "yes, go" / "cancel" for an open plan
+    // card, isn't a question.
+    if crate::agents::take_voice_follow_up(app, &text) {
+        crate::windows::fly_pill_to_dock(app);
+        return emit_phase(app, VoicePhase::Idle { message: None });
+    }
+    if let Some(started) = crate::agents::planner::voice_reply(app, &text) {
+        if started {
+            crate::windows::fly_pill_to_dock(app);
+        } else {
+            crate::windows::hide_pill(app);
+        }
+        return emit_phase(app, VoicePhase::Idle { message: None });
+    }
     emit_phase(
         app,
         VoicePhase::Thinking {

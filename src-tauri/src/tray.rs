@@ -83,7 +83,7 @@ pub fn build(app: &AppHandle, s: &Settings) -> tauri::Result<()> {
     let profile_menu = Submenu::with_items(app, "Behavior profile", true, &profile_refs)?;
     // The agent panel and approval inbox arrive with the agent phases.
     let circle = MenuItem::with_id(app, "circle", "Circle to explain", true, None::<&str>)?;
-    let agents = MenuItem::with_id(app, "agents", "Agent panel", false, None::<&str>)?;
+    let agents = MenuItem::with_id(app, "agents", "Agent panel", true, None::<&str>)?;
     let approvals = MenuItem::with_id(app, "approvals", "Approval inbox", false, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Helpy", true, None::<&str>)?;
@@ -141,6 +141,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         ),
         "capture" => set("privacy.capturePaused", (!s.privacy.capture_paused).into()),
         "circle" => crate::circle::toggle(app),
+        "agents" => crate::windows::show_agents(app, None),
         "settings" => crate::windows::show_settings(app),
         "quit" => app.exit(0),
         id => {

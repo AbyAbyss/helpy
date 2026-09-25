@@ -458,6 +458,23 @@
   color: #7f8797;
 }
 
+.ccard__agent {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-line);
+  background: rgba(77, 141, 255, 0.16);
+  color: #b6cdff;
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ccard__agent:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .ccard__send {
   display: grid;
   place-items: center;

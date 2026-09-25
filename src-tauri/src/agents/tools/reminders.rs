@@ -50,7 +50,10 @@ pub fn parse_when(s: &str, now: NaiveDateTime) -> Result<NaiveDateTime, String> 
         .or_else(|_| NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S"))
         .map_err(|_| format!("\"{s}\" isn't a date and time like 2026-09-26T15:00."))?;
     if t < now {
-        return Err(format!("{t} is in the past; it's {} now.", now.format("%Y-%m-%d %H:%M")));
+        return Err(format!(
+            "{t} is in the past; it's {} now.",
+            now.format("%Y-%m-%d %H:%M")
+        ));
     }
     Ok(t)
 }
@@ -65,7 +68,11 @@ pub fn local_ms(t: NaiveDateTime) -> i64 {
 
 /// Date parts as strings, for AppleScript's `on run argv`.
 fn parts(t: NaiveDateTime) -> Vec<String> {
-    t.format("%Y %-m %-d %-H %-M").to_string().split(' ').map(String::from).collect()
+    t.format("%Y %-m %-d %-H %-M")
+        .to_string()
+        .split(' ')
+        .map(String::from)
+        .collect()
 }
 
 const APPLESCRIPT_DATE: &str = r#"
@@ -115,7 +122,10 @@ end run"
     args.extend(parts(at));
     match osascript(&script, args).await {
         Ok(()) => ToolOutcome::Ok {
-            text: format!("Added \"{title}\" to Reminders for {}.", at.format("%A %-d %B at %H:%M")),
+            text: format!(
+                "Added \"{title}\" to Reminders for {}.",
+                at.format("%A %-d %B at %H:%M")
+            ),
             ops: Vec::new(),
         },
         Err(e) => ToolOutcome::Permanent(e),
@@ -148,7 +158,11 @@ on run argv
   end tell
 end run"
         );
-        let mut args = vec![e.title.to_string(), e.location.to_string(), e.notes.to_string()];
+        let mut args = vec![
+            e.title.to_string(),
+            e.location.to_string(),
+            e.notes.to_string(),
+        ];
         args.extend(parts(e.start));
         args.extend(parts(e.end));
         osascript(&script, args).await
@@ -156,7 +170,8 @@ end run"
     #[cfg(windows)]
     let result = outlook_event(&e).await;
     #[cfg(not(any(target_os = "macos", windows)))]
-    let result: Result<(), String> = Err("Calendar events aren't available on this computer.".into());
+    let result: Result<(), String> =
+        Err("Calendar events aren't available on this computer.".into());
     match result {
         Ok(()) => ToolOutcome::Ok {
             text: format!("Added \"{}\" to the calendar for {when}.", e.title),
@@ -189,7 +204,10 @@ async fn outlook_event(e: &Event<'_>) -> Result<(), String> {
     if out.status.success() {
         Ok(())
     } else {
-        Err(format!("Outlook couldn't add the event: {}", String::from_utf8_lossy(&out.stderr).trim()))
+        Err(format!(
+            "Outlook couldn't add the event: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
     }
 }
 
@@ -206,7 +224,9 @@ mod tests {
         let t = parse_when("2026-09-26 15:00", now()).unwrap();
         assert_eq!(parts(t), ["2026", "9", "26", "15", "0"]);
         assert!(parse_when("2026-09-26T15:00:30", now()).is_ok());
-        assert!(parse_when("2026-09-24T15:00", now()).unwrap_err().contains("past"));
+        assert!(parse_when("2026-09-24T15:00", now())
+            .unwrap_err()
+            .contains("past"));
         assert!(parse_when("tomorrow at 3", now()).is_err());
     }
 }

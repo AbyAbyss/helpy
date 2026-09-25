@@ -30,17 +30,27 @@ pub enum SearchError {
 
 pub trait SearchAdapter: Send + Sync {
     fn name(&self) -> &'static str;
-    fn search<'a>(&'a self, http: &'a reqwest::Client, query: &'a str) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>>;
+    fn search<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+        query: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>>;
 }
 
 /// The engine to use, from settings: Brave when its key is set, SearXNG when
 /// its address is set, DuckDuckGo otherwise.
-pub fn pick(engine: SearchEngine, brave_key: Option<String>, searxng_url: &str) -> Box<dyn SearchAdapter> {
+pub fn pick(
+    engine: SearchEngine,
+    brave_key: Option<String>,
+    searxng_url: &str,
+) -> Box<dyn SearchAdapter> {
     let searxng = (!searxng_url.trim().is_empty()).then(|| Searxng {
         base: searxng_url.trim().trim_end_matches('/').to_string(),
     });
     match (engine, brave_key, searxng) {
-        (SearchEngine::Brave, Some(key), _) | (SearchEngine::Auto, Some(key), _) => Box::new(Brave { key }),
+        (SearchEngine::Brave, Some(key), _) | (SearchEngine::Auto, Some(key), _) => {
+            Box::new(Brave { key })
+        }
         (SearchEngine::Searxng, _, Some(s)) | (SearchEngine::Auto, None, Some(s)) => Box::new(s),
         _ => Box::new(DuckDuckGo),
     }
@@ -83,8 +93,12 @@ fn http_error(engine: &str, e: reqwest::Error) -> SearchError {
 
 fn status_error(engine: &str, status: reqwest::StatusCode) -> SearchError {
     match status.as_u16() {
-        429 | 202 | 500..=599 => SearchError::Transient(format!("{engine} is busy or rate limiting searches ({status})")),
-        401 | 403 => SearchError::Permanent(format!("{engine} refused the search ({status}); check its key or address in Settings → Agents")),
+        429 | 202 | 500..=599 => SearchError::Transient(format!(
+            "{engine} is busy or rate limiting searches ({status})"
+        )),
+        401 | 403 => SearchError::Permanent(format!(
+            "{engine} refused the search ({status}); check its key or address in Settings → Agents"
+        )),
         _ => SearchError::Permanent(format!("{engine} answered {status}")),
     }
 }
@@ -114,7 +128,11 @@ impl SearchAdapter for DuckDuckGo {
     fn name(&self) -> &'static str {
         "DuckDuckGo"
     }
-    fn search<'a>(&'a self, http: &'a reqwest::Client, query: &'a str) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>> {
+    fn search<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+        query: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>> {
         Box::pin(async move {
             tokio::time::sleep(ddg_slot(Instant::now())).await;
             let resp = http
@@ -129,7 +147,9 @@ impl SearchAdapter for DuckDuckGo {
             let html = resp.text().await.map_err(|e| http_error("DuckDuckGo", e))?;
             // A "prove you're human" page instead of results.
             if html.contains("anomaly-modal") {
-                return Err(SearchError::Transient("DuckDuckGo is rate limiting searches".into()));
+                return Err(SearchError::Transient(
+                    "DuckDuckGo is rate limiting searches".into(),
+                ));
             }
             Ok(parse_ddg(&html))
         })
@@ -145,7 +165,11 @@ fn ddg_target(href: &str) -> String {
     };
     Url::parse(&full)
         .ok()
-        .and_then(|u| u.query_pairs().find(|(k, _)| k == "uddg").map(|(_, v)| v.to_string()))
+        .and_then(|u| {
+            u.query_pairs()
+                .find(|(k, _)| k == "uddg")
+                .map(|(_, v)| v.to_string())
+        })
         .unwrap_or(full)
 }
 
@@ -155,7 +179,13 @@ pub fn parse_ddg(html: &str) -> Vec<Hit> {
     let result = Selector::parse(".result").unwrap();
     let link = Selector::parse("a.result__a").unwrap();
     let snippet = Selector::parse(".result__snippet").unwrap();
-    let text = |e: scraper::ElementRef| e.text().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ");
+    let text = |e: scraper::ElementRef| {
+        e.text()
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     doc.select(&result)
         // Ads are marked; leave them out.
         .filter(|r| !r.value().classes().any(|c| c == "result--ad"))
@@ -181,7 +211,11 @@ impl SearchAdapter for Brave {
     fn name(&self) -> &'static str {
         "Brave"
     }
-    fn search<'a>(&'a self, http: &'a reqwest::Client, query: &'a str) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>> {
+    fn search<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+        query: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>> {
         Box::pin(async move {
             let resp = http
                 .get("https://api.search.brave.com/res/v1/web/search")
@@ -212,7 +246,11 @@ impl SearchAdapter for Searxng {
     fn name(&self) -> &'static str {
         "SearXNG"
     }
-    fn search<'a>(&'a self, http: &'a reqwest::Client, query: &'a str) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>> {
+    fn search<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+        query: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>> {
         Box::pin(async move {
             let resp = http
                 .get(format!("{}/search", self.base))
@@ -277,13 +315,19 @@ mod tests {
     #[test]
     fn reads_brave_and_searxng_json() {
         let brave = json!({"web": {"results": [{"title": "A", "url": "https://a", "description": "about a"}, {"url": "no title"}]}});
-        assert_eq!(parse_json_hits(&brave["web"]["results"], "description"), vec![Hit {
-            title: "A".into(),
-            url: "https://a".into(),
-            snippet: "about a".into()
-        }]);
+        assert_eq!(
+            parse_json_hits(&brave["web"]["results"], "description"),
+            vec![Hit {
+                title: "A".into(),
+                url: "https://a".into(),
+                snippet: "about a".into()
+            }]
+        );
         let sx = json!({"results": [{"title": "B", "url": "https://b", "content": "about b"}]});
-        assert_eq!(parse_json_hits(&sx["results"], "content")[0].snippet, "about b");
+        assert_eq!(
+            parse_json_hits(&sx["results"], "content")[0].snippet,
+            "about b"
+        );
     }
 
     #[test]
@@ -291,10 +335,16 @@ mod tests {
         let key = || Some("k".to_string());
         assert_eq!(pick(SearchEngine::Auto, None, "").name(), "DuckDuckGo");
         assert_eq!(pick(SearchEngine::Auto, key(), "http://sx").name(), "Brave");
-        assert_eq!(pick(SearchEngine::Auto, None, "http://sx").name(), "SearXNG");
+        assert_eq!(
+            pick(SearchEngine::Auto, None, "http://sx").name(),
+            "SearXNG"
+        );
         // Asked for Brave but no key: fall back instead of failing.
         assert_eq!(pick(SearchEngine::Brave, None, "").name(), "DuckDuckGo");
-        assert_eq!(pick(SearchEngine::DuckDuckGo, key(), "http://sx").name(), "DuckDuckGo");
+        assert_eq!(
+            pick(SearchEngine::DuckDuckGo, key(), "http://sx").name(),
+            "DuckDuckGo"
+        );
     }
 
     #[test]

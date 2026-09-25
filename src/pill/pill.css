@@ -118,3 +118,30 @@ body,
     animation: none;
   }
 }
+
+/* The hand-off (R6): while the window glides to the dock, the waveform
+   folds into the glowing chip the new agent gets there. */
+.pill--handoff {
+  --glow: #4d8dff;
+  --glow-soft: rgba(77, 141, 255, 0.6);
+}
+
+.pill--handoff .wave {
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(18, 21, 29, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 18px var(--glow-soft);
+  transition:
+    width 260ms ease,
+    height 260ms ease,
+    border-radius 260ms ease;
+}
+
+.pill--handoff .wave span {
+  transform: scaleY(0.2) !important;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}

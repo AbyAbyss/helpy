@@ -2,7 +2,7 @@
 
 Helpy is built phase by phase. Each phase ends with an app that runs (`npm run tauri dev`) and does something useful on its own. This file lists what each phase delivers, the crates and plugins it pulls in, and the platform risks that could change the design.
 
-Status: **Phases 1 to 5 are implemented.** Phases 6 to 9 are planned, plus the additional requirements R1 to R7 below.
+Status: **Phases 1 to 6 are implemented.** Phases 7 to 9 are planned, plus the additional requirements R1 to R7 below.
 
 ## Architecture in one paragraph
 
@@ -80,7 +80,7 @@ Crates: `rdev`.
 - As built: the screen is captured at full resolution when selection starts, so the selection is made on a still frame and cropped from it. Diagram parts come back after a `PARTS:` line as JSON in crop pixels, which works the same for models with and without tool calling. Actions: explain, copy text, translate (into a set language), summarize, and follow-up questions, all in one conversation per selection. The overlay takes the mouse and keyboard only while Circle to explain is open. "Send to agent as task context" arrives with agents in **Phase 6**.
 - Every model call (questions, walkthroughs, circle to explain) now goes through one function, `ai::call::stream`, so the retry, fallback and budget limits can't be skipped by a new feature.
 
-## Phase 6: agent core
+## Phase 6: agent core (done)
 
 - Circle to explain gets its "Send to agent" action (and the matching default-action option) once agents exist.
 
@@ -91,7 +91,9 @@ Crates: `rdev`.
 - Tools: web search, fetch, files in approved folders with backups, shell with policy.
 - Test suite: fake provider and fake tools that fail in scripted ways to prove every limit.
 
-Crates: `rusqlite` (bundled), `tokio`, `tauri-plugin-notification`, `sha2`.
+- As built: agents are persisted as one JSON document per agent in SQLite (`agents.db`), saved after every step. The runner talks to the outside world through an `Env` trait, which is how the tests drive it with a scripted provider and tools. Repeat and no-progress detection use a stable FNV hash, so `sha2` wasn't needed. Web search is an adapter trait (DuckDuckGo, Brave, SearXNG). Floating cards are the R2 dock and hover cards. Retries and backoff for agent steps use the global limits under AI providers, so there's one set of retry settings. Approvals are answered on the agent's card and in the panel; the approval inbox window is Phase 7. Templates, triggers, chained runs, dependencies, orchestrators and voice steering are Phase 8 as planned.
+
+Crates: `rusqlite` (bundled), `tokio` (process), `tauri-plugin-notification`, `tauri-plugin-clipboard-manager` (Phase 5), `scraper`, `html2text`.
 
 ## Phase 7: connectors and approvals
 
@@ -113,7 +115,7 @@ Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessib
 
 ## Additional requirements (added by the user after Phase 2)
 
-These come on top of the original brief. Each one names the phase that builds it, and those phases must not ship without it. Reference screenshots of the intended look were shared in the conversation; the descriptions below capture them.
+These come on top of the original brief. Each one names the phase that builds it, and those phases must not ship without it. Status after Phase 6: R1 is done except its file-organizer template (Phase 8), R2, R5 and R6 are done, R4's projects folder setting is done (builder agents are Phase 8), R3 is Phase 8, R7 is Phase 9. Reference screenshots of the intended look were shared in the conversation; the descriptions below capture them.
 
 ### R1. Agents that act on the computer
 

@@ -89,7 +89,11 @@ pub enum ActionKind {
 
 /// Something the agent is waiting on the user for.
 #[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 #[ts(export)]
 pub enum Pending {
     Approval {
@@ -111,7 +115,11 @@ pub enum Pending {
 
 /// The user's reply to a Pending.
 #[derive(Deserialize, TS, Clone, Debug, PartialEq)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 #[ts(export)]
 pub enum Answer {
     Approve,
@@ -127,12 +135,23 @@ pub enum Answer {
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum FileOp {
     /// A new file or folder; undo removes it.
-    Created { path: String },
+    Created {
+        path: String,
+    },
     /// An existing file was overwritten; `backup` holds the old content.
-    Replaced { path: String, backup: String },
-    Moved { from: String, to: String },
+    Replaced {
+        path: String,
+        backup: String,
+    },
+    Moved {
+        from: String,
+        to: String,
+    },
     /// Deleted; `backup` holds the old content.
-    Deleted { path: String, backup: String },
+    Deleted {
+        path: String,
+        backup: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Eq)]
@@ -229,7 +248,14 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(id: String, batch: String, order: u32, name: String, goal: String, now: i64) -> Self {
+    pub fn new(
+        id: String,
+        batch: String,
+        order: u32,
+        name: String,
+        goal: String,
+        now: i64,
+    ) -> Self {
         Self {
             id,
             batch,

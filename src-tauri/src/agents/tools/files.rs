@@ -24,7 +24,9 @@ pub fn expand_home(p: &str) -> PathBuf {
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from);
     match (p.strip_prefix("~"), home) {
-        (Some(rest), Some(h)) if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') => {
+        (Some(rest), Some(h))
+            if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') =>
+        {
             h.join(rest.trim_start_matches(['/', '\\']))
         }
         _ => PathBuf::from(p),
@@ -64,14 +66,19 @@ impl Files {
     pub fn resolve(&self, p: &str) -> Result<PathBuf, String> {
         let raw = expand_home(p.trim());
         if !raw.is_absolute() {
-            return Err(format!("Use a full path (like ~/Desktop/notes.txt), not \"{p}\"."));
+            return Err(format!(
+                "Use a full path (like ~/Desktop/notes.txt), not \"{p}\"."
+            ));
         }
         let path = normalize(&raw);
         // Resolve the deepest part that exists, then add the rest back.
         let mut existing = path.clone();
         let mut rest = Vec::new();
         while !existing.exists() {
-            match (existing.file_name().map(|n| n.to_owned()), existing.parent()) {
+            match (
+                existing.file_name().map(|n| n.to_owned()),
+                existing.parent(),
+            ) {
                 (Some(name), Some(parent)) => {
                     rest.push(name);
                     existing = parent.to_path_buf();
@@ -79,7 +86,8 @@ impl Files {
                 _ => break,
             }
         }
-        let mut real = fs::canonicalize(&existing).map_err(|e| format!("Can't open {}: {e}", existing.display()))?;
+        let mut real = fs::canonicalize(&existing)
+            .map_err(|e| format!("Can't open {}: {e}", existing.display()))?;
         for name in rest.into_iter().rev() {
             real.push(name);
         }
@@ -91,7 +99,11 @@ impl Files {
             Err(format!(
                 "{} is outside the folders you may use: {}.",
                 real.display(),
-                self.roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>().join(", ")
+                self.roots
+                    .iter()
+                    .map(|r| r.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ))
         }
     }
@@ -122,7 +134,8 @@ impl Files {
 
     pub fn read(&self, p: &str) -> Result<String, String> {
         let path = self.resolve(p)?;
-        let meta = fs::metadata(&path).map_err(|e| format!("Can't read {}: {e}", path.display()))?;
+        let meta =
+            fs::metadata(&path).map_err(|e| format!("Can't read {}: {e}", path.display()))?;
         if meta.is_dir() {
             return Err(format!("{} is a folder; list it instead.", path.display()));
         }
@@ -132,7 +145,11 @@ impl Files {
             .and_then(|f| f.take(MAX_READ).read_to_end(&mut buf))
             .map_err(|e| format!("Can't read {}: {e}", path.display()))?;
         if buf.iter().take(4096).any(|&b| b == 0) {
-            return Ok(format!("{} is a binary file ({}).", path.display(), human_size(meta.len())));
+            return Ok(format!(
+                "{} is a binary file ({}).",
+                path.display(),
+                human_size(meta.len())
+            ));
         }
         let mut text = String::from_utf8_lossy(&buf).to_string();
         if meta.len() > MAX_READ {
@@ -143,7 +160,9 @@ impl Files {
 
     /// Creates missing parent folders, recording each.
     fn ensure_parent(&self, path: &Path, ops: &mut Vec<FileOp>) -> Result<(), String> {
-        let Some(parent) = path.parent() else { return Ok(()) };
+        let Some(parent) = path.parent() else {
+            return Ok(());
+        };
         let mut missing = Vec::new();
         let mut p = parent.to_path_buf();
         while !p.exists() {
@@ -165,14 +184,22 @@ impl Files {
     fn backup(&self, agent: &str, path: &Path) -> Result<String, String> {
         let dir = self.backups.join(agent);
         fs::create_dir_all(&dir).map_err(|e| format!("Can't make a backup folder: {e}"))?;
-        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
         let n = fs::read_dir(&dir).map(|d| d.count()).unwrap_or(0);
         let dest = dir.join(format!("{n:04}-{name}"));
         copy_all(path, &dest).map_err(|e| format!("Can't back up {}: {e}", path.display()))?;
         Ok(dest.display().to_string())
     }
 
-    pub fn write(&self, agent: &str, p: &str, content: &str) -> Result<(String, Vec<FileOp>), String> {
+    pub fn write(
+        &self,
+        agent: &str,
+        p: &str,
+        content: &str,
+    ) -> Result<(String, Vec<FileOp>), String> {
         let path = self.resolve(p)?;
         if path.is_dir() {
             return Err(format!("{} is a folder.", path.display()));
@@ -191,7 +218,14 @@ impl Files {
             });
         }
         fs::write(&path, content).map_err(|e| format!("Can't write {}: {e}", path.display()))?;
-        Ok((format!("Wrote {} ({}).", path.display(), human_size(content.len() as u64)), ops))
+        Ok((
+            format!(
+                "Wrote {} ({}).",
+                path.display(),
+                human_size(content.len() as u64)
+            ),
+            ops,
+        ))
     }
 
     pub fn make_folder(&self, p: &str) -> Result<(String, Vec<FileOp>), String> {
@@ -222,7 +256,10 @@ impl Files {
             }
         }
         if dest.exists() {
-            return Err(format!("{} already exists; pick another name.", dest.display()));
+            return Err(format!(
+                "{} already exists; pick another name.",
+                dest.display()
+            ));
         }
         if dest.starts_with(&src) {
             return Err("Can't move a folder into itself.".into());
@@ -234,7 +271,10 @@ impl Files {
             from: src.display().to_string(),
             to: dest.display().to_string(),
         });
-        Ok((format!("Moved {} to {}.", src.display(), dest.display()), ops))
+        Ok((
+            format!("Moved {} to {}.", src.display(), dest.display()),
+            ops,
+        ))
     }
 
     pub fn delete(&self, agent: &str, p: &str) -> Result<(String, Vec<FileOp>), String> {
@@ -325,7 +365,9 @@ fn copy_all(src: &Path, dest: &Path) -> std::io::Result<()> {
 
 /// Removes backups older than `days`.
 pub fn prune_backups(backups: &Path, days: u32) {
-    let Ok(dirs) = fs::read_dir(backups) else { return };
+    let Ok(dirs) = fs::read_dir(backups) else {
+        return;
+    };
     let max = std::time::Duration::from_secs(days as u64 * 86_400);
     for d in dirs.filter_map(Result::ok) {
         let old = d
@@ -370,13 +412,19 @@ mod tests {
         let desk = tmp.path().join("Desktop");
         assert!(f.resolve(&desk.join("a.pdf").display().to_string()).is_ok());
         // New files inside are fine, even in folders that don't exist yet.
-        assert!(f.resolve(&desk.join("Docs/new.txt").display().to_string()).is_ok());
+        assert!(f
+            .resolve(&desk.join("Docs/new.txt").display().to_string())
+            .is_ok());
         for bad in [
             tmp.path().join("Secret/key.txt"),
             desk.join("../Secret/key.txt"),
             PathBuf::from("relative.txt"),
         ] {
-            assert!(f.resolve(&bad.display().to_string()).is_err(), "{}", bad.display());
+            assert!(
+                f.resolve(&bad.display().to_string()).is_err(),
+                "{}",
+                bad.display()
+            );
         }
     }
 
@@ -415,7 +463,10 @@ mod tests {
     fn never_overwrites_or_deletes_an_approved_folder() {
         let (tmp, f) = setup();
         let d = |p: &str| tmp.path().join("Desktop").join(p).display().to_string();
-        assert!(f.move_to(&d("a.pdf"), &d("b.png")).unwrap_err().contains("already exists"));
+        assert!(f
+            .move_to(&d("a.pdf"), &d("b.png"))
+            .unwrap_err()
+            .contains("already exists"));
         assert!(f.delete("a1", &d("")).is_err());
         assert!(f.list(&d("")).unwrap().contains("a.pdf"));
         assert_eq!(f.read(&d("a.pdf")).unwrap(), "pdf");

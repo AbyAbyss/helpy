@@ -115,7 +115,14 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Closing settings hides it; Helpy keeps running in the tray.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == windows::SETTINGS || window.label() == windows::ASK {
+                if [
+                    windows::SETTINGS,
+                    windows::ASK,
+                    windows::PLAN,
+                    windows::AGENTS,
+                ]
+                .contains(&window.label())
+                {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -157,6 +164,7 @@ pub fn run() {
             circle::circle_action,
             circle::circle_close,
             circle::circle_copy,
+            circle::circle_to_agent,
             agents::agents_list,
             agents::agents_answer,
             agents::agents_pause,
@@ -173,6 +181,15 @@ pub fn run() {
             agents::agents_duplicate,
             agents::agents_set_brave_key,
             agents::agents_has_brave_key,
+            agents::planner::agents_plan,
+            agents::agents_voice_follow_up,
+            windows::dock_layout,
+            windows::agents_open_panel,
+            agents::agents_export,
+            windows::dock_focus,
+            agents::planner::agents_plan_current,
+            agents::planner::agents_plan_start,
+            agents::planner::agents_plan_cancel,
             voice::voice_input_devices,
             voice::voice_meter_start,
             voice::voice_meter_stop,

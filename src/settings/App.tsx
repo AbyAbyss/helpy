@@ -11,6 +11,10 @@ import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } 
 import { useSettings, useTheme } from "../lib/useSettings";
 import { BuddyStage, BuddyStylePicker, useCustomBuddy } from "./BuddyPreview";
 import { GuidanceStage } from "./GuidancePreview";
+import { ApprovalRules, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
+import type { AgentTools } from "../bindings/AgentTools";
+import type { Approvals } from "../bindings/Approvals";
+import type { SearchEngine } from "../bindings/SearchEngine";
 import { ProvidersEditor } from "./ai/Providers";
 import { FallbackEditor, RoutingEditor } from "./ai/Routing";
 import { allModels, refKey } from "./ai/routing";
@@ -333,7 +337,7 @@ function Row({ field, ctx }: { field: Field; ctx: RowContext }) {
   const error = ctx.errors[field.path];
   const status = field.control.kind === "hotkey" ? ctx.hotkeys.find((h) => h.action === field.path.split(".")[1]) : undefined;
   const warning = !error ? status?.warning ?? (status?.state === "failed" ? status.error : null) : null;
-  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice"].includes(field.control.kind);
+  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice", "approvalRules", "toolToggles", "folderList", "stringList", "searchEngine"].includes(field.control.kind);
 
   return (
     <div className={`row${wide ? " row--wide" : ""}${error ? " has-error" : ""}`}>
@@ -404,7 +408,19 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
     case "textarea":
       return <TextArea id={id} value={saved as string} placeholder={c.placeholder} max={c.max} onCommit={set} />;
     case "money":
-      return <MoneyField id={id} value={saved as number | null} emptyLabel={c.emptyLabel} invalid={!!ctx.errors[path]} onChange={set} />;
+      return <MoneyField id={id} value={saved as number | null} emptyLabel={c.emptyLabel} unit={c.unit} invalid={!!ctx.errors[path]} onChange={set} />;
+    case "approvalRules":
+      return <ApprovalRules value={saved as Approvals} onChange={set} />;
+    case "toolToggles":
+      return <ToolToggles value={saved as AgentTools} onChange={set} />;
+    case "folderList":
+      return <FolderList value={saved as string[]} onChange={set} />;
+    case "folder":
+      return <FolderPicker value={saved as string} placeholder={c.placeholder} onChange={set} />;
+    case "stringList":
+      return <StringList value={saved as string[]} placeholder={c.placeholder} onChange={set} />;
+    case "searchEngine":
+      return <SearchEnginePicker value={saved as SearchEngine} onChange={set} />;
     case "text":
       return <TextInput id={id} value={saved as string} placeholder={c.placeholder} invalid={!!ctx.errors[path]} onCommit={set} />;
     case "color":
@@ -531,6 +547,14 @@ function SectionIcon({ id }: { id: SectionId }) {
       <>
         <rect x="6" y="6" width="12" height="12" rx="2.5" />
         <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
+      </>
+    ),
+    agents: (
+      <>
+        <rect x="3" y="4" width="7" height="7" rx="2.2" />
+        <rect x="14" y="4" width="7" height="7" rx="2.2" />
+        <rect x="3" y="14" width="7" height="7" rx="2.2" />
+        <path d="M17.5 14v7M14 17.5h7" />
       </>
     ),
     guidance: (
