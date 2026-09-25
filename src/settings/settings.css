@@ -2072,3 +2072,38 @@ select {
 .tpl-agent .chips {
   justify-content: flex-start;
 }
+
+/* ---------- Triggers ---------- */
+
+.trig-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.trig-when select,
+.trig-when input,
+.trig-what {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 450 13px var(--font-ui);
+  outline: none;
+}
+
+.trig-when input.mono {
+  flex: 1;
+  min-width: 200px;
+  font-family: var(--font-mono);
+}
+
+.trig-when select:focus-visible,
+.trig-when input:focus-visible,
+.trig-what:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus);
+}

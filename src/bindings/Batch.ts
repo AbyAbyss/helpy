@@ -5,4 +5,8 @@ export type Batch = { id: string, mode: RunMode,
 /**
  * What the user asked for, in their words.
  */
-request: string, created: number, };
+request: string, created: number, 
+/**
+ * The trigger that started it, if it started by itself.
+ */
+trigger: string | null, };

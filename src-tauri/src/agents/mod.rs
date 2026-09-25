@@ -7,6 +7,7 @@ pub mod runner;
 pub mod store;
 pub mod templates;
 pub mod tools;
+pub mod triggers;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -195,6 +196,17 @@ fn commit(app: &AppHandle, a: &Agent) {
     if old != Some(a.status) {
         announce(app, a, &s);
         emit_count(app);
+        if a.status.is_finished() || a.status == Status::Ready {
+            let trigger = state
+                .batches
+                .lock()
+                .unwrap()
+                .get(&a.batch)
+                .and_then(|b| b.trigger.clone());
+            if let Some(t) = trigger {
+                triggers::batch_changed(app, &t, &a.batch);
+            }
+        }
     }
     if s.agents.speak_status
         && a.status == Status::Running
@@ -940,6 +952,30 @@ pub fn create(
     agents: Vec<NewAgent>,
     image: Option<String>,
 ) -> Vec<String> {
+    let batch = create_batch(app, request, mode, agents, image, None);
+    let state = app.state::<AgentsState>();
+    let mut ids: Vec<(u32, String)> = state
+        .agents
+        .lock()
+        .unwrap()
+        .values()
+        .filter(|a| a.batch == batch)
+        .map(|a| (a.order, a.id.clone()))
+        .collect();
+    ids.sort();
+    ids.into_iter().map(|(_, id)| id).collect()
+}
+
+/// Creates a batch (started by a trigger, if given), queues its agents,
+/// and returns the batch's id.
+pub fn create_batch(
+    app: &AppHandle,
+    request: &str,
+    mode: RunMode,
+    agents: Vec<NewAgent>,
+    image: Option<String>,
+    trigger: Option<String>,
+) -> String {
     let state = app.state::<AgentsState>();
     let now = now_ms();
     let batch = Batch {
@@ -947,6 +983,7 @@ pub fn create(
         mode,
         request: request.to_string(),
         created: now,
+        trigger,
     };
     state.store.save_batch(&batch);
     state
@@ -982,7 +1019,7 @@ pub fn create(
         commit(app, &a);
     }
     schedule(app);
-    ids
+    batch.id
 }
 
 // ---------- Startup: reminders, pruning ----------

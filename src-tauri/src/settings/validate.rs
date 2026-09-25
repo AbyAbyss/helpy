@@ -183,6 +183,42 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
         ids.push(&t.id);
     }
 
+    let mut trigger_ids: Vec<&str> = Vec::new();
+    let templates: Vec<String> = crate::agents::templates::all(s)
+        .into_iter()
+        .map(|t| t.id)
+        .collect();
+    for t in &a.triggers {
+        let name = if t.name.trim().is_empty() {
+            "A trigger"
+        } else {
+            t.name.as_str()
+        };
+        let problem = if t.id.is_empty() || trigger_ids.contains(&t.id.as_str()) {
+            Some("every trigger needs its own id".to_string())
+        } else if t.name.trim().is_empty() {
+            Some("give it a name".to_string())
+        } else if !t.template.is_empty() && !templates.contains(&t.template) {
+            Some("its template doesn't exist".to_string())
+        } else if t.template.is_empty() && t.goal.trim().is_empty() {
+            Some("say what it should do".to_string())
+        } else {
+            match &t.when {
+                crate::settings::schema::TriggerWhen::Schedule { cron } => {
+                    crate::agents::triggers::check_schedule(cron).err()
+                }
+                crate::settings::schema::TriggerWhen::Folder { path, .. } => {
+                    (!std::path::Path::new(path).is_absolute())
+                        .then(|| format!("\"{path}\" isn't a full folder path"))
+                }
+            }
+        };
+        if let Some(p) = problem {
+            errors.push(FieldError::new("agents.triggers", format!("{name}: {p}")));
+        }
+        trigger_ids.push(&t.id);
+    }
+
     validate_mcp(&s.connectors.mcp, &mut errors);
 
     if s.circle.translate_to == "auto" || !is_language_tag(&s.circle.translate_to) {

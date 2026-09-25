@@ -14,6 +14,7 @@ import { GuidanceStage } from "./GuidancePreview";
 import { ApprovalRules, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
 import { ConnectorList, McpServers, OAuthApps } from "./ConnectorControls";
 import { TemplateEditor } from "./TemplateControls";
+import { TriggerEditor } from "./TriggerControls";
 import type { AgentTools } from "../bindings/AgentTools";
 import type { Approvals } from "../bindings/Approvals";
 import type { SearchEngine } from "../bindings/SearchEngine";
@@ -339,7 +340,7 @@ function Row({ field, ctx }: { field: Field; ctx: RowContext }) {
   const error = ctx.errors[field.path];
   const status = field.control.kind === "hotkey" ? ctx.hotkeys.find((h) => h.action === field.path.split(".")[1]) : undefined;
   const warning = !error ? status?.warning ?? (status?.state === "failed" ? status.error : null) : null;
-  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice", "approvalRules", "toolToggles", "folderList", "stringList", "searchEngine", "connectors", "oauthApps", "mcpServers", "templates"].includes(field.control.kind);
+  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice", "approvalRules", "toolToggles", "folderList", "stringList", "searchEngine", "connectors", "oauthApps", "mcpServers", "templates", "triggers"].includes(field.control.kind);
 
   return (
     <div className={`row${wide ? " row--wide" : ""}${error ? " has-error" : ""}`}>
@@ -453,6 +454,8 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
       return <McpServers value={ctx.settings.connectors.mcp} onChange={set} />;
     case "templates":
       return <TemplateEditor value={ctx.settings.agents.templates} onChange={set} />;
+    case "triggers":
+      return <TriggerEditor settings={ctx.settings} value={ctx.settings.agents.triggers} onChange={set} />;
   }
 }
 

@@ -163,6 +163,7 @@ mod tests {
             mode: RunMode::Single,
             request: "x".into(),
             created: 5,
+            trigger: None,
         });
         let back = s.agents();
         assert_eq!(back.len(), 1);

@@ -364,6 +364,9 @@ pub struct Batch {
     pub request: String,
     #[ts(type = "number")]
     pub created: i64,
+    /// The trigger that started it, if it started by itself.
+    #[serde(default)]
+    pub trigger: Option<String>,
 }
 
 /// What the dock, cards and panel show about an agent.

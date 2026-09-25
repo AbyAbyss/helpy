@@ -859,6 +859,8 @@ pub struct Agents {
 
     /// The user's own templates (built-in ones live in the code).
     pub templates: Vec<Template>,
+    /// Agents that start by themselves, on a schedule or when files arrive.
+    pub triggers: Vec<Trigger>,
 }
 
 impl Default for Agents {
@@ -894,6 +896,7 @@ impl Default for Agents {
             notifications: true,
             history_days: 30,
             templates: Vec::new(),
+            triggers: Vec::new(),
         }
     }
 }
@@ -935,6 +938,46 @@ pub struct TemplateAgent {
     pub keep_open: bool,
     /// Names of earlier agents of the template it waits for.
     pub after: Vec<String>,
+}
+
+/// When a trigger starts its agents.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum TriggerWhen {
+    /// A standard 5-field cron expression, in local time.
+    Schedule { cron: String },
+    /// New files at the top of a folder, optionally matching a pattern
+    /// such as "*.pdf".
+    Folder { path: String, pattern: String },
+}
+
+impl Default for TriggerWhen {
+    fn default() -> Self {
+        TriggerWhen::Schedule {
+            cron: "0 9 * * 1-5".into(),
+        }
+    }
+}
+
+/// An agent task that starts by itself.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Trigger {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub when: TriggerWhen,
+    /// A template to start, with its blanks; empty uses `goal` and `tools`.
+    pub template: String,
+    pub values: std::collections::BTreeMap<String, String>,
+    pub goal: String,
+    pub tools: Vec<String>,
 }
 
 /// A task to start again and again, with blanks to fill in.

@@ -22,6 +22,7 @@ import type { Settings } from "../bindings/Settings";
 import type { Template } from "../bindings/Template";
 import type { TemplateInfo } from "../bindings/TemplateInfo";
 import type { ToolGroup } from "../bindings/ToolGroup";
+import type { TriggerStatus } from "../bindings/TriggerStatus";
 import type { Connection } from "../bindings/Connection";
 import type { ConnectorInfo } from "../bindings/ConnectorInfo";
 import type { ImportReport } from "../bindings/ImportReport";
@@ -175,6 +176,10 @@ export const api = {
   /** Saves an agent's request (all its agents) as a template. */
   saveTemplate: (id: string) => invoke<Template>("agents_save_template", { id }),
   toolGroups: () => invoke<ToolGroup[]>("agents_tool_groups"),
+  triggersStatus: () => invoke<TriggerStatus[]>("agents_triggers_status"),
+  triggerRunNow: (id: string) => invoke<void>("agents_trigger_run_now", { id }),
+  /** Clears a trigger's pause after failures. */
+  triggerResume: (id: string) => invoke<void>("agents_trigger_resume", { id }),
   planCurrent: () => invoke<Plan | null>("agents_plan_current"),
   planStart: (id: string, mode: RunMode) => invoke<void>("agents_plan_start", { id, mode }),
   planCancel: () => invoke<void>("agents_plan_cancel"),

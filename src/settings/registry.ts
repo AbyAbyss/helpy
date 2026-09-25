@@ -56,7 +56,8 @@ export type Control =
   | { kind: "connectors" }
   | { kind: "oauthApps" }
   | { kind: "mcpServers" }
-  | { kind: "templates" };
+  | { kind: "templates" }
+  | { kind: "triggers" };
 
 export type Field = {
   path: SettingPath;
@@ -600,6 +601,12 @@ FIELDS.push(
     help: "Tasks to start again and again, with blanks to fill in. Start them from Templates in the agent panel.",
     keywords: "template reuse preset blanks parameters saved tasks",
     control: { kind: "templates" },
+  },
+  {
+    path: "agents.triggers", section: "agents", group: "Automatic runs", label: "Triggers",
+    help: "Agents that start by themselves, on a schedule or when new files arrive in a folder.",
+    keywords: "trigger schedule cron automatic recurring every day weekdays folder watch downloads new files",
+    control: { kind: "triggers" },
   },
   {
     path: "agents.searchEngine", section: "agents", group: "Web search", label: "Search with",

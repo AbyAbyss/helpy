@@ -148,7 +148,8 @@
     "doneSeconds": 60,
     "notifications": true,
     "historyDays": 30,
-    "templates": []
+    "templates": [],
+    "triggers": []
   },
   "connectors": {
     "apps": {},

@@ -36,6 +36,9 @@ pub(crate) fn on_settings_changed(app: &AppHandle, prev: &Settings, next: &Setti
     if prev.general.launch_at_login != next.general.launch_at_login {
         apply_autostart(app, next.general.launch_at_login);
     }
+    if prev.agents.triggers != next.agents.triggers {
+        agents::triggers::sync(app, next);
+    }
     if prev.connectors.mcp != next.connectors.mcp {
         mcp::sync(app, next);
     }
@@ -107,6 +110,9 @@ pub fn run() {
                 app.path().app_data_dir()?,
             ));
             app.manage(mcp::McpState::load(app.path().app_data_dir()?));
+            app.manage(agents::triggers::TriggersState::load(
+                app.path().app_data_dir()?,
+            ));
             tray::build(&handle, &s)?;
             hotkeys::sync(&handle, &s);
             overlay::sync(&handle);
@@ -114,6 +120,7 @@ pub fn run() {
             voice::setup(&handle);
             guide::setup(&handle);
             agents::setup(&handle);
+            agents::triggers::setup(&handle);
             if handle.autolaunch().is_enabled().unwrap_or(false) != s.general.launch_at_login {
                 apply_autostart(&handle, s.general.launch_at_login);
             }
@@ -200,6 +207,9 @@ pub fn run() {
             agents::agents_steer,
             agents::templates::agents_templates,
             agents::templates::agents_tool_groups,
+            agents::triggers::agents_triggers_status,
+            agents::triggers::agents_trigger_run_now,
+            agents::triggers::agents_trigger_resume,
             agents::templates::agents_template_plan,
             agents::templates::agents_save_template,
             windows::dock_focus,
