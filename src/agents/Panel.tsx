@@ -343,48 +343,54 @@ function Detail({ agent: a, batch, line }: { agent: AgentView; batch: Batch | un
 
       {(a.status === "done" || a.status === "ready") && (
         <form
-          className="inline followup"
+          className="followup"
           onSubmit={(e) => {
             e.preventDefault();
             run(() => api.agentFollowUp(a.id, followUp)).then(() => setFollowUp(""));
           }}
         >
-          <input className="field" value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder={a.keepOpen ? "What should change?" : "Ask this agent for more…"} />
-          <button type="submit" className="btn btn--primary" disabled={!followUp.trim()}>
-            Send
+          <input value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder={a.keepOpen ? "What should change?" : "Ask this agent for more…"} />
+          <button type="submit" className="sendbtn" aria-label="Send" disabled={!followUp.trim()}>
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+              <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />
+            </svg>
           </button>
         </form>
       )}
 
-      <dl className="stats">
-        <Stat label="Steps" value={`${a.counters.steps} of ${a.maxSteps}`} />
-        <Stat label="Tool calls" value={String(a.counters.toolCalls)} />
-        <Stat label="Tokens" value={tokens(a.counters.tokens)} />
-        <Stat label="Cost" value={a.counters.costKnown ? `$${a.counters.cost.toFixed(3)}` : "Unknown"} />
-        <Stat label="Working time" value={duration(a.activeMs)} />
-        <Stat label="File changes" value={String(a.changes)} />
-      </dl>
-      {a.changes > 0 && finished && (
-        <button
-          type="button"
-          className="btn"
-          onClick={() => run(async () => {
-            const problems = await api.agentUndo(a.id);
-            if (problems.length) throw new Error(`Some changes couldn't be undone: ${problems.join("; ")}`);
-          }, "Every file change was put back.")}
-        >
-          Undo all {a.changes} file changes
-        </button>
-      )}
+      <div className="statsrow">
+        <dl className="stats">
+          <Stat label="Steps" value={`${a.counters.steps}/${a.maxSteps}`} />
+          <Stat label="Tool calls" value={String(a.counters.toolCalls)} />
+          <Stat label="Tokens" value={tokens(a.counters.tokens)} />
+          <Stat label="Cost" value={a.counters.costKnown ? `$${a.counters.cost.toFixed(3)}` : "Unknown"} />
+          <Stat label="Time" value={duration(a.activeMs)} />
+          {a.changes > 0 && <Stat label="File changes" value={String(a.changes)} />}
+        </dl>
+        {a.changes > 0 && finished && (
+          <button
+            type="button"
+            className="btn btn--soft"
+            onClick={() => run(async () => {
+              const problems = await api.agentUndo(a.id);
+              if (problems.length) throw new Error(`Some changes couldn't be undone: ${problems.join("; ")}`);
+            }, "Every file change was put back.")}
+          >
+            Undo all {a.changes} file changes
+          </button>
+        )}
+      </div>
 
       <section className="timeline">
         <h2>What it did</h2>
         <ol>
           {[...a.log].reverse().map((l, i) => (
-            <li key={i} className={`tl tl--${l.kind}`}>
+            <li key={a.log.length - i} className={`tl tl--${l.kind}`}>
+              <i className="tl__dot" aria-hidden="true" />
               <time>{new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
-              <span className="tl__kind">{KIND[l.kind]}</span>
-              {l.kind === "tool" ? <code>{l.text}</code> : <span>{l.text}</span>}
+              <span className="tl__what">
+                <span className="tl__kind">{KIND[l.kind]}</span> {l.kind === "tool" ? <code>{l.text}</code> : l.text}
+              </span>
             </li>
           ))}
         </ol>

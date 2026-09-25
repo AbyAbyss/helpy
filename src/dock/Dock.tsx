@@ -5,8 +5,8 @@ import type { AgentView } from "../bindings/AgentView";
 import type { Batch } from "../bindings/Batch";
 import type { LiveLine } from "../bindings/LiveLine";
 import { api, EVENTS } from "../lib/ipc";
-import { useSettings } from "../lib/useSettings";
-import { inDock, lastCommand, spend, STATUS_LABEL, tone } from "./dockState";
+import { useSettings, useTheme } from "../lib/useSettings";
+import { duration, inDock, lastCommand, spend, STATUS_LABEL, tone } from "./dockState";
 
 const MAX_CHIPS = 8;
 
@@ -62,6 +62,7 @@ function useNow(everyMs: number) {
  */
 export function Dock() {
   const [settings] = useSettings();
+  useTheme(settings);
   const { agents, live } = useAgents();
   const now = useNow(1000);
   const [open, setOpen] = useState<string | null>(null);
@@ -121,20 +122,10 @@ export function Dock() {
 
   if (empty) return <div ref={root} className="dock dock--empty" />;
 
-  const chipIndex = open ? chips.findIndex((a) => a.id === open) : -1;
-
   return (
     <div ref={root} className={`dock dock--${side}`} onMouseLeave={closeSoon} onMouseEnter={keepOpen}>
       {current && (
-        <Card
-          key={current.id}
-          agent={current}
-          line={live.get(current.id)}
-          arrowAt={chipIndex}
-          count={chips.length + (hidden ? 1 : 0)}
-          onPin={pin}
-          onClose={() => setOpen(null)}
-        />
+        <Card key={current.id} agent={current} line={live.get(current.id)} onPin={pin} onClose={() => setOpen(null)} />
       )}
       <div className="chips">
         {hidden > 0 && (
@@ -153,6 +144,8 @@ export function Dock() {
             onClick={() => api.openAgentPanel(a.id)}
           >
             <Mark />
+            {/* Remounts on every status change, so each change ripples once. */}
+            <span key={a.status} className="chip__ripple" aria-hidden="true" />
             {a.unseen && <span className="chip__dot" />}
           </button>
         ))}
@@ -170,225 +163,241 @@ function Mark() {
   );
 }
 
-function Card(props: {
-  agent: AgentView;
-  line: string | undefined;
-  arrowAt: number;
-  count: number;
-  onPin: (on: boolean) => void;
-  onClose: () => void;
-}) {
-  const { agent: a, line, arrowAt, count } = props;
+const FINISHED = ["done", "ready", "failed", "stopped", "cancelled"];
+
+function Card(props: { agent: AgentView; line: string | undefined; onPin: (on: boolean) => void; onClose: () => void }) {
+  const { agent: a, line } = props;
   const t = tone(a.status);
   const cmd = lastCommand(a);
   const working = a.status === "running" || a.status === "queued" || a.status === "paused";
   const progress = Math.min(1, a.counters.steps / Math.max(1, a.maxSteps));
-  // Point at the hovered chip: chips are 52 px apart, centred in the column.
-  const arrowY = arrowAt >= 0 ? `calc(50% + ${(arrowAt - (count - 1) / 2) * 52}px)` : "50%";
+  const done = (a.status === "done" || a.status === "ready") && !!a.result;
 
   return (
-    <section className={`card card--${t}`} style={{ ["--arrow-y" as string]: arrowY }} aria-label={a.name}>
-      <header className="card__head">
-        <h2 title={a.goal}>{a.name}</h2>
-        <span className="pill">{STATUS_LABEL[a.status]}</span>
-        <span className="card__spacer" />
-        {(a.status === "running" || a.status === "queued") && (
-          <IconButton label="Pause" onClick={() => api.agentPause(a.id)} path="M7 5v10M13 5v10" />
-        )}
-        {a.status === "paused" && <IconButton label="Resume" onClick={() => api.agentResume(a.id)} path="M7 5l8 5-8 5z" />}
-        {!["done", "failed", "stopped", "cancelled", "ready"].includes(a.status) && (
-          <IconButton label="Cancel the agent" onClick={() => api.agentCancel(a.id)} path="M6 6h8v8H6z" />
-        )}
-        <IconButton label="Open in the agent panel" onClick={() => api.openAgentPanel(a.id)} path="M8 5h7v7M15 5l-9 9" />
-        <IconButton
-          label="Remove from the dock (the agent keeps going)"
-          onClick={() => {
-            props.onClose();
-            api.agentDismiss(a.id);
-          }}
-          path="m6 6 8 8M14 6l-8 8"
-        />
-      </header>
-
-      {working && (
-        <>
-          <p className="card__status">
-            <Bubble />
-            <span key={line ?? a.statusLine} className="fade">
-              {line ?? (a.statusLine || "Getting started…")}
+    <div className="stack">
+      <section className={`card card--${t}`} aria-label={a.name}>
+        <header className="card__head">
+          <span className="avatar" aria-hidden="true">
+            <i />
+          </span>
+          <div className="card__title">
+            <h2 title={a.goal}>{a.name}</h2>
+            <span className="card__state">
+              {STATUS_LABEL[a.status]}
+              {FINISHED.includes(a.status) && ` · ${duration(a.activeMs)}`}
             </span>
-          </p>
-          {cmd && (
-            <p className="card__cmd">
-              <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true">
-                <path d="m4 6 4 4-4 4M10 14h6" />
-              </svg>
-              <code>{cmd}</code>
+          </div>
+          {(a.status === "running" || a.status === "queued") && (
+            <IconButton label="Pause" onClick={() => api.agentPause(a.id)} path="M7 5v10M13 5v10" />
+          )}
+          {a.status === "paused" && <IconButton label="Resume" onClick={() => api.agentResume(a.id)} path="M7 5l8 5-8 5z" />}
+          {!FINISHED.includes(a.status) && <IconButton label="Cancel the agent" onClick={() => api.agentCancel(a.id)} path="M6 6h8v8H6z" />}
+          <IconButton label="Open in the agent panel" onClick={() => api.openAgentPanel(a.id)} path="M7 13l6-6M8 7h5v5" />
+          <IconButton
+            label="Remove from the dock (the agent keeps going)"
+            onClick={() => {
+              props.onClose();
+              api.agentDismiss(a.id);
+            }}
+            path="m6.5 6.5 7 7M13.5 6.5l-7 7"
+          />
+        </header>
+
+        {working && (
+          <>
+            <p className="card__status">
+              <span key={line ?? a.statusLine} className="rise">
+                {line ?? (a.statusLine || "Getting started…")}
+              </span>
+              {a.status !== "paused" && <Typing />}
             </p>
-          )}
-          <div className="bar" aria-label={`Step ${a.counters.steps} of ${a.maxSteps}`}>
-            <span style={{ width: `${Math.max(4, progress * 100)}%` }} />
-          </div>
-        </>
-      )}
-
-      {a.pending?.type === "approval" && (
-        <div className="card__ask">
-          <p className="card__summary">{a.pending.summary}</p>
-          {a.pending.detail &&
-            (a.pending.kind === "shell" || a.pending.kind === "fileChange" ? (
-              <pre className="card__detail">{a.pending.detail}</pre>
-            ) : (
-              <p className="card__note">{a.pending.detail}</p>
-            ))}
-          <div className="card__buttons">
-            <button type="button" className="btn btn--primary" onClick={() => api.agentAnswer(a.id, { type: "approve" })}>
-              Approve
-            </button>
-            <button type="button" className="btn" onClick={() => api.agentAnswer(a.id, { type: "reject", note: null })}>
-              Reject
-            </button>
-            <button type="button" className="btn btn--quiet" onClick={() => api.openAgentPanel("inbox")}>
-              Review
-            </button>
-          </div>
-        </div>
-      )}
-
-      {a.pending?.type === "question" && (
-        <div className="card__ask">
-          <p className="card__summary">{a.pending.question}</p>
-          {a.pending.options.length > 0 && (
-            <div className="card__buttons card__buttons--wrap">
-              {a.pending.options.map((o) => (
-                <button key={o} type="button" className="btn" onClick={() => api.agentAnswer(a.id, { type: "choice", text: o })}>
-                  {o}
-                </button>
-              ))}
+            {cmd && (
+              <p className="card__cmd">
+                <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true">
+                  <path d="m4 6 4 4-4 4M10 14h6" />
+                </svg>
+                <code>{cmd}</code>
+              </p>
+            )}
+            <div className="bar" aria-label={`Step ${a.counters.steps} of ${a.maxSteps}`}>
+              <span style={{ width: `${Math.max(4, progress * 100)}%` }} />
             </div>
-          )}
-          <TextReply placeholder="Or type an answer…" onPin={props.onPin} onSend={(text) => api.agentAnswer(a.id, { type: "choice", text })} />
-        </div>
-      )}
+          </>
+        )}
 
-      {a.pending?.type === "failure" && (
-        <div className="card__ask">
-          <p className="card__summary">{a.pending.message}</p>
-          <div className="card__buttons">
-            <button type="button" className="btn btn--primary" onClick={() => api.agentAnswer(a.id, { type: "retry" })}>
-              Retry
-            </button>
-            <button type="button" className="btn" onClick={() => api.agentAnswer(a.id, { type: "skip" })}>
-              Skip this step
-            </button>
-            <button type="button" className="btn btn--quiet" onClick={() => api.agentAnswer(a.id, { type: "cancel" })}>
-              Cancel
-            </button>
+        {a.pending?.type === "approval" && (
+          <div className="card__ask">
+            <p className="card__summary">{a.pending.summary}</p>
+            {a.pending.detail && <pre className="card__detail">{a.pending.detail}</pre>}
+            <div className="card__buttons">
+              <button type="button" className="btn btn--primary" onClick={() => api.agentAnswer(a.id, { type: "approve" })}>
+                Approve
+              </button>
+              <button type="button" className="btn" onClick={() => api.agentAnswer(a.id, { type: "reject", note: null })}>
+                Reject
+              </button>
+              <button type="button" className="btn btn--quiet" onClick={() => api.openAgentPanel("inbox")}>
+                Review
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {(a.status === "done" || a.status === "ready") && a.result && (
-        <>
-          <div className="card__result">
-            <Markdown components={{ a: ({ children }) => <span>{children}</span>, img: () => null }}>{a.result}</Markdown>
-          </div>
-          {a.suggestions.length > 0 && (
-            <div className="card__next">
-              <span className="card__label">Suggested next</span>
-              <div className="card__buttons card__buttons--wrap">
-                {a.suggestions.map((s) => (
-                  <button key={s} type="button" className="chipb" onClick={() => api.agentFollowUp(a.id, s)}>
-                    {s}
+        {a.pending?.type === "question" && (
+          <div className="card__ask">
+            <p className="card__summary">{a.pending.question}</p>
+            {a.pending.options.length > 0 && (
+              <div className="nexts">
+                {a.pending.options.map((o, i) => (
+                  <button key={o} type="button" className="next" style={{ ["--i" as string]: i }} onClick={() => api.agentAnswer(a.id, { type: "choice", text: o })}>
+                    <span>{o}</span>
+                    <Arrow />
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-          <FollowUp agent={a} onPin={props.onPin} />
-        </>
-      )}
-
-      {(a.status === "failed" || a.status === "stopped") && (
-        <div className="card__ask">
-          <p className="card__summary card__summary--err">{a.stop?.message ?? a.error}</p>
-          <div className="card__buttons">
-            {a.stop && (a.stop.limit === "agentBudget" || a.stop.limit === "batchBudget") && a.counters.extraTokens === 0 && (
-              <button type="button" className="btn btn--primary" onClick={() => api.agentRaise(a.id)}>
-                Raise the limit and continue once
-              </button>
             )}
-            <button type="button" className="btn" onClick={() => api.agentRetry(a.id)}>
-              Retry
-            </button>
           </div>
-        </div>
+        )}
+
+        {a.pending?.type === "failure" && (
+          <div className="card__ask">
+            <p className="card__summary">{a.pending.message}</p>
+            <div className="card__buttons">
+              <button type="button" className="btn btn--primary" onClick={() => api.agentAnswer(a.id, { type: "retry" })}>
+                Retry
+              </button>
+              <button type="button" className="btn" onClick={() => api.agentAnswer(a.id, { type: "skip" })}>
+                Skip this step
+              </button>
+              <button type="button" className="btn btn--quiet" onClick={() => api.agentAnswer(a.id, { type: "cancel" })}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {done && (
+          <>
+            <div className="card__result rise">
+              <Markdown components={{ a: ({ children }) => <span>{children}</span>, img: () => null }}>{a.result}</Markdown>
+            </div>
+            {a.suggestions.length > 0 && (
+              <div className="nexts">
+                {a.suggestions.map((s, i) => (
+                  <button key={s} type="button" className="next" style={{ ["--i" as string]: i }} onClick={() => api.agentFollowUp(a.id, s)}>
+                    <span>{s}</span>
+                    <Arrow />
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {(a.status === "failed" || a.status === "stopped") && (
+          <div className="card__ask">
+            <p className="card__summary card__summary--err">{a.stop?.message ?? a.error}</p>
+            <div className="card__buttons">
+              {a.stop && (a.stop.limit === "agentBudget" || a.stop.limit === "batchBudget") && a.counters.extraTokens === 0 && (
+                <button type="button" className="btn btn--primary" onClick={() => api.agentRaise(a.id)}>
+                  Raise the limit and continue once
+                </button>
+              )}
+              <button type="button" className="btn" onClick={() => api.agentRetry(a.id)}>
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        <footer className="card__foot">
+          {a.changes > 0 && FINISHED.includes(a.status) ? (
+            <button type="button" className="card__undo" onClick={() => api.agentUndo(a.id)}>
+              Undo {a.changes} file {a.changes === 1 ? "change" : "changes"}
+            </button>
+          ) : (
+            <span />
+          )}
+          <span className="card__meta">{spend(a)}</span>
+        </footer>
+      </section>
+
+      {done && (
+        <FollowBar
+          agent={a}
+          placeholder={a.keepOpen ? "What should change?" : "Ask a follow-up…"}
+          onSend={(text) => api.agentFollowUp(a.id, text)}
+          onVoice={() => api.agentVoiceFollowUp(a.id)}
+          onPin={props.onPin}
+        />
       )}
-
-      {a.changes > 0 && ["done", "ready", "failed", "stopped", "cancelled"].includes(a.status) && (
-        <button type="button" className="card__undo" onClick={() => api.agentUndo(a.id)}>
-          Undo {a.changes} file {a.changes === 1 ? "change" : "changes"}
-        </button>
+      {a.pending?.type === "question" && (
+        <FollowBar agent={a} placeholder="Or type an answer…" onSend={(text) => api.agentAnswer(a.id, { type: "choice", text })} onPin={props.onPin} />
       )}
-
-      <footer className="card__meta">{spend(a)}</footer>
-    </section>
-  );
-}
-
-function FollowUp({ agent: a, onPin }: { agent: AgentView; onPin: (on: boolean) => void }) {
-  const [typing, setTyping] = useState(false);
-  if (typing)
-    return (
-      <TextReply
-        placeholder={a.keepOpen ? "What should change?" : "Ask for more…"}
-        autoFocus
-        onPin={(on) => {
-          onPin(on);
-          if (!on) setTyping(false);
-        }}
-        onSend={(text) => api.agentFollowUp(a.id, text)}
-      />
-    );
-  return (
-    <div className="card__follow">
-      <span className="card__label">{a.keepOpen ? "Need changes?" : "Follow up"}</span>
-      <button type="button" className="btn" onClick={() => setTyping(true)}>
-        Text
-      </button>
-      <button type="button" className="btn" onClick={() => api.agentVoiceFollowUp(a.id)}>
-        Voice
-      </button>
     </div>
   );
 }
 
-function TextReply(props: { placeholder: string; autoFocus?: boolean; onPin: (on: boolean) => void; onSend: (text: string) => void }) {
+/** The split view's second piece: a follow-up bar floating under the card. */
+function FollowBar(props: { agent: AgentView; placeholder: string; onSend: (text: string) => void; onVoice?: () => void; onPin: (on: boolean) => void }) {
+  const { agent: a, onPin } = props;
   const [text, setText] = useState("");
+  const [sent, setSent] = useState(0);
+  const send = () => {
+    if (!text.trim()) return;
+    props.onSend(text.trim());
+    setText("");
+    setSent((n) => n + 1);
+    onPin(false);
+  };
   return (
     <form
-      className="reply"
+      className={`followbar card--${tone(a.status)}`}
       onSubmit={(e) => {
         e.preventDefault();
-        if (!text.trim()) return;
-        props.onSend(text.trim());
-        setText("");
-        props.onPin(false);
+        send();
       }}
     >
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={props.placeholder}
-        autoFocus={props.autoFocus}
-        onFocus={() => props.onPin(true)}
-        onBlur={() => props.onPin(false)}
-        onKeyDown={(e) => e.key === "Escape" && (e.currentTarget.blur(), props.onPin(false))}
+        onFocus={() => onPin(true)}
+        onBlur={() => onPin(false)}
+        onKeyDown={(e) => e.key === "Escape" && (e.currentTarget.blur(), onPin(false))}
       />
-      <button type="submit" className="btn btn--primary" disabled={!text.trim()}>
-        Send
+      {props.onVoice && (
+        <button type="button" className="round" aria-label="Follow up by voice" title="Follow up by voice" onClick={props.onVoice}>
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+            <rect x="7.5" y="3" width="5" height="9" rx="2.5" />
+            <path d="M5 10a5 5 0 0 0 10 0M10 15v2.5" />
+          </svg>
+        </button>
+      )}
+      <button key={sent} type="submit" className="round round--send" aria-label="Send" disabled={!text.trim()}>
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+          <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />
+        </svg>
       </button>
     </form>
+  );
+}
+
+function Typing() {
+  return (
+    <span className="typing" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
+function Arrow() {
+  return (
+    <svg className="next__arrow" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+      <path d="M4.5 10h11M11 5.5l4.5 4.5-4.5 4.5" />
+    </svg>
   );
 }
 
@@ -399,13 +408,5 @@ function IconButton({ label, path, onClick }: { label: string; path: string; onC
         <path d={path} />
       </svg>
     </button>
-  );
-}
-
-function Bubble() {
-  return (
-    <svg className="card__bubble" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
-      <path d="M4 4.5h12a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 16 14H9l-3.5 3v-3H4a1.5 1.5 0 0 1-1.5-1.5V6A1.5 1.5 0 0 1 4 4.5z" />
-    </svg>
   );
 }
