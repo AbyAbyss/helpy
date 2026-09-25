@@ -411,32 +411,45 @@ impl Feed {
     }
 
     pub fn on_event(&self, e: &AskEvent) {
-        let speaker = &self.app.state::<VoiceState>().speaker;
         match e {
-            AskEvent::Text { text } => {
-                self.answer.lock().unwrap().push_str(text);
-                if !self.steps_only {
-                    for sentence in self.splitter.lock().unwrap().push(text) {
-                        speaker.say(sentence);
-                    }
-                }
-            }
-            // The failed attempt's words are discarded, so stop saying them.
-            AskEvent::Retry { .. } => {
-                speaker.stop();
-                self.splitter.lock().unwrap().reset();
-                self.answer.lock().unwrap().clear();
-            }
-            AskEvent::Done { .. } => {
-                if self.steps_only {
-                    speaker.say(text::steps_only(&self.answer.lock().unwrap()));
-                } else if let Some(rest) = self.splitter.lock().unwrap().finish() {
-                    speaker.say(rest);
-                }
-            }
-            AskEvent::Error { .. } => self.splitter.lock().unwrap().reset(),
+            AskEvent::Text { text } => self.text(text),
+            AskEvent::Retry { .. } => self.restart(),
+            AskEvent::Done { .. } => self.finish(),
+            AskEvent::Error { .. } => self.reset(),
             _ => {}
         }
+    }
+
+    /// Streamed answer text; whole sentences are spoken as they complete.
+    pub fn text(&self, text: &str) {
+        self.answer.lock().unwrap().push_str(text);
+        if !self.steps_only {
+            let speaker = &self.app.state::<VoiceState>().speaker;
+            for sentence in self.splitter.lock().unwrap().push(text) {
+                speaker.say(sentence);
+            }
+        }
+    }
+
+    /// A new attempt: the failed one's words are discarded, so stop saying them.
+    pub fn restart(&self) {
+        self.app.state::<VoiceState>().speaker.stop();
+        self.reset();
+    }
+
+    /// The answer is complete: say what's left.
+    pub fn finish(&self) {
+        let speaker = &self.app.state::<VoiceState>().speaker;
+        if self.steps_only {
+            speaker.say(text::steps_only(&self.answer.lock().unwrap()));
+        } else if let Some(rest) = self.splitter.lock().unwrap().finish() {
+            speaker.say(rest);
+        }
+    }
+
+    pub fn reset(&self) {
+        self.splitter.lock().unwrap().reset();
+        self.answer.lock().unwrap().clear();
     }
 }
 

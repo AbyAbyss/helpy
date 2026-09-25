@@ -182,6 +182,8 @@ pub fn end(app: &AppHandle) {
     let Some(session) = state.session.lock().unwrap().take() else {
         return;
     };
+    // Closing the card also stops it reading the explanation aloud.
+    app.state::<crate::voice::VoiceState>().speaker.stop();
     capture_input(app, &session.overlay, false);
     emit(app, CircleEvent::Closed);
     crate::voice::update_escape(app);
@@ -312,9 +314,19 @@ async fn run(
     // Copied text is shown whole at the end, so "NO_TEXT" never flashes up.
     let stream_text = !(action == CircleAction::CopyText && question.is_none());
     let filter = Mutex::new(PartsFilter::default());
+    // Read aloud like a spoken answer, when voice guidance is on. Copied
+    // text only goes to the clipboard.
+    let feed = if stream_text {
+        crate::voice::Feed::new(app, &settings)
+    } else {
+        None
+    };
     let on = |p: Progress| match p {
         Progress::Started(model) => {
             *filter.lock().unwrap() = PartsFilter::default();
+            if let Some(f) = &feed {
+                f.restart();
+            }
             emit(
                 app,
                 CircleEvent::Attempt {
@@ -329,6 +341,9 @@ async fn run(
                 Some(piece.to_string())
             };
             if let Some(text) = shown {
+                if let Some(f) = &feed {
+                    f.text(&text);
+                }
                 emit(app, CircleEvent::Text { text });
             }
         }
@@ -362,6 +377,9 @@ async fn run(
         Ok(c) => c,
         Err(e) if e.kind == ErrorKind::Cancelled => return,
         Err(e) => {
+            if let Some(f) = &feed {
+                f.reset();
+            }
             // Forget the question that failed, so a retry starts clean.
             if let Some(s) = app.state::<CircleState>().session.lock().unwrap().as_mut() {
                 s.messages.pop();
@@ -379,6 +397,9 @@ async fn run(
     if explain {
         let (rest, json) = filter.lock().unwrap().finish();
         if let Some(text) = rest {
+            if let Some(f) = &feed {
+                f.text(&text);
+            }
             emit(app, CircleEvent::Text { text });
         }
         if let Some(json) = json {
@@ -400,6 +421,9 @@ async fn run(
             Ok(()) => emit(app, CircleEvent::Copied { chars }),
             Err(e) => return fail(format!("Couldn't copy the text: {e}"), None),
         }
+    }
+    if let Some(f) = &feed {
+        f.finish();
     }
     emit(
         app,
