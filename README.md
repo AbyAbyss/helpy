@@ -149,6 +149,23 @@ Helpy starts in the tray. Open settings from the tray menu or with Alt+Shift+S. 
 
 To ask questions, add a provider under **Settings → AI providers**. The quickest free option is [Ollama](https://ollama.com) with a vision model such as `llama3.2-vision`: start it, click **Add provider → Find models on this computer**, and press Alt+Shift+T anywhere.
 
+## Connect your accounts
+
+Connectors sign in through an OAuth app that you register once with each service. Register it with the redirect address below, then paste its client ID (and secret, where needed) under **Settings → Connectors**. The card for each service shows the same steps.
+
+| Service | Register the app at | Redirect address | Secret |
+|---|---|---|---|
+| GitHub | [Developer settings → OAuth Apps](https://github.com/settings/developers) | `http://127.0.0.1/callback` | Required |
+| Google (Gmail, Calendar, Drive) | [Google Cloud → Credentials](https://console.cloud.google.com/apis/credentials) | None: create a client of type **Desktop app** | Required |
+| Microsoft (Outlook) | [Azure → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) | `http://localhost/callback`, under **Mobile and desktop applications** | Not needed |
+| Notion | [Notion → Integrations](https://www.notion.so/profile/integrations) (make it public) | `http://localhost:53171/callback` | Required |
+| Slack | [Slack → Your apps](https://api.slack.com/apps) | `http://localhost:53172/callback`, with PKCE turned on | Not needed with PKCE |
+
+- **Type the address exactly, without a port where none is shown.** Helpy signs in on a free port each time, and GitHub, Google and Microsoft ignore the port for loopback addresses. Notion and Slack match the address exactly, so Helpy always uses the port shown.
+- **GitHub:** leave **Allow wildcard matching** and **Enable Device Flow** off. **Expire user access tokens** can stay on; Helpy keeps the refresh token and renews access on its own.
+- **Google:** under **OAuth consent screen**, add yourself as a test user, and enable the Gmail, Google Calendar and Google Drive APIs in the project.
+- **Just for yourself?** GitHub, Notion and Slack also accept a pasted token (a personal access token, an internal integration token, or a user token), which skips the OAuth app entirely.
+
 ## Tests
 
 ```sh
@@ -214,8 +231,8 @@ design/         source SVGs for the app and tray icons
 ## Platform notes
 
 - **macOS:** transparent windows need `macOSPrivateApi`, which rules out the Mac App Store. Direct downloads are fine. Screenshots need the Screen Recording permission, and snapping, password blanking, the page address and "Do it for me" need Accessibility. The welcome tour links to both. Without Accessibility those features quietly do nothing.
-- **Native translucency.** On macOS the agent panel, the dock card and the step card use vibrancy, and the panel's traffic lights float over its sidebar. On Windows 11 the panel uses Mica, and the dock card and step card use Acrylic (22H2 or later). With native glass the dock card is one frosted shape with the follow-up field inside; on Linux and older Windows the panel is opaque, and the dock card keeps its CSS glass with the follow-up bar floating underneath.
+- **Native translucency.** On macOS the settings window, the agent panel and the step card use vibrancy with a plain, untinted veil, and the settings and panel traffic lights float over their sidebars. On Windows 11 settings and the panel use Mica, and the dock card and step card use Acrylic (22H2 or later); there the dock card is one frosted shape with the follow-up field inside. On macOS, Linux and older Windows the dock card uses CSS glass instead, with the follow-up bar floating underneath; on Linux and older Windows the other windows are opaque.
 - **Agent notifications** use the system's notification service (on Linux, a notification daemon has to be running). On macOS, the first reminder or calendar event asks for Automation permission for Reminders or Calendar.
-- **Clicks during walkthroughs** are observed with a listen-only mouse hook (`rdev`); the click still reaches your app. On macOS this needs the Accessibility permission, and on Wayland it isn't available. Without it, the step card asks you to press Next instead.
+- **Clicks during walkthroughs** are observed with a listen-only hook for mouse clicks; the click still reaches your app. On macOS it's a Core Graphics event tap that needs the Accessibility permission; on Linux and Windows it's `rdev`, which isn't available on Wayland. Without it, the step card asks you to press Next instead.
 - **Accessibility on Linux** goes through AT-SPI, which Helpy switches on for the session when it first needs it (as a screen reader would). Apps that run natively on Wayland don't report screen positions, so snapping and password blanking only see XWayland and X11 apps. The blocklist needs a window manager that lists windows; the Privacy page says when it can't.
 - **Linux:** overlays need a compositing window manager to be transparent; the settings page warns when none is running. On Wayland, Helpy runs through XWayland when it can. The General section lists what won't work in your session.
