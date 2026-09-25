@@ -9,4 +9,9 @@ interfaceLanguage: string,
 /**
  * "auto" answers in the language the user spoke, otherwise a BCP 47 tag.
  */
-responseLanguage: string, checkForUpdates: boolean, };
+responseLanguage: string, checkForUpdates: boolean, 
+/**
+ * The welcome tour is done. A settings file from before the tour
+ * existed counts as done.
+ */
+onboarded: boolean, };

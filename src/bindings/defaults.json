@@ -5,7 +5,8 @@
     "theme": "system",
     "interfaceLanguage": "en",
     "responseLanguage": "auto",
-    "checkForUpdates": true
+    "checkForUpdates": true,
+    "onboarded": false
   },
   "profiles": {
     "active": "beginner"

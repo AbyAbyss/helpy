@@ -17,6 +17,7 @@ import { ConnectorList, McpServers, OAuthApps } from "./ConnectorControls";
 import { TemplateEditor } from "./TemplateControls";
 import { TriggerEditor } from "./TriggerControls";
 import { UsageHistoryView } from "./Usage";
+import { Onboarding } from "./Onboarding";
 import type { AgentTools } from "../bindings/AgentTools";
 import type { Builder } from "../bindings/Builder";
 import type { Approvals } from "../bindings/Approvals";
@@ -169,6 +170,16 @@ export function App() {
   };
 
   if (!settings) return <div className="app app--loading" />;
+  if (!settings.general.onboarded)
+    return (
+      <Onboarding
+        settings={settings}
+        platform={platform}
+        commitAi={commitAi}
+        setProfile={(p) => update("profiles.active", p)}
+        onDone={() => update("general.onboarded", true)}
+      />
+    );
 
   const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, support, update, commitAi, onError: (m) => setToast({ text: m, tone: "err" }) };
   const extras: Record<string, React.ReactNode> = {
@@ -426,6 +437,12 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
       return <ApprovalRules value={saved as Approvals} onChange={set} />;
     case "blocklist":
       return <Blocklist value={saved as string[]} onChange={set} />;
+    case "welcome":
+      return (
+        <button type="button" className="btn btn--sm" onClick={() => ctx.update("general.onboarded", false)}>
+          Show it again
+        </button>
+      );
     case "builder":
       return <BuilderPicker value={saved as Builder} onChange={set} />;
     case "toolToggles":

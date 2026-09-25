@@ -68,6 +68,10 @@ pub struct General {
     /// "auto" answers in the language the user spoke, otherwise a BCP 47 tag.
     pub response_language: String,
     pub check_for_updates: bool,
+    /// The welcome tour is done. A settings file from before the tour
+    /// existed counts as done.
+    #[serde(default = "yes")]
+    pub onboarded: bool,
 }
 
 impl Default for General {
@@ -79,6 +83,7 @@ impl Default for General {
             interface_language: "en".into(),
             response_language: "auto".into(),
             check_for_updates: true,
+            onboarded: false,
         }
     }
 }

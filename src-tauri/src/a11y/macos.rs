@@ -105,6 +105,21 @@ fn physical((x, y, w, h): (f64, f64, f64, f64), scale: f64) -> Rect {
     }
 }
 
+pub fn trusted() -> bool {
+    unsafe { AXIsProcessTrusted() }
+}
+
+/// Shows macOS's own "allow Accessibility" prompt when Helpy isn't allowed.
+pub fn request_access() {
+    use accessibility_sys::{kAXTrustedCheckOptionPrompt, AXIsProcessTrustedWithOptions};
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::CFDictionary as Dict;
+    let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
+    let options =
+        Dict::from_CFType_pairs(&[(key.as_CFType(), CFBoolean::true_value().as_CFType())]);
+    unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef() as _) };
+}
+
 fn system() -> Option<Ax> {
     if !unsafe { AXIsProcessTrusted() } {
         return None;

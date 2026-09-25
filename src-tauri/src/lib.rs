@@ -11,6 +11,7 @@ mod guide;
 mod hotkeys;
 mod mcp;
 mod overlay;
+mod permissions;
 mod platform;
 mod privacy;
 mod settings;
@@ -126,7 +127,8 @@ pub fn run() {
             if handle.autolaunch().is_enabled().unwrap_or(false) != s.general.launch_at_login {
                 apply_autostart(&handle, s.general.launch_at_login);
             }
-            if !s.general.start_minimized {
+            // The welcome tour lives in the settings window.
+            if !s.general.start_minimized || !s.general.onboarded {
                 windows::show_settings(&handle);
             }
             Ok(())
@@ -210,6 +212,9 @@ pub fn run() {
             agents::agents_browser_info,
             agents::agents_builders,
             privacy::privacy_can_see_windows,
+            permissions::permissions_status,
+            permissions::permissions_request,
+            permissions::permissions_open,
             ai::ai_usage_history,
             agents::agents_browser_download,
             agents::agents_csv_preview,

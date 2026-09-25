@@ -232,6 +232,13 @@ mod tests {
     }
 
     #[test]
+    fn only_fresh_installs_get_the_welcome_tour() {
+        assert!(!Settings::default().general.onboarded);
+        let older: Settings = serde_json::from_str(r#"{"general": {"theme": "dark"}}"#).unwrap();
+        assert!(older.general.onboarded);
+    }
+
+    #[test]
     fn with_value_sets_nested_field() {
         let s = with_value(&Settings::default(), "buddy.size", json!(48)).unwrap();
         assert_eq!(s.buddy.size, 48);

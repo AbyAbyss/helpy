@@ -6,7 +6,7 @@ Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first c
 
 The full phase plan, crate list and platform risks are in [docs/PLAN.md](docs/PLAN.md).
 
-## What works today (Phases 1 to 8)
+## What works today (Phases 1 to 9)
 
 - **Cursor buddy.** A small character follows the pointer on every monitor, with per-monitor DPI handled in Rust. Three built-in styles (Pip, Spark, Dot) or your own SVG/PNG. Size, opacity, offset and follow smoothness are adjustable. It auto-hides in fullscreen apps and, optionally, when the mouse rests.
 - **Overlays.** One transparent, always-on-top, click-through window per monitor. They're hidden from the taskbar and excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE` on Windows, `NSWindowSharingNone` on macOS). They are rebuilt when monitors are plugged in or removed.
@@ -33,6 +33,12 @@ The full phase plan, crate list and platform risks are in [docs/PLAN.md](docs/PL
   - Each service can be read-only or read and write, and every action has its own rule (Allow, Ask me, Never). Reads are allowed, drafts are allowed, and anything that sends, posts or creates asks first. Rules are checked where tools run, so no path skips them.
   - **MCP servers:** add programs that run on your computer (stdio, e.g. `npx` or `uvx`) or remote servers (Streamable HTTP). Environment variables and headers can be marked secret, and those values go to the keychain. Remote servers that want a sign-in (Jira, Linear, Sentry…) use OAuth discovered from the server as the MCP spec describes, with dynamic client registration when the server offers it. Pick a ready-made entry (Atlassian, Linear, Notion, GitHub, Sentry, Stripe, Context7, AWS, files, Playwright), fill in your own, or paste the `mcpServers` JSON other apps use; export works the same way, with secrets left out. The older SSE transport isn't supported. Tools the server marks read-only are allowed; others ask first.
   - **The approval inbox (Alt+Shift+I):** everything waiting for your OK across all agents, with the full content. Text fields (an email body, a post, an issue) can be edited before approving, and several actions from one place can be approved at once. By voice: "approve", "reject", or "approve all from Gmail". "Connect my Gmail" starts the sign-in.
+- **Welcome tour.** A fresh install opens a short setup in the settings window: choose a model (on this computer or in the cloud), pick a behavior profile, allow what the OS asks for (macOS), and see the hotkeys. It can be run again from General.
+- **Behavior profiles.** Beginner, Expert and Quiet each keep their own values for nine settings (answer detail, reading aloud, agent announcements and notifications, label notes, motion). Switch from the tray or General; a change you make sticks to the profile you're in, and those settings are marked "Per profile".
+- **Snapping and "Do it for me".** Highlights and pointers move onto the real button or field under them, using the OS accessibility layer (UI Automation, the macOS AX API, AT-SPI). With "Do it for me" on (off by default), the step card gets a Do it button: Helpy marks exactly where it will click, and clicks only after you confirm that one click.
+- **Privacy.** A blocklist of apps and title words, pre-filled with common password managers: while one is in front Helpy won't take a screenshot, and when it's behind other windows it's blanked out, title bar included. Password fields the OS reports are blanked in every screenshot. Offline mode keeps model calls, speech recognition and voices on this computer or your local network; agents' web tools still work.
+- **The page on screen.** "Pull the prices from this page into a CSV" uses the address of the page open in your browser (read through accessibility, even while Helpy's panel is in front). It's only sent when the request is about the page, and never while capture is paused or when the address matches the blocklist.
+- **Usage history.** The last 30 days of tokens and cost per day, per feature and per model, under AI providers. Counted on this computer only.
 - **Retry and budget limits, enforced in Rust.** Timeouts, network errors, rate limits (honoring `retry-after`), provider 5xx errors and garbled output are retried with exponential backoff, up to 3 times by default. Bad keys, missing models and refusals are never retried on the same model. Fallback models get one attempt each and count toward the retry limit. A daily token limit (and an optional cost limit) is checked before every call, retries included, and spending is saved to disk so it survives restarts.
 
 ## Run it
@@ -122,8 +128,9 @@ design/         source SVGs for the app and tray icons
 
 ## Platform notes
 
-- **macOS:** transparent windows need `macOSPrivateApi`, which rules out the Mac App Store. Direct downloads are fine. Screenshots need the Screen Recording permission (onboarding for it arrives in Phase 9; until then macOS asks on first capture).
+- **macOS:** transparent windows need `macOSPrivateApi`, which rules out the Mac App Store. Direct downloads are fine. Screenshots need the Screen Recording permission, and snapping, password blanking, the page address and "Do it for me" need Accessibility. The welcome tour links to both. Without Accessibility those features quietly do nothing.
 - **The step card is frosted glass** on macOS (vibrancy) and Windows 11 22H2 or later (Acrylic). On Linux and older Windows it's an opaque dark card.
 - **Agent notifications** use the system's notification service (on Linux, a notification daemon has to be running). On macOS, the first reminder or calendar event asks for Automation permission for Reminders or Calendar.
 - **Clicks during walkthroughs** are observed with a listen-only mouse hook (`rdev`); the click still reaches your app. On macOS this needs the Accessibility permission, and on Wayland it isn't available. Without it, the step card asks you to press Next instead.
+- **Accessibility on Linux** goes through AT-SPI, which Helpy switches on for the session when it first needs it (as a screen reader would). Apps that run natively on Wayland don't report screen positions, so snapping and password blanking only see XWayland and X11 apps. The blocklist needs a window manager that lists windows; the Privacy page says when it can't.
 - **Linux:** overlays need a compositing window manager to be transparent; the settings page warns when none is running. On Wayland, Helpy runs through XWayland when it can. The General section lists what won't work in your session.

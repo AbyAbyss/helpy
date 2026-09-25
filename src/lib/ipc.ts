@@ -26,6 +26,7 @@ import type { TriggerStatus } from "../bindings/TriggerStatus";
 import type { BrowserInfo } from "../bindings/BrowserInfo";
 import type { CoderInfo } from "../bindings/CoderInfo";
 import type { UsageHistory } from "../bindings/UsageHistory";
+import type { Permissions } from "../bindings/Permissions";
 import type { Connection } from "../bindings/Connection";
 import type { ConnectorInfo } from "../bindings/ConnectorInfo";
 import type { ImportReport } from "../bindings/ImportReport";
@@ -168,6 +169,9 @@ export const api = {
   browserInfo: () => invoke<BrowserInfo>("agents_browser_info"),
   builders: () => invoke<CoderInfo[]>("agents_builders"),
   canSeeWindows: () => invoke<boolean>("privacy_can_see_windows"),
+  permissions: () => invoke<Permissions>("permissions_status"),
+  permissionsRequest: () => invoke<Permissions>("permissions_request"),
+  permissionsOpen: (which: "screen" | "accessibility") => invoke<void>("permissions_open", { which }),
   /** Downloads Chromium for agents (about 150 MB); resolves to its path. */
   browserDownload: () => invoke<string>("agents_browser_download"),
   /** The first rows of a CSV the agent saved. */

@@ -38,6 +38,7 @@ export type Control =
   | { kind: "approvalRules" }
   | { kind: "toolToggles" }
   | { kind: "builder" }
+  | { kind: "welcome" }
   | { kind: "blocklist" }
   | { kind: "folderList" }
   | { kind: "folder"; placeholder: string }
@@ -109,6 +110,12 @@ export const FIELDS: Field[] = [
   {
     path: "general.checkForUpdates", section: "general", group: "Startup", label: "Check for updates automatically",
     keywords: "update version", control: { kind: "toggle" },
+  },
+  {
+    path: "general.onboarded", section: "general", group: "Startup", label: "Welcome tour",
+    help: "The first-run setup: choosing a model, a profile and permissions.",
+    keywords: "welcome tour onboarding setup first run introduction",
+    control: { kind: "welcome" },
   },
   {
     path: "profiles.active", section: "general", group: "Profile", label: "Behavior profile",

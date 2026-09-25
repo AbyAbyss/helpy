@@ -59,6 +59,21 @@ pub struct Element {
     pub name: String,
 }
 
+/// Whether Helpy may read other apps' controls and click for the user:
+/// Some on macOS, where that needs the Accessibility permission.
+pub fn trusted() -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    return Some(macos::trusted());
+    #[cfg(not(target_os = "macos"))]
+    None
+}
+
+/// Shows macOS's own prompt to allow Accessibility; nothing elsewhere.
+pub fn request_trust() {
+    #[cfg(target_os = "macos")]
+    macos::request_access();
+}
+
 /// The deepest control at a point in global physical pixels. `scale` is the
 /// monitor's scale factor (macOS works in points).
 pub async fn element_at(x: f64, y: f64, scale: f64) -> Option<Element> {

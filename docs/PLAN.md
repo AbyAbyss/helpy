@@ -2,7 +2,7 @@
 
 Helpy is built phase by phase. Each phase ends with an app that runs (`npm run tauri dev`) and does something useful on its own. This file lists what each phase delivers, the crates and plugins it pulls in, and the platform risks that could change the design.
 
-Status: **Phases 1 to 6 are implemented.** Phases 7 to 9 are planned, plus the additional requirements R1 to R7 below.
+Status: **Phases 1 to 9 are implemented**, with the additional requirements R1 to R7 below.
 
 ## Architecture in one paragraph
 
@@ -125,9 +125,19 @@ Crates: `cron`, `notify` (folder watch), `chromiumoxide`.
 
 Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessibility-sys`, AT-SPI via `atspi`), privacy features (blocklist, password field blur, offline mode), usage tracking, behavior profiles, onboarding, and "Do it for me" guidance (R7).
 
+- As built:
+  - **Accessibility layer** (`src-tauri/src/a11y/`): three questions, each answered within 900 ms or not at all: the control at a point, the password fields showing, and the address of the frontmost browser page (Helpy's own windows are skipped, so it works while the agent panel is in front). AT-SPI uses the Collection interface where apps have it (Chromium, Firefox) and walks the tree otherwise (GTK); Helpy turns AT-SPI on for the session the first time it's needed. UI Automation finds browsers by window class and reads the address bar's value; the AX API reads a web area's AXURL or the address field, and everything there needs the Accessibility permission.
+  - **Snapping**: a highlight whose box roughly matches a control (overlap of at least 30%, or one inside the other) takes the control's bounds; a pointer or arrow tip moves to the middle of the control under it. Anything larger than half the screen wide or 30% tall is never snapped to. On by default.
+  - **Do it for me (R7)**: off by default. Do it marks the click point, "Click it" performs one click (`enigo`) in the middle of the snapped target, puts the pointer back and finishes the step; Back cancels. Each click is confirmed on its own.
+  - **Privacy**: the blocklist matches app names and window titles (`xcap` window list): refuse while one is focused, blank it (and its title bar) when it's behind. Password fields are blanked after capture from the accessibility layer. Offline mode was chosen as "local AI only": models, speech recognition and voices must be on this computer or a private network address; agent tools stay online. It filters models in `ai::call::stream`, so every feature follows it.
+  - **Profiles**: Beginner, Expert, Quiet each keep values for nine settings, saved in `profiles.json` next to the settings (so the settings file keeps one row per setting). Beginner starts from the defaults.
+  - **Usage**: the existing 90-day ledger now feeds a 30-day chart by day, feature (agents grouped) and model.
+  - **Onboarding**: a welcome tour in the settings window on a fresh install (hello, model, profile, permissions, hotkeys). Settings files from before it existed count as onboarded.
+  - **Verified** on Linux (X11) end to end: snapping onto a GTK button, a blanked password field in the screenshot the model received, the Chromium address reaching the planner while the agent panel was in front, and "Do it" clicking a GTK button. The Windows and macOS code for these features is compile-checked only (both targets) and still needs a run on a real PC and Mac.
+
 ## Additional requirements (added by the user after Phase 2)
 
-These come on top of the original brief. Each one names the phase that builds it, and those phases must not ship without it. Status after Phase 8: R1, R2, R4, R5 and R6 are done. R3 is done except reading the URL of the page on screen (Phase 9), and its Python scraper was dropped for now (see Phase 8). R7 is Phase 9. Reference screenshots of the intended look were shared in the conversation; the descriptions below capture them.
+These come on top of the original brief. Each one names the phase that builds it, and those phases must not ship without it. Status after Phase 9: R1 to R7 are done. R3's Python scraper was dropped for now (see Phase 8); the page on screen is read through accessibility (Phase 9). Reference screenshots of the intended look were shared in the conversation; the descriptions below capture them.
 
 ### R1. Agents that act on the computer
 
