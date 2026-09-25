@@ -24,7 +24,7 @@ function seconds(ms: number) {
 export function apply(items: Item[], e: AskEvent): Item[] {
   switch (e.type) {
     case "question":
-      return [...items, { kind: "user", text: e.text, voice: e.voice }];
+      return [...(e.fresh ? [] : items), { kind: "user", text: e.text, voice: e.voice }];
     case "started":
       return items;
     case "text": {

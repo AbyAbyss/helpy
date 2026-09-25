@@ -1,5 +1,6 @@
-//! Text questions from the ask panel: one conversation that lasts until the
-//! panel is dismissed. The model decides whether it needs to see the screen
+//! Questions, typed or spoken: one conversation that lasts until the panel
+//! is dismissed or Helpy has been idle for a while, keeping the last few
+//! questions. The model decides whether it needs to see the screen
 //! (through a `view_screen` tool, or a reply sentinel for models without
 //! reliable tool calling), within the user's screen-access setting. Once it
 //! has seen the screen it can guide the user step by step (`show_step`, or a
@@ -7,6 +8,7 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::json;
@@ -44,7 +46,14 @@ pub struct AskState {
     /// The newest screenshot in the conversation, which step coordinates refer to.
     screen: Mutex<Option<CaptureMeta>>,
     next_id: AtomicU32,
+    /// When the last question finished, for starting fresh after a break.
+    last_turn: Mutex<Option<Instant>>,
 }
+
+/// A question after this long without one starts a new conversation.
+const FRESH_AFTER: Duration = Duration::from_secs(10 * 60);
+/// Questions kept in the conversation, with their answers and steps.
+const KEEP_QUESTIONS: usize = 10;
 
 pub const EVENT: &str = "ask://event";
 
@@ -53,10 +62,12 @@ pub const EVENT: &str = "ask://event";
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(export)]
 pub enum AskEvent {
-    /// A new question, typed or spoken.
+    /// A new question, typed or spoken. `fresh`: it starts a new
+    /// conversation, so earlier messages are gone.
     Question {
         text: String,
         voice: bool,
+        fresh: bool,
     },
     Started {
         model: String,
@@ -812,6 +823,11 @@ pub async fn ask(app: &AppHandle, text: String, origin: Origin) -> Result<(), St
         let _ = app.emit(EVENT, e);
     };
     let cancel = CancellationToken::new();
+    // Speaking while Helpy is busy (a walkthrough, a slow answer) interrupts
+    // it; typed questions wait their turn.
+    if origin == Origin::Voice {
+        interrupt(app).await;
+    }
     {
         let mut running = state.running.lock().unwrap();
         if running.is_some() {
@@ -819,9 +835,20 @@ pub async fn ask(app: &AppHandle, text: String, origin: Origin) -> Result<(), St
         }
         *running = Some(cancel.clone());
     }
+    let fresh = state
+        .last_turn
+        .lock()
+        .unwrap()
+        .is_some_and(|t| t.elapsed() >= FRESH_AFTER);
+    log::info!("ask: question started (voice: {}, fresh: {fresh})", origin == Origin::Voice);
+    if fresh {
+        state.conversation.lock().unwrap().clear();
+        state.screen.lock().unwrap().take();
+    }
     emit(AskEvent::Question {
         text: text.clone(),
         voice: origin == Origin::Voice,
+        fresh,
     });
     let plan = match plan(&settings.ai, &settings.answer_style) {
         Ok(p) => p,
@@ -849,11 +876,13 @@ pub async fn ask(app: &AppHandle, text: String, origin: Origin) -> Result<(), St
     };
     let result = turn.run(history, text).await;
     *state.running.lock().unwrap() = None;
+    *state.last_turn.lock().unwrap() = Some(Instant::now());
+    log::info!("ask: question ended ({})", if result.is_ok() { "answered" } else { "stopped or failed" });
     guide::end(app);
 
     match result {
         Ok((messages, completion)) => {
-            *state.conversation.lock().unwrap() = messages;
+            *state.conversation.lock().unwrap() = keep_recent(messages, KEEP_QUESTIONS);
             turn.send(AskEvent::Done {
                 model: completion.model.clone(),
                 tokens: completion.usage.total().min(u32::MAX as u64) as u32,
@@ -879,6 +908,39 @@ pub async fn ask_send(app: AppHandle, text: String) -> Result<(), String> {
     ask(&app, text, Origin::Text).await
 }
 
+/// Stops the running answer and waits (briefly) until it has ended.
+async fn interrupt(app: &AppHandle) {
+    let state = app.state::<AskState>();
+    if state.running.lock().unwrap().is_none() {
+        return;
+    }
+    cancel(app);
+    for _ in 0..100 {
+        if state.running.lock().unwrap().is_none() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Drops all but the last `questions` questions and what followed each. A
+/// question is a user message that isn't a tool result, so tool calls and
+/// their results always stay together.
+fn keep_recent(mut messages: Vec<Message>, questions: usize) -> Vec<Message> {
+    let starts: Vec<usize> = messages
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| {
+            m.role == Role::User && !m.parts.iter().any(|p| matches!(p, Part::ToolResult { .. }))
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if starts.len() > questions {
+        messages.drain(..starts[starts.len() - questions]);
+    }
+    messages
+}
+
 /// Stops the running answer, if any.
 pub fn cancel(app: &AppHandle) {
     ask_cancel(app.state::<AskState>());
@@ -886,6 +948,7 @@ pub fn cancel(app: &AppHandle) {
 
 #[tauri::command]
 pub fn ask_cancel(state: tauri::State<AskState>) {
+    log::info!("ask: cancel requested");
     if let Some(c) = state.running.lock().unwrap().as_ref() {
         c.cancel();
     }
@@ -936,6 +999,31 @@ pub fn ask_status(store: tauri::State<SettingsStore>) -> AskStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeps_the_last_questions_with_their_tool_calls() {
+        let q = |t: &str| Message::user_text(t);
+        let a = |t: &str| Message {
+            role: Role::Assistant,
+            parts: vec![Part::Text(t.into())],
+        };
+        let result = Message {
+            role: Role::User,
+            parts: vec![Part::ToolResult {
+                id: "1".into(),
+                name: "show_step".into(),
+                parts: vec![Part::Text("done".into())],
+                is_error: false,
+            }],
+        };
+        let history = vec![q("one"), a("1"), q("two"), a("step"), result.clone(), a("2"), q("three"), a("3")];
+        let kept = keep_recent(history.clone(), 2);
+        // "two" starts the kept history; its tool result stays with it.
+        assert_eq!(kept.len(), 6);
+        assert_eq!(kept[0], q("two"));
+        assert_eq!(kept[2], result);
+        assert_eq!(keep_recent(history.clone(), 10), history);
+    }
     use crate::settings::schema::{ModelConfig, ProviderConfig, ProviderKind};
 
     fn model(id: &str, vision: bool, tools: bool) -> ModelConfig {
