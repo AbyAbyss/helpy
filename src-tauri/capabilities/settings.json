@@ -3,5 +3,5 @@
   "identifier": "settings",
   "description": "The settings window: reads and writes settings, picks files for import, export and custom buddy images.",
   "windows": ["settings"],
-  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "dialog:allow-open", "dialog:allow-save"]
 }

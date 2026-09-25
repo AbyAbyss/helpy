@@ -1,4 +1,4 @@
-//! Native translucency for the agent panel and the dock card: vibrancy on
+//! Native translucency for settings, the agent panel and the dock card: vibrancy on
 //! macOS, Mica or Acrylic on Windows 11. Each page asks which look it got
 //! and draws translucent surfaces only then; on Linux and older Windows the
 //! windows stay opaque (the dock card falls back to CSS glass).
@@ -9,14 +9,14 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewWindow};
 
 use crate::settings::schema::Theme;
-use crate::windows::{AGENTS, DOCK_CARD};
+use crate::windows::{AGENTS, DOCK_CARD, SETTINGS};
 
 #[derive(Default)]
 pub struct Glass(Mutex<HashMap<String, &'static str>>);
 
 pub fn setup(app: &AppHandle) {
     let state = app.state::<Glass>();
-    for label in [AGENTS, DOCK_CARD] {
+    for label in [SETTINGS, AGENTS, DOCK_CARD] {
         if let Some(w) = app.get_webview_window(label) {
             if let Some(kind) = apply(&w) {
                 state.0.lock().unwrap().insert(label.into(), kind);
@@ -38,7 +38,7 @@ pub fn follow_theme(app: &AppHandle, theme: Theme) {
         Theme::Light => Some(tauri::Theme::Light),
         Theme::Dark => Some(tauri::Theme::Dark),
     };
-    for label in [AGENTS, DOCK_CARD] {
+    for label in [SETTINGS, AGENTS, DOCK_CARD] {
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.set_theme(t);
         }
@@ -54,7 +54,7 @@ pub fn window_glass(window: WebviewWindow, state: tauri::State<Glass>) -> Option
 #[cfg(target_os = "macos")]
 fn apply(w: &WebviewWindow) -> Option<&'static str> {
     use tauri::window::{Effect, EffectState, EffectsBuilder};
-    let effects = if w.label() == AGENTS {
+    let effects = if w.label() != DOCK_CARD {
         // The sidebar material, as in Finder and Notes; the content side
         // gets a light wash in CSS.
         EffectsBuilder::new()
@@ -77,7 +77,7 @@ fn apply(w: &WebviewWindow) -> Option<&'static str> {
 fn apply(w: &WebviewWindow) -> Option<&'static str> {
     use tauri::window::{Effect, EffectsBuilder};
     let build = crate::platform::windows_build()?;
-    let effect = if w.label() == AGENTS && build >= 22000 {
+    let effect = if w.label() != DOCK_CARD && build >= 22000 {
         Effect::Mica
     } else if build >= 22523 {
         // Older builds only have an Acrylic that lags while dragging.

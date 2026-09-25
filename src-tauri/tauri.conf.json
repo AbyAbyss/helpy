@@ -21,7 +21,10 @@
         "minWidth": 780,
         "minHeight": 520,
         "center": true,
-        "visible": false
+        "visible": false,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       },
       {
         "label": "ask",

@@ -2457,3 +2457,114 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .welcome__card { animation: none; }
 }
+
+/* ---------- The window's look ----------
+   Same references as the agent panel. Light: a peach sidebar beside a white
+   page with cool glows, milky cards, coral accent. Dark: an ultramarine
+   sidebar beside near-black with crimson and green glows, faint glass
+   cards, mint accent. Surfaces are see-through so the glows read through. */
+
+:root {
+  --side-bg: linear-gradient(185deg, #f9d5c3 0%, #f7e3d8 40%, #f2ece8 75%, #eff0f2 100%);
+  --main-bg: radial-gradient(55% 45% at 100% 0%, rgba(214, 220, 255, 0.4), transparent 70%),
+    radial-gradient(45% 40% at 95% 100%, rgba(200, 232, 246, 0.45), transparent 70%), #fbfbfc;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-2: rgba(23, 27, 38, 0.045);
+  --line: rgba(23, 27, 38, 0.08);
+  --line-strong: rgba(23, 27, 38, 0.15);
+  --accent: #e26d6a;
+  --accent-hover: #d65b58;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbe7e6;
+  --focus: 0 0 0 3px rgba(226, 109, 106, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --side-bg: linear-gradient(185deg, #1f36a8 0%, #1a2672 38%, #151b3f 72%, #12151f 100%);
+    --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.3), transparent 72%),
+      radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.26), transparent 72%), #14161c;
+    --surface: rgba(255, 255, 255, 0.055);
+    --surface-2: rgba(255, 255, 255, 0.07);
+    --line: rgba(255, 255, 255, 0.1);
+    --line-strong: rgba(255, 255, 255, 0.17);
+    --accent: #3ee08f;
+    --accent-hover: #5ceaa3;
+    --accent-ink: #06140d;
+    --accent-soft: rgba(62, 224, 143, 0.14);
+    --focus: 0 0 0 3px rgba(62, 224, 143, 0.28);
+  }
+}
+
+:root[data-theme="dark"] {
+  --side-bg: linear-gradient(185deg, #1f36a8 0%, #1a2672 38%, #151b3f 72%, #12151f 100%);
+  --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.3), transparent 72%),
+    radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.26), transparent 72%), #14161c;
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-2: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.17);
+  --accent: #3ee08f;
+  --accent-hover: #5ceaa3;
+  --accent-ink: #06140d;
+  --accent-soft: rgba(62, 224, 143, 0.14);
+  --focus: 0 0 0 3px rgba(62, 224, 143, 0.28);
+}
+
+.rail {
+  background: var(--side-bg);
+}
+
+.content,
+.welcome {
+  background: var(--main-bg);
+}
+
+/* The sketched window on the preview stage floats over other content, so
+   it stays solid. */
+.mock {
+  background: var(--bg);
+}
+
+/* Native glass: the window is the frosted material and the page is a
+   tinted veil over it, thin on the sidebar, near-opaque behind text. */
+html[data-glass] body {
+  background: transparent;
+}
+
+html[data-glass] {
+  --side-bg: linear-gradient(185deg, rgba(249, 213, 195, 0.62) 0%, rgba(247, 227, 216, 0.5) 45%, rgba(242, 236, 232, 0.38) 100%);
+  --main-bg: radial-gradient(55% 45% at 100% 0%, rgba(214, 220, 255, 0.3), transparent 70%), rgba(251, 251, 252, 0.84);
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-glass]:not([data-theme="light"]) {
+    --side-bg: linear-gradient(185deg, rgba(31, 54, 168, 0.62) 0%, rgba(26, 38, 114, 0.58) 40%, rgba(18, 21, 31, 0.6) 100%);
+    --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.22), transparent 72%),
+      radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.18), transparent 72%), rgba(17, 19, 24, 0.8);
+  }
+}
+
+html[data-glass][data-theme="dark"] {
+  --side-bg: linear-gradient(185deg, rgba(31, 54, 168, 0.62) 0%, rgba(26, 38, 114, 0.58) 40%, rgba(18, 21, 31, 0.6) 100%);
+  --main-bg: radial-gradient(50% 42% at 100% 0%, rgba(170, 40, 75, 0.22), transparent 72%),
+    radial-gradient(45% 45% at 100% 100%, rgba(30, 150, 95, 0.18), transparent 72%), rgba(17, 19, 24, 0.8);
+}
+
+/* macOS: no title bar. The traffic lights sit over the sidebar, and a strip
+   along the top edge drags the window. */
+.dragbar {
+  display: none;
+}
+
+html[data-mac] .dragbar {
+  display: block;
+  position: fixed;
+  inset: 0 0 auto;
+  height: 28px;
+  z-index: 10;
+}
+
+html[data-mac] .rail {
+  padding-top: 46px;
+}
