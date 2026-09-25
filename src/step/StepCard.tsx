@@ -71,25 +71,54 @@ export function StepCard() {
               <span className="spinner" aria-hidden="true" />
               Checking your screen…
             </p>
+          ) : card.confirming ? (
+            <p className="card__hint card__hint--ask">Helpy will click the marked spot once. Is that the right place?</p>
           ) : (
             <p className="card__hint">
               {card.clickAdvances ? "Click the highlighted spot, or press Next." : "Press Next once you've done it."}
             </p>
           )}
+          {card.problem && !card.confirming && <p className="card__hint card__hint--err">{card.problem}</p>}
 
-          <footer className="card__actions">
-            <button type="button" className="btn btn--quiet" onClick={() => api.guideAction("stop")}>
-              Stop <kbd>Esc</kbd>
-            </button>
-            <span className="card__spacer" />
-            <button type="button" className="btn" disabled={card.checking} onClick={() => api.guideAction("repeat")}>
-              <RepeatIcon />
-              Repeat
-            </button>
-            <button type="button" className="btn btn--primary" disabled={card.checking} onClick={() => api.guideAction("next")}>
-              Next
-            </button>
-          </footer>
+          {card.confirming ? (
+            <footer className="card__actions">
+              <button type="button" className="btn btn--quiet" onClick={() => api.guideAction("back")}>
+                Back
+              </button>
+              <span className="card__spacer" />
+              <button type="button" className="btn btn--primary" autoFocus onClick={() => api.guideAction("confirm")}>
+                <ClickIcon />
+                Click it
+              </button>
+            </footer>
+          ) : (
+            <footer className="card__actions">
+              <button type="button" className="btn btn--quiet" onClick={() => api.guideAction("stop")}>
+                Stop <kbd>Esc</kbd>
+              </button>
+              <span className="card__spacer" />
+              <button
+                type="button"
+                className="btn"
+                disabled={card.checking}
+                title="Repeat"
+                aria-label="Repeat"
+                onClick={() => api.guideAction("repeat")}
+              >
+                <RepeatIcon />
+                {!card.canDoIt && "Repeat"}
+              </button>
+              {card.canDoIt && (
+                <button type="button" className="btn" disabled={card.checking} onClick={() => api.guideAction("doIt")}>
+                  <ClickIcon />
+                  Do it
+                </button>
+              )}
+              <button type="button" className="btn btn--primary" disabled={card.checking} onClick={() => api.guideAction("next")}>
+                Next
+              </button>
+            </footer>
+          )}
         </div>
       )}
     </div>
@@ -121,6 +150,14 @@ function SpeakerIcon({ on }: { on: boolean }) {
     <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
       <path d="M3.5 7.5h3l4-3.5v12l-4-3.5h-3z" />
       {on ? <path d="M13.5 7a4 4 0 0 1 0 6M15.5 5a7 7 0 0 1 0 10" /> : <path d="m13.5 8 4 4m0-4-4 4" />}
+    </svg>
+  );
+}
+
+function ClickIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+      <path d="M8 3.5v2M3.5 8h2M4.8 4.8l1.4 1.4M9 9l7.5 3-3.2 1.3L12 16.5z" />
     </svg>
   );
 }

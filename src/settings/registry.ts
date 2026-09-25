@@ -554,6 +554,12 @@ FIELDS.push(
     control: { kind: "toggle" },
   },
   {
+    path: "guidance.doItForMe", section: "guidance", group: "Accuracy", label: "Do it for me",
+    help: "Adds a Do it button to each step. Helpy marks exactly where it will click and clicks only after you confirm, one click at a time. On macOS this needs Accessibility permission.",
+    keywords: "do it for me click automatically automate perform action",
+    control: { kind: "toggle" },
+  },
+  {
     path: "guidance.showCoordinates", section: "guidance", group: "Troubleshooting", label: "Show raw coordinates",
     help: "Prints the model's numbers next to each mark, to check where it thinks things are.",
     keywords: "debug coordinates pixels position", control: { kind: "toggle" },

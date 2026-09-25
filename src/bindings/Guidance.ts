@@ -41,4 +41,9 @@ showCoordinates: boolean,
  * Move highlights and pointers onto the real control under them, as
  * the system's accessibility layer reports it.
  */
-snapToControls: boolean, };
+snapToControls: boolean, 
+/**
+ * A "Do it" button on the step card: Helpy clicks the target itself,
+ * after the user confirms that one click.
+ */
+doItForMe: boolean, };

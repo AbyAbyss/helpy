@@ -115,7 +115,8 @@
     "reduceMotion": false,
     "maxSteps": 12,
     "showCoordinates": false,
-    "snapToControls": true
+    "snapToControls": true,
+    "doItForMe": false
   },
   "circle": {
     "defaultShape": "rectangle",

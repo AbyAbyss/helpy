@@ -638,6 +638,9 @@ pub struct Guidance {
     /// the system's accessibility layer reports it.
     #[serde(default = "yes")]
     pub snap_to_controls: bool,
+    /// A "Do it" button on the step card: Helpy clicks the target itself,
+    /// after the user confirms that one click.
+    pub do_it_for_me: bool,
 }
 
 impl Default for Guidance {
@@ -657,6 +660,7 @@ impl Default for Guidance {
             max_steps: 12,
             show_coordinates: false,
             snap_to_controls: true,
+            do_it_for_me: false,
         }
     }
 }

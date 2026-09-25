@@ -397,6 +397,14 @@ pub fn targets(step: &Step, meta: CaptureMeta) -> Vec<Target> {
         .collect()
 }
 
+/// Where Helpy clicks for "Do it": the middle of the first target.
+pub fn click_point(targets: &[Target]) -> Option<(f64, f64)> {
+    targets.first().map(|t| match *t {
+        Target::Rect { x, y, w, h } => (x + w / 2.0, y + h / 2.0),
+        Target::Spot { x, y } => (x, y),
+    })
+}
+
 /// Whether a click at (x, y) is on or near one of the targets. `margin` is in
 /// physical pixels: a small allowance around boxes, and the radius around
 /// points and arrow tips.
@@ -426,6 +434,25 @@ pub fn bounds(targets: &[Target], radius: f64) -> Option<(f64, f64, f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn helpy_clicks_the_middle_of_the_first_target() {
+        let t = [
+            Target::Rect {
+                x: 100.0,
+                y: 50.0,
+                w: 40.0,
+                h: 20.0,
+            },
+            Target::Spot { x: 1.0, y: 1.0 },
+        ];
+        assert_eq!(click_point(&t), Some((120.0, 60.0)));
+        assert_eq!(
+            click_point(&[Target::Spot { x: 5.0, y: 6.0 }]),
+            Some((5.0, 6.0))
+        );
+        assert_eq!(click_point(&[]), None);
+    }
 
     /// A 4K monitor at 200% to the right of a 1080p one, sent at 1568x882.
     fn meta() -> CaptureMeta {

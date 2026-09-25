@@ -53,12 +53,21 @@ pub struct CardView {
     pub checking: bool,
     /// A click on the target moves on; otherwise only Next does.
     pub click_advances: bool,
+    /// Helpy can click the target itself ("Do it").
+    pub can_do_it: bool,
+    /// Helpy is showing where it will click and waits for the OK.
+    pub confirming: bool,
+    /// Why Helpy's own click didn't happen.
+    pub problem: Option<String>,
 }
 
 enum Command {
     Next,
     Repeat,
     Click(f64, f64),
+    DoIt,
+    Confirm,
+    Back,
 }
 
 #[derive(Default)]
@@ -293,6 +302,7 @@ pub async fn show(
     let draw = || emit_marks(app, &label, marks.clone());
     draw();
 
+    let click_at = step::click_point(&targets);
     show_card_view(
         app,
         CardView {
@@ -301,8 +311,18 @@ pub async fn show(
             instruction: step.instruction.clone(),
             checking: false,
             click_advances: click_advances(app, s),
+            can_do_it: s.guidance.do_it_for_me && click_at.is_some(),
+            confirming: false,
+            problem: None,
         },
     );
+    let update_card = |f: &dyn Fn(&mut CardView)| {
+        let card = state.card.lock().unwrap().clone();
+        if let Some(mut card) = card {
+            f(&mut card);
+            show_card_view(app, card);
+        }
+    };
     if let Some(w) = app.get_webview_window(windows::STEP) {
         // Without a matching overlay (the monitors just changed), the card
         // still shows where it was, so Next and Stop stay reachable.
@@ -335,6 +355,38 @@ pub async fn show(
                     draw();
                     say(app, s, &step::speech(step));
                 }
+                Some(Command::DoIt) if s.guidance.do_it_for_me => {
+                    let (Some((x, y)), Some((_, m))) = (click_at, &overlay) else { continue };
+                    // Exactly where the click will land, on top of the step's marks.
+                    let mut shown = marks.clone();
+                    shown.push(Mark::Point {
+                        x: (x - m.x as f64) / m.scale,
+                        y: (y - m.y as f64) / m.scale,
+                        label: Some("Helpy will click here".into()),
+                        raw: String::new(),
+                    });
+                    emit_marks(app, &label, shown);
+                    faded = true;
+                    update_card(&|c| {
+                        c.confirming = true;
+                        c.problem = None;
+                    });
+                }
+                Some(Command::Back) => {
+                    draw();
+                    update_card(&|c| c.confirming = false);
+                }
+                Some(Command::Confirm) if s.guidance.do_it_for_me => {
+                    let Some((x, y)) = click_at else { continue };
+                    match click(x, y, meta.scale_factor).await {
+                        Ok(()) => break true,
+                        Err(e) => update_card(&|c| {
+                            c.confirming = false;
+                            c.problem = Some(e.clone());
+                        }),
+                    }
+                }
+                Some(Command::DoIt | Command::Confirm) => {}
                 Some(Command::Click(x, y)) => {
                     if click_advances(app, s)
                         && !on_card(app, x, y)
@@ -363,6 +415,33 @@ pub async fn show(
     done
 }
 
+/// Clicks at a point in global physical pixels for the user, then puts the
+/// pointer back where it was.
+async fn click(x: f64, y: f64, scale: f64) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        use enigo::{Button, Coordinate, Direction, Enigo, Mouse};
+        let fail = |e: &dyn std::fmt::Display| {
+            format!("Helpy couldn't click here ({e}). On macOS, allow Helpy under Privacy & Security → Accessibility")
+        };
+        let mut e = Enigo::new(&enigo::Settings::default()).map_err(|e| fail(&e))?;
+        // macOS moves the pointer in points.
+        let k = if cfg!(target_os = "macos") { scale } else { 1.0 };
+        let back = e.location().ok();
+        let pause = || std::thread::sleep(Duration::from_millis(60));
+        e.move_mouse((x / k).round() as i32, (y / k).round() as i32, Coordinate::Abs)
+            .map_err(|e| fail(&e))?;
+        pause();
+        e.button(Button::Left, Direction::Click).map_err(|e| fail(&e))?;
+        pause();
+        if let Some((bx, by)) = back {
+            let _ = e.move_mouse(bx, by, Coordinate::Abs);
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn on_card(app: &AppHandle, x: f64, y: f64) -> bool {
     let Some(w) = app.get_webview_window(windows::STEP) else {
         return false;
@@ -376,7 +455,8 @@ fn on_card(app: &AppHandle, x: f64, y: f64) -> bool {
         && y < p.y as f64 + size.height as f64
 }
 
-/// The step card's buttons: "next", "repeat" or "stop".
+/// The step card's buttons: "next", "repeat", "stop", and for Do it
+/// "doIt", "confirm" and "back".
 #[tauri::command]
 pub fn guide_action(app: AppHandle, action: String) {
     let state = app.state::<GuideState>();
@@ -388,6 +468,9 @@ pub fn guide_action(app: AppHandle, action: String) {
     match action.as_str() {
         "next" => send(Command::Next),
         "repeat" => send(Command::Repeat),
+        "doIt" => send(Command::DoIt),
+        "confirm" => send(Command::Confirm),
+        "back" => send(Command::Back),
         "stop" => crate::ai::ask::cancel(&app),
         _ => {}
     }

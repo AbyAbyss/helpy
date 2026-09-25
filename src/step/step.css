@@ -145,6 +145,15 @@ body,
   color: var(--card-ink-2);
 }
 
+.card__hint--ask {
+  color: var(--card-ink);
+  font-weight: 600;
+}
+
+.card__hint--err {
+  color: #ff9a9d;
+}
+
 .spinner {
   width: 12px;
   height: 12px;

@@ -8,4 +8,16 @@ checking: boolean,
 /**
  * A click on the target moves on; otherwise only Next does.
  */
-clickAdvances: boolean, };
+clickAdvances: boolean, 
+/**
+ * Helpy can click the target itself ("Do it").
+ */
+canDoIt: boolean, 
+/**
+ * Helpy is showing where it will click and waits for the OK.
+ */
+confirming: boolean, 
+/**
+ * Why Helpy's own click didn't happen.
+ */
+problem: string | null, };

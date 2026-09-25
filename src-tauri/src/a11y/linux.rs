@@ -32,8 +32,18 @@ async fn frames(ac: &'static AccessibilityConnection) -> Vec<(String, Accessible
     let Ok(root) = ac.root_accessible_on_registry().await else {
         return Vec::new();
     };
+    let dbus = atspi::zbus::fdo::DBusProxy::new(c).await.ok();
+    let own = std::process::id();
     let mut out = Vec::new();
     for app in root.get_children().await.unwrap_or_default() {
+        // Helpy's own windows (above all the full-screen overlay) aren't
+        // what the user is looking at.
+        if let (Some(d), Some(bus)) = (&dbus, app.name()) {
+            let bus = atspi::zbus::names::BusName::from(bus.clone());
+            if d.get_connection_unix_process_id(bus).await.ok() == Some(own) {
+                continue;
+            }
+        }
         let Ok(app) = app.into_accessible_proxy(c).await else {
             continue;
         };
