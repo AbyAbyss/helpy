@@ -19,6 +19,9 @@ import type { SystemVoice } from "../bindings/SystemVoice";
 import type { VoiceSupport } from "../bindings/VoiceSupport";
 import type { WhisperModel } from "../bindings/WhisperModel";
 import type { Settings } from "../bindings/Settings";
+import type { Template } from "../bindings/Template";
+import type { TemplateInfo } from "../bindings/TemplateInfo";
+import type { ToolGroup } from "../bindings/ToolGroup";
 import type { Connection } from "../bindings/Connection";
 import type { ConnectorInfo } from "../bindings/ConnectorInfo";
 import type { ImportReport } from "../bindings/ImportReport";
@@ -166,6 +169,12 @@ export const api = {
   setBraveKey: (key: string) => invoke<void>("agents_set_brave_key", { key }),
   hasBraveKey: () => invoke<boolean>("agents_has_brave_key"),
   plan: (request: string) => invoke<Plan>("agents_plan", { request }),
+  templates: () => invoke<TemplateInfo[]>("agents_templates"),
+  /** Fills in a template and shows its plan card. */
+  templatePlan: (id: string, values: Record<string, string>) => invoke<Plan>("agents_template_plan", { id, values }),
+  /** Saves an agent's request (all its agents) as a template. */
+  saveTemplate: (id: string) => invoke<Template>("agents_save_template", { id }),
+  toolGroups: () => invoke<ToolGroup[]>("agents_tool_groups"),
   planCurrent: () => invoke<Plan | null>("agents_plan_current"),
   planStart: (id: string, mode: RunMode) => invoke<void>("agents_plan_start", { id, mode }),
   planCancel: () => invoke<void>("agents_plan_cancel"),

@@ -9,6 +9,7 @@ import { useAgents } from "../dock/Dock";
 import { duration, STATUS_LABEL, tokens, tone } from "../dock/dockState";
 import { api, EVENTS } from "../lib/ipc";
 import { ApprovalBox, Inbox } from "./Approvals";
+import { Templates } from "./Templates";
 import { useSettings, useTheme } from "../lib/useSettings";
 
 type Filter = "active" | "finished" | "all";
@@ -22,7 +23,10 @@ export function Panel() {
   const { agents, batches, live } = useAgents();
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<string | null>(null);
-  const [inbox, setInbox] = useState(false);
+  // What the right side shows instead of an agent.
+  const [view, setView] = useState<"agent" | "inbox" | "templates">("agent");
+  const inbox = view === "inbox";
+  const setInbox = (on: boolean) => setView(on ? "inbox" : "agent");
 
   useEffect(() => {
     const off = listen<string>(EVENTS.agentsFocus, (e) => {
@@ -69,6 +73,13 @@ export function Panel() {
           </div>
         </header>
         <NewTask />
+        <button type="button" className={`row inboxrow${view === "templates" ? " is-on" : ""}`} onClick={() => setView("templates")}>
+          <span className="dot dot--templates" aria-hidden="true" />
+          <span className="row__main">
+            <span className="row__name">Templates</span>
+          </span>
+          <span className="row__status">Start one</span>
+        </button>
         <button type="button" className={`row inboxrow${inbox ? " is-on" : ""}`} onClick={() => setInbox(true)}>
           <span className={`dot dot--${waiting ? "alert" : "idle"}`} aria-hidden="true" />
           <span className="row__main">
@@ -88,7 +99,7 @@ export function Panel() {
                 <button
                   key={a.id}
                   type="button"
-                  className={`row${a.parent ? " row--helper" : ""}${!inbox && selected === a.id ? " is-on" : ""}`}
+                  className={`row${a.parent ? " row--helper" : ""}${view === "agent" && selected === a.id ? " is-on" : ""}`}
                   onClick={() => {
                     setSelected(a.id);
                     setInbox(false);
@@ -110,7 +121,9 @@ export function Panel() {
         </div>
       </aside>
       <main className="ap__detail">
-        {inbox ? (
+        {view === "templates" ? (
+          <Templates />
+        ) : inbox ? (
           <Inbox agents={[...agents.values()]} />
         ) : current ? (
           <Detail key={current.id} agent={current} batch={batches.get(current.batch)} line={live.get(current.id)} agentName={(id) => agents.get(id)?.name ?? "an earlier agent"} />
@@ -239,6 +252,15 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
           <button type="button" className="btn" onClick={() => run(() => api.agentDuplicate(a.id), "Started a copy.")}>
             Run again as new
           </button>
+          {!a.parent && (
+            <button
+              type="button"
+              className="btn btn--quiet"
+              onClick={() => run(async () => { await api.saveTemplate(a.id); }, "Saved as a template. Add blanks to it in Settings → Agents → Templates.")}
+            >
+              Save as template
+            </button>
+          )}
           {finished && (
             <button type="button" className="btn btn--quiet" onClick={() => run(() => api.agentDelete(a.id))}>
               Remove

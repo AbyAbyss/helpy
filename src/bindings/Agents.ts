@@ -7,6 +7,7 @@ import type { DockSide } from "./DockSide";
 import type { OnFailure } from "./OnFailure";
 import type { SearchEngine } from "./SearchEngine";
 import type { ShellPolicy } from "./ShellPolicy";
+import type { Template } from "./Template";
 
 export type Agents = { maxRunning: number, defaultMode: DefaultRunMode, confirmPlans: ConfirmPlans, approvals: Approvals, tools: AgentTools, 
 /**
@@ -57,4 +58,8 @@ doneSeconds: number, notifications: boolean,
 /**
  * Days to keep finished agents in the panel.
  */
-historyDays: number, };
+historyDays: number, 
+/**
+ * The user's own templates (built-in ones live in the code).
+ */
+templates: Array<Template>, };

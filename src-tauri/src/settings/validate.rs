@@ -166,6 +166,23 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
         ));
     }
 
+    let builtin: Vec<String> = crate::agents::templates::builtins()
+        .into_iter()
+        .map(|t| t.id)
+        .collect();
+    let mut ids: Vec<&str> = Vec::new();
+    for t in &a.templates {
+        if let Err(e) = crate::agents::templates::check(t) {
+            errors.push(FieldError::new("agents.templates", e));
+        } else if ids.contains(&t.id.as_str()) || builtin.contains(&t.id) {
+            errors.push(FieldError::new(
+                "agents.templates",
+                format!("{}: two templates have the same id", t.name),
+            ));
+        }
+        ids.push(&t.id);
+    }
+
     validate_mcp(&s.connectors.mcp, &mut errors);
 
     if s.circle.translate_to == "auto" || !is_language_tag(&s.circle.translate_to) {

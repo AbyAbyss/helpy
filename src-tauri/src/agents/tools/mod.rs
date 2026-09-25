@@ -573,7 +573,10 @@ mod tests {
     fn groups_follow_settings_and_what_this_os_supports() {
         let mut a = Agents::default();
         let ids = |a: &Agents| groups(a).into_iter().map(|g| g.id).collect::<Vec<_>>();
-        assert_eq!(ids(&a), ["search", "web", "files", "shell", "reminders", "team"]);
+        assert_eq!(
+            ids(&a),
+            ["search", "web", "files", "shell", "reminders", "team"]
+        );
         a.tools.fetch = false;
         a.shell_policy = ShellPolicy::Never;
         assert_eq!(ids(&a), ["search", "files", "reminders", "team"]);

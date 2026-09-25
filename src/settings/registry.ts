@@ -55,7 +55,8 @@ export type Control =
   | { kind: "fallbackChain" }
   | { kind: "connectors" }
   | { kind: "oauthApps" }
-  | { kind: "mcpServers" };
+  | { kind: "mcpServers" }
+  | { kind: "templates" };
 
 export type Field = {
   path: SettingPath;
@@ -593,6 +594,12 @@ FIELDS.push(
     path: "agents.shellAllowlist", section: "agents", group: "Tools", label: "Allowed commands",
     help: "Run without asking. Chained or redirected commands are never allowed this way.", keywords: "allowlist safe commands",
     control: { kind: "stringList", placeholder: "Add a command, e.g. git status" }, when: (s) => s.agents.shellPolicy === "allowlist",
+  },
+  {
+    path: "agents.templates", section: "agents", group: "Templates", label: "Your templates",
+    help: "Tasks to start again and again, with blanks to fill in. Start them from Templates in the agent panel.",
+    keywords: "template reuse preset blanks parameters saved tasks",
+    control: { kind: "templates" },
   },
   {
     path: "agents.searchEngine", section: "agents", group: "Web search", label: "Search with",

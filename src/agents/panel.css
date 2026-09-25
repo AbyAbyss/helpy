@@ -1062,3 +1062,77 @@ body {
   border-bottom-left-radius: 5px;
   transform: translateY(-5px);
 }
+
+/* ---------- Templates ---------- */
+
+.dot--templates {
+  background: var(--work);
+  border-radius: 3px;
+}
+
+.tgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.tcard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 132px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  animation: fade-up 460ms var(--out) both;
+  animation-delay: calc(var(--i, 0) * 50ms);
+  transition:
+    transform 420ms var(--spring),
+    background 150ms ease,
+    box-shadow 200ms ease;
+}
+
+.tcard:hover {
+  transform: translateY(-3px);
+  background: var(--glass-strong);
+  box-shadow: 0 14px 30px -20px rgba(0, 0, 0, 0.45);
+}
+
+.tcard:active {
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+
+.tcard__name {
+  font: 650 15px var(--font-ui);
+}
+
+.tcard__about {
+  flex: 1;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tcard__meta {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.tform {
+  --tone: var(--work);
+  max-width: 560px;
+}
+
+.tform select.field {
+  appearance: auto;
+}
+
+.tform .approval__field > span {
+  text-transform: none;
+}

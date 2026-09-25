@@ -147,7 +147,8 @@
     "speakStatus": false,
     "doneSeconds": 60,
     "notifications": true,
-    "historyDays": 30
+    "historyDays": 30,
+    "templates": []
   },
   "connectors": {
     "apps": {},

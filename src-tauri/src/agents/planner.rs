@@ -97,6 +97,10 @@ pub fn planning_models(ai: &Ai) -> Result<Vec<ModelRef>, String> {
 }
 
 pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
+    let templates: String = super::templates::all(s)
+        .iter()
+        .map(super::templates::for_planner)
+        .collect();
     let list: String = groups
         .iter()
         .map(|g| {
@@ -129,7 +133,10 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          Desktop is ~/Desktop. Builder agents use the projects folder and don't need it listed.\n\n\
          Reply with only a JSON object: {{\"mode\": \"single\", \"agents\": [{{\"name\": \"...\", \"goal\": \"...\", \
          \"tools\": [\"...\"], \"keepOpen\": false, \"after\": []}}], \"folders\": [], \"reply\": \"one short sentence telling the user \
-         what you set up\"}}"
+         what you set up\"}}\n\n\
+         If the request is clearly one of these templates, reply instead with only {{\"template\": \"id\", \"params\": \
+         {{\"blank\": \"value\"}}, \"reply\": \"one short sentence\"}}, filling the blanks from the request (leave out \
+         ones it doesn't say):\n{templates}"
     )
 }
 
@@ -269,7 +276,61 @@ pub async fn plan(app: &AppHandle, request: &str, image: Option<String>) -> Resu
     )
     .await
     .map_err(|e| e.message)?;
-    let (mode, agents, folders, reply) = parse(&completion.text(), &groups, s.agents.default_mode)?;
+    let text = completion.text();
+    let (mode, agents, folders, reply) = match template_choice(&text) {
+        Some((id, values, reply)) => {
+            let t = super::templates::all(&s)
+                .into_iter()
+                .find(|t| t.id == id)
+                .ok_or("The planner picked a template that doesn't exist")?;
+            let (mode, agents, folders) = super::templates::build(&t, &values)?;
+            (mode, agents, folders, reply)
+        }
+        None => parse(&text, &groups, s.agents.default_mode)?,
+    };
+    offer(app, &s, request, mode, agents, folders, reply, image)
+}
+
+/// A template the planner picked: {"template": id, "params": {...}}.
+fn template_choice(
+    text: &str,
+) -> Option<(String, std::collections::HashMap<String, String>, String)> {
+    let t = text.trim();
+    let v: Value = serde_json::from_str(&t[t.find('{')?..=t.rfind('}')?]).ok()?;
+    let id = v["template"].as_str()?.to_string();
+    let values = v["params"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        v.as_str()
+                            .map(String::from)
+                            .unwrap_or_else(|| v.to_string()),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((id, values, v["reply"].as_str().unwrap_or("").to_string()))
+}
+
+/// Shows the plan card for these agents, or starts them when settings
+/// allow it. Used by the planner and by templates.
+#[allow(clippy::too_many_arguments)]
+pub fn offer(
+    app: &AppHandle,
+    s: &Settings,
+    request: &str,
+    mode: RunMode,
+    agents: Vec<PlanAgent>,
+    folders: Vec<String>,
+    reply: String,
+    image: Option<String>,
+) -> Result<Plan, String> {
+    let mut groups = tools::groups(&s.agents);
+    groups.extend(crate::connectors::external(app, s).groups());
     let used: Vec<ToolGroup> = groups
         .iter()
         .filter(|g| agents.iter().any(|a| a.tools.contains(&g.id)))

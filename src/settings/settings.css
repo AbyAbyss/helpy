@@ -2022,3 +2022,53 @@ select {
 .tokenform .link-btn {
   align-self: flex-start;
 }
+
+/* ---------- Templates ---------- */
+
+.tpl-param {
+  display: grid;
+  grid-template-columns: 110px 1fr 110px 1.2fr auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.tpl-param input:not([type="checkbox"]),
+.tpl-param select,
+.tpl-copy {
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 450 13px var(--font-ui);
+  outline: none;
+}
+
+.tpl-param input.mono {
+  font-family: var(--font-mono);
+}
+
+.tpl-param input:focus-visible,
+.tpl-param select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus);
+}
+
+.tpl-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-m);
+  border: 1px dashed var(--line-strong);
+}
+
+.tpl-agent .chips {
+  align-items: center;
+}
+
+.tpl-agent .chips {
+  justify-content: flex-start;
+}

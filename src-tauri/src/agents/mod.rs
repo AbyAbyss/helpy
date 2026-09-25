@@ -5,6 +5,7 @@ pub mod model;
 pub mod planner;
 pub mod runner;
 pub mod store;
+pub mod templates;
 pub mod tools;
 
 use std::collections::HashMap;

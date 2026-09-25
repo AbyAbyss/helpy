@@ -856,6 +856,9 @@ pub struct Agents {
     pub notifications: bool,
     /// Days to keep finished agents in the panel.
     pub history_days: u32,
+
+    /// The user's own templates (built-in ones live in the code).
+    pub templates: Vec<Template>,
 }
 
 impl Default for Agents {
@@ -890,8 +893,62 @@ impl Default for Agents {
             done_seconds: 60,
             notifications: true,
             history_days: 30,
+            templates: Vec::new(),
         }
     }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ParamKind {
+    #[default]
+    Text,
+    LongText,
+    Folder,
+    Number,
+    Choice,
+}
+
+/// Something the user fills in when starting a template, used in its
+/// goals, names and folders as {key}.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct TemplateParam {
+    pub key: String,
+    pub label: String,
+    pub kind: ParamKind,
+    pub default: String,
+    /// For a choice.
+    pub options: Vec<String>,
+    pub required: bool,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct TemplateAgent {
+    pub name: String,
+    pub goal: String,
+    pub tools: Vec<String>,
+    pub keep_open: bool,
+    /// Names of earlier agents of the template it waits for.
+    pub after: Vec<String>,
+}
+
+/// A task to start again and again, with blanks to fill in.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Template {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub params: Vec<TemplateParam>,
+    pub agents: Vec<TemplateAgent>,
+    /// Folders it works in; approved when the plan starts.
+    pub folders: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
