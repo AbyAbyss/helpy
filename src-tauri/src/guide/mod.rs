@@ -271,6 +271,7 @@ pub fn end(app: &AppHandle) {
     if !state.active.swap(false, Ordering::SeqCst) {
         return;
     }
+    log::info!("guide: walkthrough ended");
     state.waiter.lock().unwrap().take();
     state.card.lock().unwrap().take();
     emit_marks(app, "", Vec::new());
@@ -390,6 +391,7 @@ pub async fn show(
         let _ = w.set_always_on_top(true);
     }
     say(app, s, &step::speech(step));
+    log::info!("guide: step {number} shown");
 
     let margin = HIT_MARGIN * meta.scale_factor;
     let fade = s.guidance.annotation_seconds;
@@ -397,6 +399,9 @@ pub async fn show(
     tokio::pin!(fade_after);
     let mut faded = fade == 0;
     let shown_at = tokio::time::Instant::now();
+    // After a click the app needs a moment before the next screenshot;
+    // after Next or a spoken reply the screen has already settled.
+    let mut settle = true;
 
     let end = loop {
         tokio::select! {
@@ -406,8 +411,14 @@ pub async fn show(
                 emit_marks(app, &label, Vec::new());
             }
             cmd = rx.recv() => match cmd {
-                None | Some(Command::Next) => break StepEnd::Done,
-                Some(Command::Said(text)) => break StepEnd::Said(text),
+                None | Some(Command::Next) => {
+                    settle = false;
+                    break StepEnd::Done;
+                }
+                Some(Command::Said(text)) => {
+                    settle = false;
+                    break StepEnd::Said(text);
+                }
                 Some(Command::Repeat) => {
                     draw();
                     say(app, s, &step::speech(step));
@@ -461,6 +472,12 @@ pub async fn show(
     };
     state.waiter.lock().unwrap().take();
     emit_marks(app, &label, Vec::new());
+    log::info!("guide: step {number} ended ({})", match &end {
+        StepEnd::Done => "done",
+        StepEnd::Stray => "stray click",
+        StepEnd::Said(_) => "voice reply",
+        StepEnd::Stopped => "stopped",
+    });
     if !matches!(end, StepEnd::Stopped) {
         // Clone first: show_card_view takes the same lock.
         let card = state.card.lock().unwrap().clone();
@@ -468,9 +485,11 @@ pub async fn show(
             card.checking = true;
             show_card_view(app, card);
         }
-        tokio::select! {
-            _ = cancel.cancelled() => return StepEnd::Stopped,
-            _ = tokio::time::sleep(SETTLE) => {}
+        if settle {
+            tokio::select! {
+                _ = cancel.cancelled() => return StepEnd::Stopped,
+                _ = tokio::time::sleep(SETTLE) => {}
+            }
         }
     }
     end
