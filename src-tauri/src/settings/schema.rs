@@ -321,6 +321,8 @@ pub struct VoiceOutput {
     pub volume: f64,
     pub read_aloud: ReadAloud,
     pub announce_agents: bool,
+    /// A spoken question gets a spoken answer, even with voice guidance off.
+    pub answer_spoken_aloud: bool,
 }
 
 impl Default for VoiceOutput {
@@ -337,6 +339,7 @@ impl Default for VoiceOutput {
             volume: 1.0,
             read_aloud: ReadAloud::FullAnswers,
             announce_agents: true,
+            answer_spoken_aloud: true,
         }
     }
 }
@@ -743,7 +746,8 @@ pub enum DefaultRunMode {
 pub enum ConfirmPlans {
     #[default]
     Always,
-    /// Plans that only read and search start right away.
+    /// Plans start right away when none of their actions would ask first
+    /// (the saved name predates that rule).
     SideEffectsOnly,
 }
 

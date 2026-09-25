@@ -6,12 +6,12 @@ const run = (events: AskEvent[], start: Item[] = [{ kind: "user", text: "q", voi
 
 describe("ask transcript", () => {
   it("adds typed and spoken questions as user messages", () => {
-    const items = run([{ type: "question", text: "Where is spam?", voice: true, fresh: false }], []);
+    const items = run([{ type: "question", text: "Where is spam?", voice: true, fresh: false, images: [] }], []);
     expect(items).toEqual([{ kind: "user", text: "Where is spam?", voice: true }]);
   });
 
   it("a fresh question clears the earlier conversation", () => {
-    const items = run([{ type: "text", text: "Old answer" }, { type: "question", text: "New task", voice: true, fresh: true }]);
+    const items = run([{ type: "text", text: "Old answer" }, { type: "question", text: "New task", voice: true, fresh: true, images: [] }]);
     expect(items).toEqual([{ kind: "user", text: "New task", voice: true }]);
   });
 

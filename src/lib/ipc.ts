@@ -113,7 +113,7 @@ export const api = {
   usageHistory: (days: number) => invoke<UsageHistory>("ai_usage_history", { days }),
 
   // The ask panel. Progress arrives as EVENTS.ask events.
-  ask: (text: string) => invoke<void>("ask_send", { text }),
+  ask: (text: string, images: string[] = []) => invoke<void>("ask_send", { text, images }),
   askCancel: () => invoke<void>("ask_cancel"),
   askReset: () => invoke<void>("ask_reset"),
   askScreenAnswer: (id: number, allow: boolean) => invoke<void>("ask_screen_answer", { id, allow }),
@@ -163,9 +163,9 @@ export const api = {
   agentCancel: (id: string) => invoke<void>("agents_cancel", { id }),
   agentRetry: (id: string) => invoke<void>("agents_retry", { id }),
   agentRaise: (id: string) => invoke<void>("agents_raise", { id }),
-  agentFollowUp: (id: string, text: string) => invoke<void>("agents_follow_up", { id, text }),
+  agentFollowUp: (id: string, text: string, image?: string) => invoke<void>("agents_follow_up", { id, text, image }),
   /** Tells a working agent something; a finished one takes it as a follow-up. */
-  agentSteer: (id: string, text: string) => invoke<void>("agents_steer", { id, text }),
+  agentSteer: (id: string, text: string, image?: string) => invoke<void>("agents_steer", { id, text, image }),
   agentUndo: (id: string) => invoke<string[]>("agents_undo", { id }),
   browserInfo: () => invoke<BrowserInfo>("agents_browser_info"),
   builders: () => invoke<CoderInfo[]>("agents_builders"),
@@ -187,7 +187,7 @@ export const api = {
   agentExport: (id: string, path: string) => invoke<void>("agents_export", { id, path }),
   setBraveKey: (key: string) => invoke<void>("agents_set_brave_key", { key }),
   hasBraveKey: () => invoke<boolean>("agents_has_brave_key"),
-  plan: (request: string) => invoke<Plan>("agents_plan", { request }),
+  plan: (request: string, image?: string) => invoke<Plan>("agents_plan", { request, image }),
   templates: () => invoke<TemplateInfo[]>("agents_templates"),
   /** Fills in a template and shows its plan card. */
   templatePlan: (id: string, values: Record<string, string>) => invoke<Plan>("agents_template_plan", { id, values }),

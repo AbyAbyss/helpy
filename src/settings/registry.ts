@@ -592,12 +592,13 @@ FIELDS.push(
   },
   {
     path: "agents.confirmPlans", section: "agents", group: "Running", label: "Show the plan first",
-    help: "Plans that only search and read can start right away.", keywords: "plan card confirm",
+    help: "With the second option, a plan starts right away when nothing in it needs your OK: every action it can take is set to Allow below or in Connectors.",
+    keywords: "plan card confirm approve start",
     control: {
       kind: "segmented",
       options: [
         { value: "always", label: "Always" },
-        { value: "sideEffectsOnly", label: "Only if it changes things" },
+        { value: "sideEffectsOnly", label: "Only if something asks first" },
       ],
     },
   },
@@ -820,6 +821,11 @@ FIELDS.push(
     path: "voiceOutput.voiceGuidance", section: "voiceOutput", group: "Speaking", label: "Read answers aloud",
     help: "For spoken questions and walkthrough steps. Also in the tray menu and on the step card. Press Esc to stop talking.",
     keywords: "voice guidance tts speak read aloud mute", control: { kind: "toggle" },
+  },
+  {
+    path: "voiceOutput.answerSpokenAloud", section: "voiceOutput", group: "Speaking", label: "Answer spoken questions aloud",
+    help: "When you ask out loud, the answer is spoken too, even with Read answers aloud off. Typed questions stay silent.",
+    keywords: "voice reply speak answer spoken question", control: { kind: "toggle" },
   },
   {
     path: "voiceOutput.readAloud", section: "voiceOutput", group: "Speaking", label: "What to read",

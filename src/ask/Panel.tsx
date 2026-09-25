@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import type { AskAction } from "../bindings/AskAction";
 import type { AskEvent } from "../bindings/AskEvent";
 import type { AskStatus } from "../bindings/AskStatus";
+import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
 import { apply, waiting, type Item } from "./transcript";
@@ -18,6 +19,7 @@ export function Panel() {
   const [running, setRunning] = useState(false);
   const [meta, setMeta] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const attach = useAttachments(4);
   const input = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -55,11 +57,13 @@ export function Panel() {
   }, [items]);
 
   const send = async (text: string) => {
-    const q = text.trim();
+    const images = attach.images;
+    const q = text.trim() || (images.length ? "Look at this." : "");
     if (!q || running) return;
     setDraft("");
+    attach.clear();
     try {
-      await api.ask(q);
+      await api.ask(q, images);
     } catch (e) {
       setItems((prev) => [...prev, { kind: "error", text: String(e), action: null }]);
     } finally {
@@ -126,7 +130,9 @@ export function Panel() {
       </div>
 
       <footer className="composer">
+        <AttachmentStrip images={attach.images} onRemove={attach.remove} />
         <div className="composer__box">
+          <AttachButton onFiles={(f) => attach.add(f)} disabled={!ready} />
           <textarea
             ref={input}
             id="ask-input"
@@ -139,6 +145,7 @@ export function Panel() {
               e.target.style.height = "auto";
               e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
             }}
+            onPaste={attach.onPaste}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -151,13 +158,13 @@ export function Panel() {
               <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" /></svg>
             </button>
           ) : (
-            <button type="button" className="send" aria-label="Send" title="Send (Enter)" disabled={!draft.trim() || !ready} onClick={() => send(draft)}>
+            <button type="button" className="send" aria-label="Send" title="Send (Enter)" disabled={(!draft.trim() && !attach.images.length) || !ready} onClick={() => send(draft)}>
               <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M7 12V2M7 2 2.5 6.5M7 2l4.5 4.5" /></svg>
             </button>
           )}
         </div>
         <div className="composer__meta">
-          <span>{meta ?? "Enter to send · Shift+Enter for a new line · Esc to close"}</span>
+          {attach.error ? <span className="attach-error">{attach.error}</span> : <span>{meta ?? "Enter to send · Shift+Enter for a new line · Paste a picture · Esc to close"}</span>}
         </div>
       </footer>
     </div>
@@ -170,6 +177,7 @@ function ItemView({ item, onPermission }: { item: Item; onPermission: (id: numbe
     case "user":
       return (
         <div className={`msg msg--user${item.voice ? " msg--voice" : ""}`}>
+          {item.images && <AttachmentStrip images={item.images} />}
           {item.voice && <MicIcon />}
           {item.text}
         </div>

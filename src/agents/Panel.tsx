@@ -8,6 +8,7 @@ import type { LogKind } from "../bindings/LogKind";
 import { useAgents } from "../dock/Dock";
 import { AgentFiles } from "../dock/Files";
 import { duration, STATUS_LABEL, tokens, tone } from "../dock/dockState";
+import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api, EVENTS } from "../lib/ipc";
 import { ApprovalBox, Inbox } from "./Approvals";
 import { Templates } from "./Templates";
@@ -151,13 +152,15 @@ function NewTask() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const attach = useAttachments(1);
   const plan = async () => {
     if (!text.trim() || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await api.plan(text);
+      await api.plan(text, attach.images[0]);
       setText("");
+      attach.clear();
     } catch (e) {
       setError(String(e));
     }
@@ -171,11 +174,13 @@ function NewTask() {
         plan();
       }}
     >
+      <AttachmentStrip images={attach.images} onRemove={attach.remove} />
       <textarea
         value={text}
         rows={2}
         placeholder="Describe a task for an agent…"
         onChange={(e) => setText(e.target.value)}
+        onPaste={attach.onPaste}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -184,7 +189,8 @@ function NewTask() {
         }}
       />
       <div className="newtask__foot">
-        {error ? <span className="err-text">{error}</span> : <span className="muted">Helpy shows a plan before anything starts.</span>}
+        <AttachButton onFiles={(f) => attach.add(f)} />
+        {error || attach.error ? <span className="err-text">{error ?? attach.error}</span> : <span className="muted">Helpy shows a plan before anything starts.</span>}
         <button type="submit" className="btn btn--primary" disabled={!text.trim() || busy}>
           {busy ? "Planning…" : "Plan it"}
         </button>
@@ -196,6 +202,7 @@ function NewTask() {
 function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch: Batch | undefined; line: string | undefined; agentName: (id: string) => string }) {
   const [answer, setAnswer] = useState("");
   const [followUp, setFollowUp] = useState("");
+  const attach = useAttachments(1);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(a.name);
   const [message, setMessage] = useState<string | null>(null);
@@ -388,16 +395,22 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
         </section>
       )}
 
+      {["done", "ready", "running", "queued", "paused"].includes(a.status) && <AttachmentStrip images={attach.images} onRemove={attach.remove} />}
       {["done", "ready", "running", "queued", "paused"].includes(a.status) && (
         <form
           className="followup"
           onSubmit={(e) => {
             e.preventDefault();
             const done = a.status === "done" || a.status === "ready";
-            run(() => (done ? api.agentFollowUp(a.id, followUp) : api.agentSteer(a.id, followUp)), done ? undefined : "It'll hear that at its next step.").then(() => setFollowUp(""));
+            const image = attach.images[0];
+            run(() => (done ? api.agentFollowUp(a.id, followUp, image) : api.agentSteer(a.id, followUp)), done ? undefined : "It'll hear that at its next step.").then(() => {
+              setFollowUp("");
+              attach.clear();
+            });
           }}
         >
-          <input value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder={a.status === "done" || a.status === "ready" ? (a.keepOpen ? "What should change?" : "Ask this agent for more…") : "Tell it something while it works…"} />
+          <AttachButton onFiles={(f) => attach.add(f)} disabled={!(a.status === "done" || a.status === "ready")} />
+          <input value={followUp} onChange={(e) => setFollowUp(e.target.value)} onPaste={(e) => (a.status === "done" || a.status === "ready") && attach.onPaste(e)} placeholder={a.status === "done" || a.status === "ready" ? (a.keepOpen ? "What should change?" : "Ask this agent for more…") : "Tell it something while it works…"} />
           <button type="submit" className="sendbtn" aria-label="Send" disabled={!followUp.trim()}>
             <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
               <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />

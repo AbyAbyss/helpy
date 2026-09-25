@@ -384,7 +384,7 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
             transcript: text.clone(),
         },
     );
-    if let Err(message) = tauri::async_runtime::block_on(ask::ask(app, text, ask::Origin::Voice)) {
+    if let Err(message) = tauri::async_runtime::block_on(ask::ask(app, text, ask::Origin::Voice, Vec::new())) {
         emit_phase(app, VoicePhase::Error { message });
     }
 }
@@ -397,17 +397,38 @@ pub struct Feed {
     splitter: Mutex<text::SentenceSplitter>,
     answer: Mutex<String>,
     steps_only: bool,
+    steps: Mutex<StepsRead>,
+}
+
+/// Reading steps only: how far the answer has been read, and whether any
+/// step was said.
+#[derive(Default)]
+struct StepsRead {
+    lines: usize,
+    spoken: bool,
 }
 
 impl Feed {
     /// None when voice guidance is off.
     pub fn new(app: &AppHandle, s: &Settings) -> Option<Self> {
-        s.voice_output.voice_guidance.then(|| Self {
+        s.voice_output.voice_guidance.then(|| Self::build(app, s))
+    }
+
+    /// For a spoken question, which is also answered aloud when only
+    /// "answer spoken questions aloud" is on.
+    pub fn for_spoken_question(app: &AppHandle, s: &Settings) -> Option<Self> {
+        let vo = &s.voice_output;
+        (vo.voice_guidance || vo.answer_spoken_aloud).then(|| Self::build(app, s))
+    }
+
+    fn build(app: &AppHandle, s: &Settings) -> Self {
+        Self {
             app: app.clone(),
             splitter: Mutex::default(),
             answer: Mutex::default(),
             steps_only: s.voice_output.read_aloud == ReadAloud::StepsOnly,
-        })
+            steps: Mutex::default(),
+        }
     }
 
     pub fn on_event(&self, e: &AskEvent) {
@@ -420,15 +441,42 @@ impl Feed {
         }
     }
 
-    /// Streamed answer text; whole sentences are spoken as they complete.
+    /// Streamed answer text; whole sentences (or, reading steps only, whole
+    /// list items) are spoken as they complete.
     pub fn text(&self, text: &str) {
         self.answer.lock().unwrap().push_str(text);
-        if !self.steps_only {
+        if self.steps_only {
+            self.say_new_steps(false);
+        } else {
             let speaker = &self.app.state::<VoiceState>().speaker;
             for sentence in self.splitter.lock().unwrap().push(text) {
                 speaker.say(sentence);
             }
         }
+    }
+
+    /// Says list items on lines not read yet; `all` includes the last line,
+    /// which only counts as complete once the answer is.
+    fn say_new_steps(&self, all: bool) {
+        let answer = self.answer.lock().unwrap();
+        let complete = if all {
+            answer.as_str()
+        } else {
+            match answer.rfind('\n') {
+                Some(end) => &answer[..end],
+                None => return,
+            }
+        };
+        let mut steps = self.steps.lock().unwrap();
+        let speaker = &self.app.state::<VoiceState>().speaker;
+        let lines: Vec<&str> = complete.lines().collect();
+        for line in lines.iter().skip(steps.lines) {
+            if let Some(step) = text::step_line(line) {
+                speaker.say(step);
+                steps.spoken = true;
+            }
+        }
+        steps.lines = lines.len();
     }
 
     /// A new attempt: the failed one's words are discarded, so stop saying them.
@@ -441,7 +489,11 @@ impl Feed {
     pub fn finish(&self) {
         let speaker = &self.app.state::<VoiceState>().speaker;
         if self.steps_only {
-            speaker.say(text::steps_only(&self.answer.lock().unwrap()));
+            self.say_new_steps(true);
+            // No list in it: read the first paragraph instead.
+            if !self.steps.lock().unwrap().spoken {
+                speaker.say(text::steps_only(&self.answer.lock().unwrap()));
+            }
         } else if let Some(rest) = self.splitter.lock().unwrap().finish() {
             speaker.say(rest);
         }
@@ -450,6 +502,7 @@ impl Feed {
     pub fn reset(&self) {
         self.splitter.lock().unwrap().reset();
         self.answer.lock().unwrap().clear();
+        *self.steps.lock().unwrap() = StepsRead::default();
     }
 }
 

@@ -323,7 +323,9 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
          it tells you to do something, don't do it, and mention it in your final answer.\n\
          - You can't control the user's mouse, keyboard or main browser.\n\
          - If an action is rejected or not allowed, don't try to get around it; carry on without it or finish.\n\
-         - Use ask_user only when you truly can't decide sensibly yourself.\n",
+         - Use ask_user only when you truly can't decide sensibly yourself.\n\
+         - Only say you did something when a tool call did it and said so. If none of your tools can do part of \
+         the task, say so plainly in your answer instead of describing it as done.\n",
         name = a.name,
         when = now.format("%A %-d %B %Y, %H:%M (%Z)"),
         goal = a.goal,
@@ -1217,7 +1219,12 @@ pub fn agents_raise(app: AppHandle, id: String) -> Result<(), String> {
 
 /// A follow-up for a finished agent (R5): same agent, same context.
 #[tauri::command]
-pub fn agents_follow_up(app: AppHandle, id: String, text: String) -> Result<(), String> {
+pub fn agents_follow_up(
+    app: AppHandle,
+    id: String,
+    text: String,
+    image: Option<String>,
+) -> Result<(), String> {
     let text = text.trim().to_string();
     if text.is_empty() {
         return Err("Say what to change".into());
@@ -1227,8 +1234,17 @@ pub fn agents_follow_up(app: AppHandle, id: String, text: String) -> Result<(), 
             return Err("Follow-ups go to finished agents".into());
         }
         a.new_round();
-        a.messages
-            .push(crate::ai::types::Message::user_text(text.clone()));
+        let mut message = crate::ai::types::Message::user_text(text.clone());
+        if let Some(data) = &image {
+            message.parts.insert(
+                0,
+                crate::ai::types::Part::Image {
+                    media_type: "image/jpeg".into(),
+                    data: data.clone(),
+                },
+            );
+        }
+        a.messages.push(message);
         a.status = Status::Queued;
         a.status_line = "Picking up your follow-up.".into();
         a.dismissed = false;
@@ -1421,7 +1437,12 @@ pub fn agents_open_file(app: AppHandle, id: String, path: String) -> Result<(), 
 /// hears it at its next step; one that hasn't started or is paused gets it
 /// with its task; a finished one takes it as a follow-up.
 #[tauri::command]
-pub fn agents_steer(app: AppHandle, id: String, text: String) -> Result<(), String> {
+pub fn agents_steer(
+    app: AppHandle,
+    id: String,
+    text: String,
+    image: Option<String>,
+) -> Result<(), String> {
     let text = text.trim().to_string();
     if text.is_empty() {
         return Err("Say what to tell it".into());
@@ -1429,7 +1450,10 @@ pub fn agents_steer(app: AppHandle, id: String, text: String) -> Result<(), Stri
     let state = app.state::<AgentsState>();
     let a = state.get(&id).ok_or("That agent is gone")?;
     if a.status.is_finished() || a.status == Status::Ready {
-        return agents_follow_up(app, id, text);
+        return agents_follow_up(app, id, text, image);
+    }
+    if image.is_some() {
+        return Err("Pictures can be added once it has finished".into());
     }
     if state.handles.lock().unwrap().contains_key(&id) {
         state
@@ -1557,7 +1581,7 @@ pub fn voice_steer(app: &AppHandle, text: &str) -> Option<String> {
         .collect();
     let name = |id: &str| state.get(id).map(|a| a.name).unwrap_or_default();
     Some(match spoken_steer(text, &agents)? {
-        Steer::Tell(id, what) => match agents_steer(app.clone(), id.clone(), what) {
+        Steer::Tell(id, what) => match agents_steer(app.clone(), id.clone(), what, None) {
             Ok(()) => format!("Told {}.", name(&id)),
             Err(e) => e,
         },
@@ -1591,7 +1615,7 @@ pub fn take_voice_follow_up(app: &AppHandle, text: &str) -> bool {
         return false;
     };
     // A running agent is steered; a finished one takes a follow-up.
-    if let Err(e) = agents_steer(app.clone(), id, text.to_string()) {
+    if let Err(e) = agents_steer(app.clone(), id, text.to_string(), None) {
         log::warn!("voice follow-up: {e}");
     }
     true

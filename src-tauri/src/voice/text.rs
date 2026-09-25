@@ -71,6 +71,12 @@ pub fn steps_only(markdown: &str) -> String {
     speakable(markdown.split("\n\n").next().unwrap_or_default())
 }
 
+/// One line of an answer as a spoken step, if it's a list item.
+pub fn step_line(line: &str) -> Option<String> {
+    let line = line.trim_start();
+    is_list_item(line).then(|| speakable(line))
+}
+
 fn is_list_item(line: &str) -> bool {
     let digits = line.chars().take_while(char::is_ascii_digit).count();
     (digits > 0 && line[digits..].starts_with(". "))
@@ -205,6 +211,13 @@ mod tests {
             steps_only("Spam lives in Junk Email.\n\nMore detail here."),
             "Spam lives in Junk Email."
         );
+    }
+
+    #[test]
+    fn step_lines_are_list_items_only() {
+        assert_eq!(step_line("  1. Open **Settings**").as_deref(), Some("1. Open Settings"));
+        assert!(step_line("- Click Wallpaper").is_some());
+        assert!(step_line("Here's how to do it:").is_none());
     }
 
     #[test]

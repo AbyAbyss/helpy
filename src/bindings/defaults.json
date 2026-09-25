@@ -61,7 +61,8 @@
     "speed": 1.0,
     "volume": 1.0,
     "readAloud": "fullAnswers",
-    "announceAgents": true
+    "announceAgents": true,
+    "answerSpokenAloud": true
   },
   "privacy": {
     "capturePaused": false,

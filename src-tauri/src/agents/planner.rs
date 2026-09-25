@@ -119,7 +119,9 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
     };
     format!(
         "You plan background agents for Helpy, a desktop assistant. Turn the user's request into 1 to {MAX_AGENTS} \
-         agents. Most requests need one agent; use several only when the user asks for separate pieces of work.\n\n\
+         agents. Give each independent task in the request its own agent (\"check my GitHub issues and draft a \
+         Notion page about them\" is two, the second after the first); one task is one agent however many steps it \
+         takes.\n\n\
          Tools agents can have (give each agent only what it needs):\n{list}\n\
          Modes: \"single\" (one agent), \"parallel\" (independent agents at once), \"sequential\" (one after another, in \
          order, each starting with what the one before found). {mode}. In a parallel plan, an agent can wait for \
@@ -224,14 +226,6 @@ fn unapproved(folders: &[String], approved: &[String]) -> Vec<String> {
 }
 
 /// Whether the plan can change anything (files, commands, reminders).
-fn has_side_effects(agents: &[PlanAgent]) -> bool {
-    agents
-        .iter()
-        .flat_map(|a| &a.tools)
-        // Connectors and MCP servers can send, post and change things.
-        .any(|t| !matches!(t.as_str(), "search" | "web"))
-}
-
 /// Plans a request with the planning model, then shows the plan card, or
 /// starts right away when settings allow it. Returns the plan.
 /// The address of the page the request is about, when it's about the page
@@ -340,6 +334,16 @@ fn template_choice(
 /// Shows the plan card for these agents, or starts them when settings
 /// allow it. Used by the planner and by templates.
 #[allow(clippy::too_many_arguments)]
+/// Whether a plan can start without its card: the user chose that, and
+/// nothing in it would ask first (every action its tools can take is set to
+/// Allow or Never), needs a new folder, or needs a connection.
+fn starts_quietly(confirm: ConfirmPlans, plan: &Plan) -> bool {
+    confirm == ConfirmPlans::SideEffectsOnly
+        && plan.asks.is_empty()
+        && plan.new_folders.is_empty()
+        && plan.groups.iter().all(|g| g.connected)
+}
+
 pub fn offer(
     app: &AppHandle,
     s: &Settings,
@@ -379,10 +383,7 @@ pub fn offer(
         started: false,
         agents,
     };
-    let quiet = s.agents.confirm_plans == ConfirmPlans::SideEffectsOnly
-        && !has_side_effects(&plan.agents)
-        && plan.new_folders.is_empty()
-        && plan.groups.iter().all(|g| g.connected);
+    let quiet = starts_quietly(s.agents.confirm_plans, &plan);
     let mut plan = plan;
     plan.started = quiet;
     *app.state::<AgentsState>().plan.lock().unwrap() = Some((plan.clone(), image));
@@ -507,13 +508,14 @@ pub fn agents_plan_cancel(app: AppHandle) {
     close_card(&app);
 }
 
-/// A typed request from the agent panel.
+/// A typed request from the agent panel, with a picture if one was attached
+/// (base64 JPEG).
 #[tauri::command]
-pub async fn agents_plan(app: AppHandle, request: String) -> Result<Plan, String> {
+pub async fn agents_plan(app: AppHandle, request: String, image: Option<String>) -> Result<Plan, String> {
     if request.trim().is_empty() {
         return Err("Describe what the agent should do".into());
     }
-    plan(&app, request.trim(), None).await
+    plan(&app, request.trim(), image).await
 }
 
 #[cfg(test)]
@@ -602,19 +604,29 @@ mod tests {
             &approved,
         );
         assert_eq!(out, [home.join("Desktop").display().to_string()]);
-        assert!(has_side_effects(&[PlanAgent {
-            name: "a".into(),
-            goal: "g".into(),
-            tools: vec!["files".into()],
-            keep_open: false,
-            after: Vec::new(),
-        }]));
-        assert!(!has_side_effects(&[PlanAgent {
-            name: "a".into(),
-            goal: "g".into(),
-            tools: vec!["search".into()],
-            keep_open: false,
-            after: Vec::new(),
-        }]));
+        // A reminders plan whose reminders are set to Allow starts at once;
+        // one that would ask, or when plans always show, gets its card.
+        let group = |asks: Vec<String>| ToolGroup {
+            id: "reminders".into(),
+            label: "Reminders".into(),
+            about: String::new(),
+            asks,
+            connected: true,
+        };
+        let plan = |asks: Vec<String>| Plan {
+            id: "p".into(),
+            request: "remind me".into(),
+            mode: RunMode::Single,
+            new_folders: Vec::new(),
+            asks: asks.clone(),
+            groups: vec![group(asks)],
+            has_image: false,
+            reply: String::new(),
+            started: false,
+            agents: Vec::new(),
+        };
+        assert!(starts_quietly(ConfirmPlans::SideEffectsOnly, &plan(Vec::new())));
+        assert!(!starts_quietly(ConfirmPlans::SideEffectsOnly, &plan(vec!["adding reminders".into()])));
+        assert!(!starts_quietly(ConfirmPlans::Always, &plan(Vec::new())));
     }
 }

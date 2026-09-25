@@ -22,11 +22,15 @@ use crate::ai::types::{ChatRequest, Completion, Message, Part, Role, ToolDef};
 use crate::settings::schema::OnFailure;
 
 /// Tool output kept in the conversation, in characters.
-const MAX_TOOL_OUTPUT: usize = 8_000;
+pub(crate) const MAX_TOOL_OUTPUT: usize = 8_000;
 /// Status lines change at most this often.
 const STATUS_EVERY_MS: i64 = 3_000;
 /// Messages kept verbatim when older work is summarized.
 const KEEP_RECENT: usize = 6;
+/// Tool results sent to the model in full; older, longer ones are cleared.
+const KEEP_RESULTS: usize = 2;
+/// Tool results up to this many characters are always sent in full.
+const SMALL_RESULT: usize = 800;
 pub const ASK_USER: &str = "ask_user";
 /// Hands parts of the work to helper agents and waits for their results.
 pub const DELEGATE: &str = "delegate";
@@ -173,7 +177,7 @@ pub fn canonical(v: &Value) -> String {
     sort(v).to_string()
 }
 
-fn truncate(s: &str, max: usize) -> String {
+pub(crate) fn truncate(s: &str, max: usize) -> String {
     match s.char_indices().nth(max) {
         Some((i, _)) => format!("{}\n[… {} more characters cut]", &s[..i], s.len() - i),
         None => s.to_string(),
@@ -390,7 +394,7 @@ impl Run<'_> {
         ChatRequest {
             model: String::new(),
             system: self.env.system(agent),
-            messages: agent.messages.clone(),
+            messages: clear_stale_results(&agent.messages),
             tools,
             max_tokens: self.lim.max_response_tokens,
             temperature: self.lim.temperature,
@@ -920,9 +924,72 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
     }
 }
 
+/// The conversation as sent to the model: the latest tool results in full,
+/// older long ones replaced by a note, since the agent has already used them
+/// and they would otherwise be paid for again on every step. The stored
+/// history keeps everything.
+pub(crate) fn clear_stale_results(messages: &[Message]) -> Vec<Message> {
+    let mut out = messages.to_vec();
+    let mut seen = 0;
+    for m in out.iter_mut().rev() {
+        for p in m.parts.iter_mut().rev() {
+            let Part::ToolResult { name, parts, .. } = p else { continue };
+            seen += 1;
+            let size: usize = parts
+                .iter()
+                .map(|p| match p {
+                    Part::Text(t) => t.len(),
+                    _ => SMALL_RESULT + 1,
+                })
+                .sum();
+            if seen > KEEP_RESULTS && size > SMALL_RESULT {
+                *parts = vec![Part::Text(format!(
+                    "[Earlier result of {name} ({size} characters), cleared to save space. Call it again if you \
+                     need it.]"
+                ))];
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stale_tool_results_are_cleared_in_requests_only() {
+        let result = |id: &str, text: &str| Message {
+            role: Role::User,
+            parts: vec![Part::ToolResult {
+                id: id.into(),
+                name: "notion_read".into(),
+                parts: vec![Part::Text(text.into())],
+                is_error: false,
+            }],
+        };
+        let big = "x".repeat(5000);
+        let history = vec![
+            Message::user_text("goal"),
+            result("1", &big),
+            result("2", "short"),
+            result("3", &big),
+            result("4", &big),
+        ];
+        let sent = clear_stale_results(&history);
+        let text = |m: &Message| match &m.parts[0] {
+            Part::ToolResult { parts, .. } => match &parts[0] {
+                Part::Text(t) => t.clone(),
+                _ => String::new(),
+            },
+            _ => String::new(),
+        };
+        assert!(text(&sent[1]).starts_with("[Earlier result of notion_read (5000 characters)"));
+        assert_eq!(text(&sent[2]), "short");
+        assert_eq!(text(&sent[3]), big);
+        assert_eq!(text(&sent[4]), big);
+        assert_eq!(text(&history[1]), big);
+    }
     use crate::ai::types::{StopReason, Usage};
     use serde_json::json;
     use std::collections::VecDeque;

@@ -33,11 +33,14 @@ pub fn body(req: &ChatRequest) -> Value {
         })
         .collect();
     // Sampling parameters are left out: current Claude models reject them.
+    // Automatic prompt caching: the unchanged start of a conversation (system,
+    // tools, earlier turns) is read from cache on the next call.
     let mut body = json!({
         "model": req.model,
         "max_tokens": req.max_tokens,
         "stream": true,
         "messages": messages,
+        "cache_control": { "type": "ephemeral" },
     });
     if !req.system.is_empty() {
         body["system"] = json!(req.system);

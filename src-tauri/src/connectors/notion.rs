@@ -2,9 +2,11 @@
 //! internal integration's token.
 
 use futures_util::future::BoxFuture;
+use reqwest::Method;
 use serde_json::{json, Value};
 
 use super::api::{arg, done, limit, Api, ApiResult};
+use super::notion_blocks::blocks;
 use super::google::cut;
 use super::oauth::{ClientAuth, Tokens};
 use super::{Action, Connector, OAuthSpec, TokenHelp};
@@ -16,6 +18,15 @@ const API: &str = "https://api.notion.com/v1";
 const VERSION: &str = "2025-09-03";
 /// Blocks read from one page, nested ones included.
 const MAX_BLOCKS: usize = 300;
+/// Blocks Notion takes in one request.
+const BATCH: usize = 100;
+/// How agents should write text for Notion.
+macro_rules! markdown {
+    () => {
+        "Markdown: # headings, - bullets, 1. numbered, - [ ] to-dos, > quotes, ``` code, | tables |, **bold**, \
+         *italic*, `code`, [links](url). It becomes Notion's own blocks and styles."
+    };
+}
 
 pub struct Notion;
 
@@ -113,17 +124,42 @@ fn property_text(p: &Value) -> String {
     }
 }
 
-/// Text as paragraph blocks (Notion caps one text run at 2000 characters).
-fn paragraphs(text: &str) -> Vec<Value> {
-    text.split("\n\n")
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .flat_map(|p| {
-            let chars: Vec<char> = p.chars().collect();
-            chars.chunks(2000).map(|c| c.iter().collect::<String>()).collect::<Vec<_>>()
-        })
-        .map(|p| json!({ "object": "block", "type": "paragraph", "paragraph": { "rich_text": [{ "type": "text", "text": { "content": p } }] } }))
-        .collect()
+/// Adds blocks to the end of a page or block, a batch at a time.
+async fn append_blocks(api: &Api, id: &str, mut list: Vec<Value>) -> ApiResult<()> {
+    while !list.is_empty() {
+        let rest = list.split_off(list.len().min(BATCH));
+        api.patch(&format!("{API}/blocks/{id}/children"), &json!({ "children": list }))
+            .await?;
+        list = rest;
+    }
+    Ok(())
+}
+
+/// Deletes a page's content, keeping its sub-pages and databases.
+async fn clear(api: &Api, id: &str) -> ApiResult<usize> {
+    let mut ids = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let mut q = vec![("page_size", "100".to_string())];
+        if let Some(c) = &cursor {
+            q.push(("start_cursor", c.clone()));
+        }
+        let list = api.get(&format!("{API}/blocks/{id}/children"), &q).await?;
+        for b in list["results"].as_array().into_iter().flatten() {
+            if !matches!(b["type"].as_str(), Some("child_page" | "child_database")) {
+                ids.extend(b["id"].as_str().map(String::from));
+            }
+        }
+        cursor = list["next_cursor"].as_str().map(String::from);
+        if cursor.is_none() {
+            break;
+        }
+    }
+    for b in &ids {
+        api.send(Method::DELETE, &format!("{API}/blocks/{b}"), &[], None)
+            .await?;
+    }
+    Ok(ids.len())
 }
 
 impl Notion {
@@ -310,7 +346,7 @@ impl Connector for Notion {
             ),
             Action::write(
                 "create_page",
-                "Create a page inside another page. Paragraphs are separated by blank lines.",
+                concat!("Create a page inside another page. The text is ", markdown!()),
                 json!({"parent_id": {"type": "string", "description": "Id of the page to put it in"}, "title": {"type": "string"}, "text": {"type": "string"}}),
                 &["parent_id", "title"],
                 Rule::Ask,
@@ -318,7 +354,19 @@ impl Connector for Notion {
             ),
             Action::write(
                 "append",
-                "Add text to the end of a page.",
+                concat!("Add text to the end of a page, keeping what's there. The text is ", markdown!()),
+                json!({"id": {"type": "string"}, "text": {"type": "string"}}),
+                &["id", "text"],
+                Rule::Ask,
+                &["text"],
+            ),
+            Action::write(
+                "replace",
+                concat!(
+                    "Replace a page's content with new text, to rewrite, reformat or restructure it. Its title, \
+                     sub-pages and databases stay. Read the page first. The text is ",
+                    markdown!()
+                ),
                 json!({"id": {"type": "string"}, "text": {"type": "string"}}),
                 &["id", "text"],
                 Rule::Ask,
@@ -336,6 +384,7 @@ impl Connector for Notion {
                 ),
                 text,
             ),
+            "replace" => ("Replace a Notion page's content".into(), text),
             _ => ("Add text to a Notion page".into(), text),
         }
     }
@@ -364,24 +413,42 @@ impl Connector for Notion {
                 "read" => self.read(api, args).await,
                 "query_database" => self.query(api, args).await,
                 "create_page" => async {
+                    let mut content = blocks(args["text"].as_str().unwrap_or(""));
+                    let rest = content.split_off(content.len().min(BATCH));
                     let page = api
                         .post(
                             &format!("{API}/pages"),
                             &json!({
                                 "parent": { "page_id": arg(args, "parent_id")? },
                                 "properties": { "title": { "title": [{ "text": { "content": arg(args, "title")? } }] } },
-                                "children": paragraphs(args["text"].as_str().unwrap_or("")),
+                                "children": content,
                             }),
                         )
                         .await?;
-                    Ok(format!("Created the page: {}", page["url"].as_str().unwrap_or("")))
+                    if let Some(id) = page["id"].as_str() {
+                        append_blocks(api, id, rest).await?;
+                    }
+                    Ok(format!(
+                        "Created the page (id {}): {}",
+                        page["id"].as_str().unwrap_or(""),
+                        page["url"].as_str().unwrap_or("")
+                    ))
                 }
                 .await,
                 "append" => async {
+                    let list = blocks(arg(args, "text")?);
+                    let n = list.len();
+                    append_blocks(api, arg(args, "id")?, list).await?;
+                    Ok(format!("Added {n} blocks to the end of the page."))
+                }
+                .await,
+                "replace" => async {
                     let id = arg(args, "id")?;
-                    api.patch(&format!("{API}/blocks/{id}/children"), &json!({ "children": paragraphs(arg(args, "text")?) }))
-                        .await?;
-                    Ok("Added the text to the page.".to_string())
+                    let list = blocks(arg(args, "text")?);
+                    let n = list.len();
+                    let removed = clear(api, id).await?;
+                    append_blocks(api, id, list).await?;
+                    Ok(format!("Replaced the page's content: removed {removed} blocks, wrote {n}."))
                 }
                 .await,
                 other => Err(ToolOutcome::Permanent(format!("Notion has no action {other}."))),
@@ -427,14 +494,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn splits_text_into_paragraph_blocks() {
-        let long = "x".repeat(4500);
-        let blocks = paragraphs(&format!("one\n\n\n\ntwo\n\n{long}"));
-        assert_eq!(blocks.len(), 5);
-        assert_eq!(
-            blocks[1]["paragraph"]["rich_text"][0]["text"]["content"],
-            "two"
-        );
-    }
 }

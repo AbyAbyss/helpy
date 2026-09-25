@@ -2,7 +2,7 @@ import type { AskAction } from "../bindings/AskAction";
 import type { AskEvent } from "../bindings/AskEvent";
 
 export type Item =
-  | { kind: "user"; text: string; voice: boolean }
+  | { kind: "user"; text: string; voice: boolean; images?: string[] }
   /** `final` once its model call finished; a retry discards non-final text. */
   | { kind: "assistant"; text: string; final: boolean }
   | { kind: "screen"; thumbnail: string; monitor: string }
@@ -24,7 +24,7 @@ function seconds(ms: number) {
 export function apply(items: Item[], e: AskEvent): Item[] {
   switch (e.type) {
     case "question":
-      return [...(e.fresh ? [] : items), { kind: "user", text: e.text, voice: e.voice }];
+      return [...(e.fresh ? [] : items), { kind: "user", text: e.text, voice: e.voice, ...(e.images.length ? { images: e.images } : {}) }];
     case "started":
       return items;
     case "text": {

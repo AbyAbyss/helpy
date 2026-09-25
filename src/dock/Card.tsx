@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Markdown from "react-markdown";
 import type { AgentView } from "../bindings/AgentView";
+import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api } from "../lib/ipc";
 import { AgentFiles } from "./Files";
 import { duration, lastCommand, spend, STATUS_LABEL, tone } from "./dockState";
@@ -30,7 +31,8 @@ export function Card(props: {
       agent={a}
       inset={props.merged}
       placeholder={a.keepOpen ? "What should change?" : "Ask a follow-up…"}
-      onSend={(text) => api.agentFollowUp(a.id, text)}
+      pictures
+      onSend={(text, image) => api.agentFollowUp(a.id, text, image)}
       onVoice={() => api.agentVoiceFollowUp(a.id)}
       onPin={props.onPin}
     />
@@ -215,50 +217,59 @@ function FollowBar(props: {
   agent: AgentView;
   inset: boolean;
   placeholder: string;
-  onSend: (text: string) => void;
+  /** Pictures can go with the message (follow-ups to finished agents). */
+  pictures?: boolean;
+  onSend: (text: string, image?: string) => void;
   onVoice?: () => void;
   onPin: (on: boolean) => void;
 }) {
   const { agent: a, onPin } = props;
   const [text, setText] = useState("");
   const [sent, setSent] = useState(0);
+  const attach = useAttachments(1);
   const send = () => {
     if (!text.trim()) return;
-    props.onSend(text.trim());
+    props.onSend(text.trim(), attach.images[0]);
     setText("");
+    attach.clear();
     setSent((n) => n + 1);
     onPin(false);
   };
   return (
-    <form
-      className={`followbar card--${tone(a.status)}${props.inset ? " followbar--inset" : ""}`}
-      onSubmit={(e) => {
-        e.preventDefault();
-        send();
-      }}
-    >
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={props.placeholder}
-        onFocus={() => onPin(true)}
-        onBlur={() => onPin(false)}
-        onKeyDown={(e) => e.key === "Escape" && (e.currentTarget.blur(), onPin(false))}
-      />
-      {props.onVoice && (
-        <button type="button" className="round" aria-label="Follow up by voice" title="Follow up by voice" onClick={props.onVoice}>
+    <>
+      <AttachmentStrip images={attach.images} onRemove={attach.remove} />
+      <form
+        className={`followbar card--${tone(a.status)}${props.inset ? " followbar--inset" : ""}`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        {props.pictures && <AttachButton className="round" onOpen={() => onPin(true)} onFiles={(f) => attach.add(f)} />}
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onPaste={props.pictures ? attach.onPaste : undefined}
+          placeholder={props.placeholder}
+          onFocus={() => onPin(true)}
+          onBlur={() => onPin(false)}
+          onKeyDown={(e) => e.key === "Escape" && (e.currentTarget.blur(), onPin(false))}
+        />
+        {props.onVoice && (
+          <button type="button" className="round" aria-label="Follow up by voice" title="Follow up by voice" onClick={props.onVoice}>
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+              <rect x="7.5" y="3" width="5" height="9" rx="2.5" />
+              <path d="M5 10a5 5 0 0 0 10 0M10 15v2.5" />
+            </svg>
+          </button>
+        )}
+        <button key={sent} type="submit" className="round round--send" aria-label="Send" disabled={!text.trim()}>
           <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-            <rect x="7.5" y="3" width="5" height="9" rx="2.5" />
-            <path d="M5 10a5 5 0 0 0 10 0M10 15v2.5" />
+            <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />
           </svg>
         </button>
-      )}
-      <button key={sent} type="submit" className="round round--send" aria-label="Send" disabled={!text.trim()}>
-        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-          <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />
-        </svg>
-      </button>
-    </form>
+      </form>
+    </>
   );
 }
 

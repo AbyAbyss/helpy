@@ -18,4 +18,8 @@ speed: number,
 /**
  * 0 to 1.
  */
-volume: number, readAloud: ReadAloud, announceAgents: boolean, };
+volume: number, readAloud: ReadAloud, announceAgents: boolean, 
+/**
+ * A spoken question gets a spoken answer, even with voice guidance off.
+ */
+answerSpokenAloud: boolean, };

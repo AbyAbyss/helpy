@@ -10,6 +10,7 @@ pub mod github;
 pub mod google;
 pub mod microsoft;
 pub mod notion;
+mod notion_blocks;
 pub mod oauth;
 pub mod slack;
 

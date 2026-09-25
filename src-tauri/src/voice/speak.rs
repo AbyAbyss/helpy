@@ -1,6 +1,8 @@
 //! Speaking text aloud: a queue of sentences played one after another by the
-//! chosen engine. `stop()` silences everything at once, including queued
-//! sentences, by bumping a generation counter the worker checks.
+//! chosen engine. Audio is made ahead on one thread and played on another,
+//! so the next sentence is ready when the current one ends. `stop()` silences
+//! everything at once, including queued sentences, by bumping a generation
+//! counter both threads check.
 
 use std::num::NonZero;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -106,39 +108,110 @@ pub fn system_voices() -> Result<Vec<SystemVoice>, String> {
 }
 
 struct Worker {
-    app: AppHandle,
     generation: Arc<AtomicU64>,
     sink: Option<rodio::MixerDeviceSink>,
 }
 
+/// A sentence ready to play.
+enum Job {
+    /// The system voice speaks it itself.
+    System(u64, String),
+    Audio {
+        generation: u64,
+        samples: Vec<f32>,
+        rate: u32,
+    },
+    /// Nothing to play (stopped, or making the audio failed).
+    Skip,
+}
+
+/// Makes audio for queued sentences as soon as they arrive, while the player
+/// thread plays the ones before.
 fn worker(
     app: AppHandle,
     rx: Receiver<(u64, String)>,
     generation: Arc<AtomicU64>,
     pending: Arc<AtomicUsize>,
 ) {
+    let (jobs, queue) = mpsc::channel();
+    let last_error = Arc::new(AtomicU64::new(u64::MAX));
+    {
+        let (app, generation, last_error) = (app.clone(), generation.clone(), last_error.clone());
+        thread::Builder::new()
+            .name("helpy-speech-play".into())
+            .spawn(move || player(app, queue, generation, pending, last_error))
+            .expect("spawn speech player");
+    }
+    while let Ok((gen, text)) = rx.recv() {
+        let job = if gen != generation.load(Ordering::SeqCst) {
+            Job::Skip
+        } else {
+            let settings = app.state::<SettingsStore>().get();
+            match synthesize(&app, &settings, &text) {
+                Ok(Some((samples, rate))) => Job::Audio {
+                    generation: gen,
+                    samples,
+                    rate,
+                },
+                Ok(None) => Job::System(gen, text),
+                Err(e) => {
+                    report(&app, &last_error, gen, e);
+                    Job::Skip
+                }
+            }
+        };
+        if jobs.send(job).is_err() {
+            break;
+        }
+    }
+}
+
+/// One message per interruption, not one per sentence.
+fn report(app: &AppHandle, last_error: &AtomicU64, gen: u64, e: String) {
+    if last_error.swap(gen, Ordering::SeqCst) != gen {
+        log::warn!("speech failed: {e}");
+        let _ = app.emit(SPEAK_ERROR_EVENT, e);
+    }
+}
+
+fn player(
+    app: AppHandle,
+    queue: Receiver<Job>,
+    generation: Arc<AtomicU64>,
+    pending: Arc<AtomicUsize>,
+    last_error: Arc<AtomicU64>,
+) {
     let mut w = Worker {
-        app: app.clone(),
         generation,
         sink: None,
     };
-    let mut last_error_generation = u64::MAX;
     let mut speaking = false;
-    while let Ok((gen, text)) = rx.recv() {
-        if gen == w.generation.load(Ordering::SeqCst) {
-            if !speaking {
-                speaking = true;
-                let _ = app.emit(SPEAKING_EVENT, true);
-            }
-            let settings = app.state::<SettingsStore>().get();
-            if let Err(e) = w.speak(&settings, gen, &text) {
-                // One message per interruption, not one per sentence.
-                if gen != last_error_generation {
-                    last_error_generation = gen;
-                    log::warn!("speech failed: {e}");
-                    let _ = app.emit(SPEAK_ERROR_EVENT, e);
+    while let Ok(job) = queue.recv() {
+        let (gen, result) = match job {
+            Job::System(gen, text) if !w.cancelled(gen) => {
+                if !speaking {
+                    speaking = true;
+                    let _ = app.emit(SPEAKING_EVENT, true);
                 }
+                let settings = app.state::<SettingsStore>().get();
+                (gen, w.speak_system(&settings, gen, &text))
             }
+            Job::Audio {
+                generation: gen,
+                samples,
+                rate,
+            } if !w.cancelled(gen) => {
+                if !speaking {
+                    speaking = true;
+                    let _ = app.emit(SPEAKING_EVENT, true);
+                }
+                let volume = app.state::<SettingsStore>().get().voice_output.volume;
+                (gen, w.play(samples, rate, volume, gen))
+            }
+            _ => (0, Ok(())),
+        };
+        if let Err(e) = result {
+            report(&app, &last_error, gen, e);
         }
         if pending.fetch_sub(1, Ordering::SeqCst) == 1 && speaking {
             speaking = false;
@@ -147,33 +220,28 @@ fn worker(
     }
 }
 
+/// Audio for one sentence, or None when the system voice speaks it itself.
+fn synthesize(
+    app: &AppHandle,
+    s: &Settings,
+    text: &str,
+) -> Result<Option<(Vec<f32>, u32)>, String> {
+    let vo = &s.voice_output;
+    match vo.engine {
+        TtsEngine::System => Ok(None),
+        // Piper can be chosen on a system where it no longer runs (macOS).
+        TtsEngine::Piper if !piper::available() => Ok(None),
+        TtsEngine::Piper => piper::synthesize(app, &vo.piper_voice, text, vo.speed).map(Some),
+        // Offline mode keeps speech on this computer: the system voice
+        // stands in for a cloud one.
+        TtsEngine::OpenAi if s.privacy.offline && !local_voice(s) => Ok(None),
+        TtsEngine::OpenAi => tauri::async_runtime::block_on(openai_speech(app, s, text)).map(Some),
+    }
+}
+
 impl Worker {
     fn cancelled(&self, gen: u64) -> bool {
         self.generation.load(Ordering::SeqCst) != gen
-    }
-
-    fn speak(&mut self, s: &Settings, gen: u64, text: &str) -> Result<(), String> {
-        let vo = &s.voice_output;
-        match vo.engine {
-            TtsEngine::System => self.speak_system(s, gen, text),
-            // Piper can be chosen on a system where it no longer runs (macOS).
-            TtsEngine::Piper if !piper::available() => self.speak_system(s, gen, text),
-            TtsEngine::Piper => {
-                let (samples, rate) =
-                    piper::synthesize(&self.app, &vo.piper_voice, text, vo.speed)?;
-                self.play(samples, rate, vo.volume, gen)
-            }
-            // Offline mode keeps speech on this computer: the system voice
-            // stands in for a cloud one.
-            TtsEngine::OpenAi if s.privacy.offline && !local_voice(s) => {
-                self.speak_system(s, gen, text)
-            }
-            TtsEngine::OpenAi => {
-                let (samples, rate) =
-                    tauri::async_runtime::block_on(openai_speech(&self.app, s, text))?;
-                self.play(samples, rate, vo.volume, gen)
-            }
-        }
     }
 
     fn speak_system(&mut self, s: &Settings, gen: u64, text: &str) -> Result<(), String> {
