@@ -862,8 +862,15 @@ pub async fn connectors_test(app: AppHandle, id: String) -> Result<String, Strin
 }
 
 #[tauri::command]
-pub fn connectors_set_app_secret(provider: String, secret: String) -> Result<(), String> {
-    secrets::set_service(&format!("oauthapp:{provider}"), &secret).map_err(|e| e.message)
+pub fn connectors_set_app_secret(
+    app: AppHandle,
+    provider: String,
+    secret: String,
+) -> Result<(), String> {
+    secrets::set_service(&format!("oauthapp:{provider}"), &secret).map_err(|e| e.message)?;
+    // The settings page shows "Set up" once the list says the secret is there.
+    let _ = app.emit(CHANGED_EVENT, ());
+    Ok(())
 }
 
 #[cfg(test)]
