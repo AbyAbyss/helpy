@@ -166,6 +166,8 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
         ));
     }
 
+    validate_mcp(&s.connectors.mcp, &mut errors);
+
     if s.circle.translate_to == "auto" || !is_language_tag(&s.circle.translate_to) {
         errors.push(FieldError::new(
             "circle.translateTo",
@@ -396,6 +398,65 @@ fn describe(r: &super::schema::ModelRef) -> String {
 fn is_http_url(s: &str) -> bool {
     reqwest::Url::parse(s)
         .is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.host().is_some())
+}
+
+fn validate_mcp(servers: &[crate::settings::schema::McpServer], errors: &mut Vec<FieldError>) {
+    use crate::settings::schema::McpTransport;
+    let path = "connectors.mcp";
+    let mut ids: Vec<&str> = Vec::new();
+    for m in servers {
+        let name = if m.name.trim().is_empty() {
+            m.id.as_str()
+        } else {
+            m.name.as_str()
+        };
+        if m.id.trim().is_empty() || ids.contains(&m.id.as_str()) {
+            errors.push(FieldError::new(
+                path,
+                format!("{name}: every MCP server needs its own id"),
+            ));
+        }
+        ids.push(&m.id);
+        if m.name.trim().is_empty() {
+            errors.push(FieldError::new(path, "Every MCP server needs a name"));
+        }
+        match m.transport {
+            McpTransport::Stdio if m.command.trim().is_empty() => {
+                errors.push(FieldError::new(
+                    path,
+                    format!("{name}: give the command that starts it"),
+                ));
+            }
+            McpTransport::Http if !is_http_url(&m.url) => {
+                errors.push(FieldError::new(
+                    path,
+                    format!("{name}: the address must start with http:// or https://"),
+                ));
+            }
+            _ => {}
+        }
+        let token = |k: &str| {
+            !k.is_empty()
+                && k.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_!#$%&'*+.^`|~".contains(&b))
+        };
+        for h in &m.headers {
+            if !token(&h.key) {
+                errors.push(FieldError::new(
+                    path,
+                    format!("{name}: \"{}\" isn't a valid header name", h.key),
+                ));
+            }
+        }
+        for e in &m.env {
+            if e.key.trim().is_empty() || e.key.contains('=') {
+                errors.push(FieldError::new(
+                    path,
+                    format!("{name}: \"{}\" isn't a valid variable name", e.key),
+                ));
+            }
+        }
+    }
 }
 
 fn is_hex_color(c: &str) -> bool {

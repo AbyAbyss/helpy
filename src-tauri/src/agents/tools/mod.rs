@@ -35,6 +35,23 @@ pub struct ToolGroup {
     pub about: String,
     /// Actions in it that may wait for the user's OK, for the plan card.
     pub asks: Vec<String>,
+    /// False for a connector that isn't connected yet: the plan card offers
+    /// to connect it.
+    pub connected: bool,
+}
+
+/// Tools that live outside this module: connectors and MCP servers. Their
+/// actions go through the same gate as everything else.
+pub trait External: Send + Sync {
+    fn groups(&self) -> Vec<ToolGroup>;
+    fn defs(&self, groups: &[String]) -> Vec<ToolDef>;
+    /// None when the tool isn't one of its own.
+    fn gate(&self, groups: &[String], tool: &str, args: &Value) -> Option<Gate>;
+    fn run<'a>(
+        &'a self,
+        tool: &'a str,
+        args: &'a Value,
+    ) -> futures_util::future::BoxFuture<'a, Option<ToolOutcome>>;
 }
 
 fn rule_asks(rule: Rule, what: &str) -> Option<String> {
@@ -51,6 +68,7 @@ pub fn groups(a: &Agents) -> Vec<ToolGroup> {
                 label: label.into(),
                 about: about.into(),
                 asks: asks.into_iter().flatten().collect(),
+                connected: true,
             });
         }
     };
@@ -231,10 +249,28 @@ pub struct Toolbox {
     pub search: Box<dyn search::SearchAdapter>,
     /// Where commands run and builder projects go.
     pub projects: PathBuf,
+    /// Connectors and MCP servers.
+    pub external: Option<std::sync::Arc<dyn External>>,
 }
 
 impl Toolbox {
+    /// Built-in tool definitions plus those of connectors and MCP servers.
+    pub fn defs(&self, groups: &[String]) -> Vec<ToolDef> {
+        let mut out = defs(groups);
+        if let Some(x) = &self.external {
+            out.extend(x.defs(groups));
+        }
+        out
+    }
+
     pub fn gate(&self, groups: &[String], tool: &str, args: &Value) -> Gate {
+        if let Some(gate) = self
+            .external
+            .as_ref()
+            .and_then(|x| x.gate(groups, tool, args))
+        {
+            return gate;
+        }
         let Some(group) = group_of(tool) else {
             return Gate::Never(format!("there's no tool called {tool}."));
         };
@@ -244,6 +280,17 @@ impl Toolbox {
         let rule = |rule: Rule, kind: ActionKind, summary: String, detail: String| match rule {
             Rule::Allow => Gate::Allow,
             Rule::Ask => Gate::Ask {
+                source: match kind {
+                    ActionKind::Reminder => "Reminders".into(),
+                    _ => "Files".into(),
+                },
+                editable: match (kind, tool) {
+                    (ActionKind::Reminder, _) => ["title", "when", "start", "notes"]
+                        .map(String::from)
+                        .to_vec(),
+                    (_, "write_file") => vec!["content".into()],
+                    _ => Vec::new(),
+                },
                 kind,
                 summary,
                 detail,
@@ -284,8 +331,10 @@ impl Toolbox {
                 Verdict::Run => Gate::Allow,
                 Verdict::Ask => Gate::Ask {
                     kind: ActionKind::Shell,
+                    source: "Commands".into(),
                     summary: "Run a command".into(),
                     detail: s(args, "command").to_string(),
+                    editable: vec!["command".into()],
                 },
                 Verdict::Refuse(why) => Gate::Never(why),
             },
@@ -334,6 +383,11 @@ impl Toolbox {
             },
             Err(e) => ToolOutcome::Permanent(e),
         };
+        if let Some(x) = &self.external {
+            if let Some(outcome) = x.run(tool, args).await {
+                return outcome;
+            }
+        }
         match tool {
             "web_search" => search::run(self.search.as_ref(), &self.http, s(args, "query")).await,
             "fetch_page" => web::fetch(&self.http, s(args, "url")).await,
@@ -428,6 +482,7 @@ mod tests {
             http: web::client(),
             search: search::pick(a.search_engine, None, ""),
             projects: PathBuf::from("/tmp"),
+            external: None,
         }
     }
 

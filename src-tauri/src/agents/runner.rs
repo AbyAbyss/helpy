@@ -54,8 +54,11 @@ pub enum Gate {
     Allow,
     Ask {
         kind: ActionKind,
+        source: String,
         summary: String,
         detail: String,
+        /// Fields of the input the user may change before approving.
+        editable: Vec<String>,
     },
     Never(String),
 }
@@ -489,6 +492,8 @@ impl Run<'_> {
         name: &str,
         args: &Value,
     ) -> Result<(String, bool), Flow> {
+        // The user may edit the input while approving.
+        let mut args = args.clone();
         let now = self.env.now_ms();
         if name == ASK_USER {
             let question = args["question"].as_str().unwrap_or("").to_string();
@@ -517,21 +522,26 @@ impl Run<'_> {
             };
         }
 
-        match self.env.gate(agent, name, args) {
+        match self.env.gate(agent, name, &args) {
             Gate::Never(reason) => {
                 agent.log(now, LogKind::Approval, format!("Not allowed: {reason}"));
                 return Ok((format!("Not allowed: {reason} Don't try this again."), true));
             }
             Gate::Ask {
                 kind,
+                source,
                 summary,
                 detail,
+                editable,
             } => {
                 let pending = Pending::Approval {
                     id: format!("a{now}"),
                     kind,
+                    source,
                     summary: summary.clone(),
                     detail,
+                    args: args.clone(),
+                    editable: editable.clone(),
                 };
                 agent.status_line = format!("Needs your OK: {summary}");
                 match self.wait(agent, pending, Status::Approval).await {
@@ -540,6 +550,19 @@ impl Run<'_> {
                             self.env.now_ms(),
                             LogKind::Approval,
                             format!("Approved: {summary}"),
+                        );
+                    }
+                    Some(Answer::Edit { args: edited }) => {
+                        // Only the fields offered for editing change.
+                        for key in &editable {
+                            if let Some(v) = edited.get(key) {
+                                args[key.as_str()] = v.clone();
+                            }
+                        }
+                        agent.log(
+                            self.env.now_ms(),
+                            LogKind::Approval,
+                            format!("Approved with your changes: {summary}"),
                         );
                     }
                     None => return Err(Flow::Exit),
@@ -573,7 +596,7 @@ impl Run<'_> {
             let outcome = tokio::select! {
                 _ = self.cancel.cancelled() => return Err(Flow::Exit),
                 _ = self.env.sleep(left) => return Err(self.stop(agent, Limit::Time, self.time_message())),
-                o = self.env.run_tool(agent, name, args) => o,
+                o = self.env.run_tool(agent, name, &args) => o,
             };
             match outcome {
                 ToolOutcome::Ok { text, ops } => {
@@ -822,6 +845,7 @@ mod tests {
         answer_ms: i64,
         calls: AtomicI64,
         tool_runs: Mutex<Vec<String>>,
+        tool_args: Mutex<Vec<Value>>,
         saves: AtomicI64,
     }
 
@@ -889,10 +913,11 @@ mod tests {
             &'a self,
             _: &'a Agent,
             tool: &'a str,
-            _: &'a Value,
+            args: &'a Value,
         ) -> BoxFuture<'a, ToolOutcome> {
             Box::pin(async move {
                 self.tool_runs.lock().unwrap().push(tool.to_string());
+                self.tool_args.lock().unwrap().push(args.clone());
                 self.tools
                     .lock()
                     .unwrap()
@@ -1260,8 +1285,10 @@ mod tests {
         *f.gate.lock().unwrap() = Some(|tool| match tool {
             "shell" => Gate::Ask {
                 kind: ActionKind::Shell,
+                source: "Commands".into(),
                 summary: "Run ls".into(),
                 detail: "ls -la".into(),
+                editable: vec!["c".into()],
             },
             "delete_file" => Gate::Never("deleting is turned off.".into()),
             _ => Gate::Allow,
@@ -1276,7 +1303,9 @@ mod tests {
             ],
         );
         *f.answers.lock().unwrap() = vec![
-            Answer::Approve,
+            Answer::Edit {
+                args: json!({"c": "edited", "other": "ignored"}),
+            },
             Answer::Reject {
                 note: Some("not that one".into()),
             },
@@ -1287,6 +1316,8 @@ mod tests {
         assert_eq!(a.status, Status::Done);
         // Only the approved command ran.
         assert_eq!(*f.tool_runs.lock().unwrap(), ["shell"]);
+        // It ran with the user's edit, and only editable fields changed.
+        assert_eq!(f.tool_args.lock().unwrap()[0], json!({"c": "edited"}));
         let said: String = a
             .messages
             .iter()

@@ -11,4 +11,9 @@ about: string,
 /**
  * Actions in it that may wait for the user's OK, for the plan card.
  */
-asks: Array<string>, };
+asks: Array<string>, 
+/**
+ * False for a connector that isn't connected yet: the plan card offers
+ * to connect it.
+ */
+connected: boolean, };

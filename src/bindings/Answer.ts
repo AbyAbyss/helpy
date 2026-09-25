@@ -3,4 +3,4 @@
 /**
  * The user's reply to a Pending.
  */
-export type Answer = { "type": "approve" } | { "type": "reject", note: string | null, } | { "type": "choice", text: string, } | { "type": "retry" } | { "type": "skip" } | { "type": "cancel" };
+export type Answer = { "type": "approve" } | { "type": "edit", args: Record<string, unknown>, } | { "type": "reject", note: string | null, } | { "type": "choice", text: string, } | { "type": "retry" } | { "type": "skip" } | { "type": "cancel" };

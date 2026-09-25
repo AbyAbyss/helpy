@@ -23,6 +23,7 @@ pub struct Settings {
     pub guidance: Guidance,
     pub circle: Circle,
     pub agents: Agents,
+    pub connectors: Connectors,
     pub limits: Limits,
 }
 
@@ -41,6 +42,7 @@ pub const SECTIONS: &[&str] = &[
     "guidance",
     "circle",
     "agents",
+    "connectors",
     "limits",
 ];
 
@@ -889,6 +891,104 @@ impl Default for Agents {
             notifications: true,
             history_days: 30,
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Permission {
+    #[default]
+    ReadOnly,
+    ReadWrite,
+}
+
+/// A built-in connector's settings. Whether it's connected, and as whom,
+/// isn't a setting; tokens live in the keychain.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct ConnectorConfig {
+    pub permission: Permission,
+    /// Per-action overrides of the approval rule, by action name.
+    pub rules: std::collections::BTreeMap<String, Rule>,
+}
+
+/// The user's own OAuth app for a provider (google, microsoft, notion,
+/// slack, github). The client secret, where one is needed, is in the keychain.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct OAuthApp {
+    pub client_id: String,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum McpTransport {
+    /// A local program Helpy starts, speaking MCP over stdin and stdout.
+    #[default]
+    Stdio,
+    /// A server at a URL, speaking Streamable HTTP.
+    Http,
+}
+
+/// An environment variable or HTTP header. Secret values are kept in the
+/// keychain and are empty here.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct KeyValue {
+    pub key: String,
+    pub value: String,
+    pub secret: bool,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct McpServer {
+    /// Stable id; names the server's secrets in the keychain.
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub transport: McpTransport,
+    // Stdio
+    pub command: String,
+    pub args: Vec<String>,
+    pub cwd: String,
+    pub env: Vec<KeyValue>,
+    // HTTP
+    pub url: String,
+    pub headers: Vec<KeyValue>,
+    /// Sign in with OAuth (discovered from the server, as the MCP spec says).
+    pub oauth: bool,
+    /// A pre-registered OAuth client, for servers without dynamic registration.
+    pub oauth_client_id: String,
+    pub oauth_scopes: String,
+    /// Read-only offers only tools the server marks as read-only.
+    pub permission: Permission,
+    /// Per-tool overrides of the approval rule.
+    pub rules: std::collections::BTreeMap<String, Rule>,
+    /// The catalog entry it came from, if any.
+    pub preset: String,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Connectors {
+    /// OAuth apps by provider.
+    pub apps: std::collections::BTreeMap<String, OAuthApp>,
+    /// Built-in connectors by id. Missing means the defaults.
+    pub builtin: std::collections::BTreeMap<String, ConnectorConfig>,
+    pub mcp: Vec<McpServer>,
+}
+
+impl Connectors {
+    pub fn config(&self, id: &str) -> ConnectorConfig {
+        self.builtin.get(id).cloned().unwrap_or_default()
     }
 }
 

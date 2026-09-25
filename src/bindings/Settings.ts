@@ -4,6 +4,7 @@ import type { Ai } from "./Ai";
 import type { AnswerStyle } from "./AnswerStyle";
 import type { Buddy } from "./Buddy";
 import type { Circle } from "./Circle";
+import type { Connectors } from "./Connectors";
 import type { General } from "./General";
 import type { Guidance } from "./Guidance";
 import type { Hotkeys } from "./Hotkeys";
@@ -13,4 +14,4 @@ import type { Profiles } from "./Profiles";
 import type { VoiceInput } from "./VoiceInput";
 import type { VoiceOutput } from "./VoiceOutput";
 
-export type Settings = { general: General, profiles: Profiles, buddy: Buddy, hotkeys: Hotkeys, voiceInput: VoiceInput, voiceOutput: VoiceOutput, privacy: Privacy, ai: Ai, answerStyle: AnswerStyle, guidance: Guidance, circle: Circle, agents: Agents, limits: Limits, };
+export type Settings = { general: General, profiles: Profiles, buddy: Buddy, hotkeys: Hotkeys, voiceInput: VoiceInput, voiceOutput: VoiceOutput, privacy: Privacy, ai: Ai, answerStyle: AnswerStyle, guidance: Guidance, circle: Circle, agents: Agents, connectors: Connectors, limits: Limits, };

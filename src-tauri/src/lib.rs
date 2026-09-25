@@ -3,10 +3,12 @@ mod ai;
 mod buddy;
 mod capture;
 mod circle;
+mod connectors;
 mod cursor;
 mod fullscreen;
 mod guide;
 mod hotkeys;
+mod mcp;
 mod overlay;
 mod platform;
 mod settings;
@@ -33,6 +35,9 @@ pub(crate) fn on_settings_changed(app: &AppHandle, prev: &Settings, next: &Setti
     }
     if prev.general.launch_at_login != next.general.launch_at_login {
         apply_autostart(app, next.general.launch_at_login);
+    }
+    if prev.connectors.mcp != next.connectors.mcp {
+        mcp::sync(app, next);
     }
     tray::sync(app, next);
 }
@@ -75,6 +80,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(hotkeys::Hotkeys::default())
         .manage(overlay::Overlays::default())
         .manage(cursor::CursorShared::default())
@@ -97,6 +103,10 @@ pub fn run() {
 
             app.manage(voice::VoiceState::new(handle.clone()));
             app.manage(agents::AgentsState::load(app.path().app_data_dir()?));
+            app.manage(connectors::ConnectorsState::load(
+                app.path().app_data_dir()?,
+            ));
+            app.manage(mcp::McpState::load(app.path().app_data_dir()?));
             tray::build(&handle, &s)?;
             hotkeys::sync(&handle, &s);
             overlay::sync(&handle);
@@ -190,6 +200,20 @@ pub fn run() {
             agents::planner::agents_plan_current,
             agents::planner::agents_plan_start,
             agents::planner::agents_plan_cancel,
+            connectors::connectors_list,
+            connectors::connectors_connect,
+            connectors::connectors_set_token,
+            connectors::connectors_disconnect,
+            connectors::connectors_test,
+            connectors::connectors_set_app_secret,
+            mcp::mcp_status,
+            mcp::mcp_connect,
+            mcp::mcp_sign_in,
+            mcp::mcp_sign_out,
+            mcp::mcp_set_secret,
+            mcp::mcp_import,
+            mcp::mcp_export,
+            mcp::mcp_catalog,
             voice::voice_input_devices,
             voice::voice_meter_start,
             voice::voice_meter_stop,

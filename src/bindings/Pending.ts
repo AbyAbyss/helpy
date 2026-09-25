@@ -6,10 +6,22 @@ import type { ActionKind } from "./ActionKind";
  */
 export type Pending = { "type": "approval", id: string, kind: ActionKind, 
 /**
+ * What does it: "Files", "Gmail", an MCP server's name.
+ */
+source: string, 
+/**
  * One line: what will happen.
  */
 summary: string, 
 /**
- * Everything: the full command, file list, reminder text.
+ * Everything: the full command, the email, the page content.
  */
-detail: string, } | { "type": "question", id: string, question: string, options: Array<string>, } | { "type": "failure", id: string, message: string, };
+detail: string, 
+/**
+ * The action's input, for editing before approving.
+ */
+args: Record<string, unknown>, 
+/**
+ * Fields of `args` the user may edit.
+ */
+editable: Array<string>, } | { "type": "question", id: string, question: string, options: Array<string>, } | { "type": "failure", id: string, message: string, };

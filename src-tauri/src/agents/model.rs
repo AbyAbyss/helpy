@@ -85,6 +85,8 @@ pub enum ActionKind {
     FileDelete,
     Shell,
     Reminder,
+    /// Something a connector or MCP server does (send, post, create, delete).
+    Connector,
 }
 
 /// Something the agent is waiting on the user for.
@@ -99,10 +101,17 @@ pub enum Pending {
     Approval {
         id: String,
         kind: ActionKind,
+        /// What does it: "Files", "Gmail", an MCP server's name.
+        source: String,
         /// One line: what will happen.
         summary: String,
-        /// Everything: the full command, file list, reminder text.
+        /// Everything: the full command, the email, the page content.
         detail: String,
+        /// The action's input, for editing before approving.
+        #[ts(type = "Record<string, unknown>")]
+        args: serde_json::Value,
+        /// Fields of `args` the user may edit.
+        editable: Vec<String>,
     },
     Question {
         id: String,
@@ -123,8 +132,17 @@ pub enum Pending {
 #[ts(export)]
 pub enum Answer {
     Approve,
-    Reject { note: Option<String> },
-    Choice { text: String },
+    /// Approve with changes to the editable fields.
+    Edit {
+        #[ts(type = "Record<string, unknown>")]
+        args: serde_json::Value,
+    },
+    Reject {
+        note: Option<String>,
+    },
+    Choice {
+        text: String,
+    },
     Retry,
     Skip,
     Cancel,

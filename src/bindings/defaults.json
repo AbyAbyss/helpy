@@ -149,6 +149,11 @@
     "notifications": true,
     "historyDays": 30
   },
+  "connectors": {
+    "apps": {},
+    "builtin": {},
+    "mcp": []
+  },
   "limits": {
     "maxRetries": 3,
     "backoffBaseMs": 2000,

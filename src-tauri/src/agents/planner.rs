@@ -200,7 +200,8 @@ fn has_side_effects(agents: &[PlanAgent]) -> bool {
 /// starts right away when settings allow it. Returns the plan.
 pub async fn plan(app: &AppHandle, request: &str, image: Option<String>) -> Result<Plan, String> {
     let s = app.state::<SettingsStore>().get();
-    let groups = tools::groups(&s.agents);
+    let mut groups = tools::groups(&s.agents);
+    groups.extend(crate::connectors::external(app, &s).groups());
     let models = planning_models(&s.ai)?;
     let mut parts = Vec::new();
     // The planner sees the picture only if its model can.

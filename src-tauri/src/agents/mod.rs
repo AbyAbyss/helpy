@@ -342,6 +342,7 @@ fn toolbox(app: &AppHandle, s: &Settings) -> Toolbox {
         http: state.http.clone(),
         search: tools::search::pick(s.agents.search_engine, brave, &s.agents.searxng_url),
         projects,
+        external: Some(crate::connectors::external(app, s)),
     }
 }
 
@@ -433,7 +434,7 @@ impl Env for AppEnv {
     }
 
     fn tools(&self, agent: &Agent) -> Vec<ToolDef> {
-        tools::defs(&agent.tools)
+        self.toolbox.defs(&agent.tools)
     }
 
     fn save(&self, agent: &Agent) {
