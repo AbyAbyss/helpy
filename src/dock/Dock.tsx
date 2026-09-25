@@ -135,7 +135,8 @@ export function Dock() {
             aria-label={`${a.name}: ${STATUS_LABEL[a.status]}`}
             onMouseEnter={(e) => hover(a.id, e.currentTarget)}
             onFocus={(e) => hover(a.id, e.currentTarget)}
-            onClick={() => api.openAgentPanel(a.id)}
+            // Toggles the card; the card's ↗ button opens the panel.
+            onClick={(e) => (open === a.id ? api.dockCardClose() : hover(a.id, e.currentTarget))}
           >
             <Mark />
             {/* Remounts on every status change, so each change ripples once. */}
