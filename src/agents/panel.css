@@ -1044,3 +1044,21 @@ body {
     transition: none !important;
   }
 }
+
+/* Helpers, indented under the agent that started them. */
+.row--helper {
+  width: calc(100% - 18px);
+  margin-left: 18px;
+}
+
+.row--helper::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 12px;
+  margin-right: -4px;
+  border-left: 1.5px solid var(--line-strong);
+  border-bottom: 1.5px solid var(--line-strong);
+  border-bottom-left-radius: 5px;
+  transform: translateY(-5px);
+}

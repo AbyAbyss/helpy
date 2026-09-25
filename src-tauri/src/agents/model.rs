@@ -231,6 +231,18 @@ pub struct Agent {
     pub keep_open: bool,
     /// Extra context, e.g. what the user circled (a JPEG, base64).
     pub image: Option<String>,
+    /// Agents (ids) this one waits for; it starts with their results.
+    #[serde(default)]
+    pub after: Vec<String>,
+    /// The results it was handed at the start, added to its task.
+    #[serde(default)]
+    pub handoff: Option<String>,
+    /// Set on a helper started by an orchestrating agent (one level only).
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// The parent's tool call that started this helper.
+    #[serde(default)]
+    pub delegation: Option<String>,
 
     pub status: Status,
     pub status_line: String,
@@ -283,6 +295,10 @@ impl Agent {
             tools: Vec::new(),
             keep_open: false,
             image: None,
+            after: Vec::new(),
+            handoff: None,
+            parent: None,
+            delegation: None,
             status: Status::Queued,
             status_line: String::new(),
             status_at: 0,
@@ -362,6 +378,10 @@ pub struct AgentView {
     pub goal: String,
     pub tools: Vec<String>,
     pub keep_open: bool,
+    /// Agents it waits for, by id.
+    pub after: Vec<String>,
+    /// The orchestrating agent, for a helper.
+    pub parent: Option<String>,
     pub status: Status,
     pub status_line: String,
     pub stop: Option<Stop>,
@@ -394,6 +414,8 @@ impl Agent {
             goal: self.goal.clone(),
             tools: self.tools.clone(),
             keep_open: self.keep_open,
+            after: self.after.clone(),
+            parent: self.parent.clone(),
             status: self.status,
             status_line: self.status_line.clone(),
             stop: self.stop.clone(),

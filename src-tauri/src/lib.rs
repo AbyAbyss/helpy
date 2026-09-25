@@ -197,6 +197,7 @@ pub fn run() {
             windows::agents_open_panel,
             windows::open_link,
             agents::agents_export,
+            agents::agents_steer,
             windows::dock_focus,
             agents::planner::agents_plan_current,
             agents::planner::agents_plan_start,

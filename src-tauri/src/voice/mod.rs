@@ -329,6 +329,7 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
         return emit_phase(app, VoicePhase::Idle { message: None });
     }
     if let Some(message) = crate::agents::voice_approval(app, &text)
+        .or_else(|| crate::agents::voice_steer(app, &text))
         .or_else(|| crate::connectors::voice_connect(app, &text))
     {
         return emit_phase(

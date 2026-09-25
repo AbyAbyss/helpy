@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::model::ActionKind;
-use super::runner::{Gate, ToolOutcome, ASK_USER};
+use super::runner::{Gate, ToolOutcome, ASK_USER, DELEGATE};
 use crate::ai::types::ToolDef;
 use crate::settings::schema::{Agents, Rule};
 use files::Files;
@@ -125,8 +125,18 @@ pub fn groups(a: &Agents) -> Vec<ToolGroup> {
             "adding reminders or events",
         )],
     );
+    add(
+        true,
+        "team",
+        "Helpers",
+        "split a big task among up to 5 helper agents that work at the same time and report back (for work with clearly separate parts)",
+        vec![],
+    );
     out
 }
+
+/// Most helpers one agent may start, in all.
+pub const MAX_HELPERS: usize = 5;
 
 fn def(name: &str, description: &str, props: Value, required: &[&str]) -> ToolDef {
     ToolDef {
@@ -146,6 +156,20 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
         json!({ "question": { "type": "string" }, "options": { "type": "array", "items": { "type": "string" }, "description": "Up to 4 short choices, if it's a choice." } }),
         &["question"],
     )];
+    if has("team") {
+        out.push(def(
+            DELEGATE,
+            "Start helper agents for separate parts of your task and wait for their results. They work at the same \
+             time; each gets only the tools you list (from your own). Use it once, for up to 5 parts in all; helpers \
+             can't start helpers.",
+            json!({ "tasks": { "type": "array", "maxItems": MAX_HELPERS, "items": { "type": "object", "properties": {
+                "name": { "type": "string", "description": "One or two words" },
+                "goal": { "type": "string", "description": "A complete, self-contained instruction" },
+                "tools": { "type": "array", "items": { "type": "string" }, "description": "Tool groups, e.g. search, web, files" }
+            }, "required": ["name", "goal"] } } }),
+            &["tasks"],
+        ));
+    }
     if has("search") {
         out.push(def(
             "web_search",
@@ -549,10 +573,10 @@ mod tests {
     fn groups_follow_settings_and_what_this_os_supports() {
         let mut a = Agents::default();
         let ids = |a: &Agents| groups(a).into_iter().map(|g| g.id).collect::<Vec<_>>();
-        assert_eq!(ids(&a), ["search", "web", "files", "shell", "reminders"]);
+        assert_eq!(ids(&a), ["search", "web", "files", "shell", "reminders", "team"]);
         a.tools.fetch = false;
         a.shell_policy = ShellPolicy::Never;
-        assert_eq!(ids(&a), ["search", "files", "reminders"]);
+        assert_eq!(ids(&a), ["search", "files", "reminders", "team"]);
         let files = groups(&a).into_iter().find(|g| g.id == "files").unwrap();
         assert_eq!(files.asks, ["deleting files"]);
         // Calendar events are only offered where the OS has a calendar.

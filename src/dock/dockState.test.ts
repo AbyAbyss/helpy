@@ -10,6 +10,8 @@ const agent = (over: Partial<AgentView>): AgentView => ({
   goal: "g",
   tools: [],
   keepOpen: false,
+  after: [],
+  parent: null,
   status: "running",
   statusLine: "",
   stop: null,

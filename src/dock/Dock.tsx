@@ -331,6 +331,15 @@ function Card(props: { agent: AgentView; line: string | undefined; onPin: (on: b
           onPin={props.onPin}
         />
       )}
+      {working && (
+        <FollowBar
+          agent={a}
+          placeholder="Tell it something…"
+          onSend={(text) => api.agentSteer(a.id, text)}
+          onVoice={() => api.agentVoiceFollowUp(a.id)}
+          onPin={props.onPin}
+        />
+      )}
       {a.pending?.type === "question" && (
         <FollowBar agent={a} placeholder="Or type an answer…" onSend={(text) => api.agentAnswer(a.id, { type: "choice", text })} onPin={props.onPin} />
       )}

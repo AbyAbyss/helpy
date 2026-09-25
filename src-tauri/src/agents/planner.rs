@@ -27,6 +27,9 @@ pub struct PlanAgent {
     pub goal: String,
     pub tools: Vec<String>,
     pub keep_open: bool,
+    /// Names of earlier agents in the plan it waits for.
+    #[serde(default)]
+    pub after: Vec<String>,
 }
 
 /// A plan waiting for the user's go-ahead.
@@ -73,6 +76,8 @@ struct RawAgent {
     tools: Vec<String>,
     #[serde(default)]
     keep_open: bool,
+    #[serde(default)]
+    after: Vec<String>,
 }
 
 pub fn planning_models(ai: &Ai) -> Result<Vec<ModelRef>, String> {
@@ -113,14 +118,17 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          agents. Most requests need one agent; use several only when the user asks for separate pieces of work.\n\n\
          Tools agents can have (give each agent only what it needs):\n{list}\n\
          Modes: \"single\" (one agent), \"parallel\" (independent agents at once), \"sequential\" (one after another, in \
-         order, each can use what earlier ones found). {mode}.\n\n\
+         order, each starting with what the one before found). {mode}. In a parallel plan, an agent can wait for \
+         earlier agents and start with their results: list their names in its \"after\" (e.g. two researchers at once, \
+         then a writer after both). For one big task with clearly separate parts, you may instead give a single agent \
+         the \"team\" tool so it splits the work among helpers itself.\n\n\
          Write each goal as a complete, self-contained instruction with every detail from the request (names, dates, \
          numbers, places, format wanted). Names are one or two words, like \"Research\" or \"Desktop tidy\". Set \
          keepOpen to true for open-ended work the user will want to keep changing, such as building an app or a site.\n\
          If agents must work in folders, list them in \"folders\" as full paths (~ for the home folder); the user's \
          Desktop is ~/Desktop. Builder agents use the projects folder and don't need it listed.\n\n\
          Reply with only a JSON object: {{\"mode\": \"single\", \"agents\": [{{\"name\": \"...\", \"goal\": \"...\", \
-         \"tools\": [\"...\"], \"keepOpen\": false}}], \"folders\": [], \"reply\": \"one short sentence telling the user \
+         \"tools\": [\"...\"], \"keepOpen\": false, \"after\": []}}], \"folders\": [], \"reply\": \"one short sentence telling the user \
          what you set up\"}}"
     )
 }
@@ -157,11 +165,24 @@ pub fn parse(
             .filter(|t| known.contains(&t.as_str()))
             .collect();
         tools.dedup();
+        // Only agents listed before it, so a plan can't wait on itself.
+        let after: Vec<String> = a
+            .after
+            .iter()
+            .map(|n| n.trim())
+            .filter_map(|n| {
+                agents
+                    .iter()
+                    .find(|o| o.name.eq_ignore_ascii_case(n))
+                    .map(|o| o.name.clone())
+            })
+            .collect();
         agents.push(PlanAgent {
             name,
             goal,
             tools,
             keep_open: a.keep_open,
+            after,
         });
     }
     if agents.is_empty() {
@@ -331,10 +352,16 @@ fn start(app: &AppHandle, id: &str, mode: RunMode) -> Result<(), String> {
     } else {
         mode
     };
+    let names: Vec<String> = plan.agents.iter().map(|a| a.name.clone()).collect();
     let agents = plan
         .agents
         .into_iter()
         .map(|a| NewAgent {
+            after: a
+                .after
+                .iter()
+                .filter_map(|n| names.iter().position(|x| x == n))
+                .collect(),
             name: a.name,
             goal: a.goal,
             tools: a.tools,
@@ -455,6 +482,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(mode, RunMode::Sequential);
+        // "after" keeps only earlier agents, so there are no cycles.
+        let (_, agents, _, _) = parse(
+            r#"{"agents": [{"name": "A", "goal": "a", "after": ["B"]}, {"name": "B", "goal": "b", "after": ["a", "Nobody"]}]}"#,
+            &groups(),
+            DefaultRunMode::Auto,
+        )
+        .unwrap();
+        assert!(agents[0].after.is_empty());
+        assert_eq!(agents[1].after, vec!["A"]);
         assert!(parse("I can't do that", &groups(), DefaultRunMode::Auto).is_err());
         assert!(parse(r#"{"agents": []}"#, &groups(), DefaultRunMode::Auto).is_err());
         let many = format!(
@@ -488,13 +524,15 @@ mod tests {
             name: "a".into(),
             goal: "g".into(),
             tools: vec!["files".into()],
-            keep_open: false
+            keep_open: false,
+            after: Vec::new(),
         }]));
         assert!(!has_side_effects(&[PlanAgent {
             name: "a".into(),
             goal: "g".into(),
             tools: vec!["search".into()],
-            keep_open: false
+            keep_open: false,
+            after: Vec::new(),
         }]));
     }
 }

@@ -8,7 +8,15 @@ import type { Stop } from "./Stop";
 /**
  * What the dock, cards and panel show about an agent.
  */
-export type AgentView = { id: string, batch: string, order: number, name: string, goal: string, tools: Array<string>, keepOpen: boolean, status: Status, statusLine: string, stop: Stop | null, result: string | null, suggestions: Array<string>, error: string | null, pending: Pending | null, unseen: boolean, dismissed: boolean, created: number, finished: number | null, activeMs: number, counters: Counters, maxSteps: number, log: Array<LogEntry>, 
+export type AgentView = { id: string, batch: string, order: number, name: string, goal: string, tools: Array<string>, keepOpen: boolean, 
+/**
+ * Agents it waits for, by id.
+ */
+after: Array<string>, 
+/**
+ * The orchestrating agent, for a helper.
+ */
+parent: string | null, status: Status, statusLine: string, stop: Stop | null, result: string | null, suggestions: Array<string>, error: string | null, pending: Pending | null, unseen: boolean, dismissed: boolean, created: number, finished: number | null, activeMs: number, counters: Counters, maxSteps: number, log: Array<LogEntry>, 
 /**
  * File changes that can be undone.
  */

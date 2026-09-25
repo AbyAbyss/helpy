@@ -341,3 +341,8 @@ kbd {
     animation: none;
   }
 }
+
+.tag--after {
+  background: rgba(143, 182, 255, 0.14);
+  color: #9fb6ff;
+}

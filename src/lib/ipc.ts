@@ -154,6 +154,8 @@ export const api = {
   agentRetry: (id: string) => invoke<void>("agents_retry", { id }),
   agentRaise: (id: string) => invoke<void>("agents_raise", { id }),
   agentFollowUp: (id: string, text: string) => invoke<void>("agents_follow_up", { id, text }),
+  /** Tells a working agent something; a finished one takes it as a follow-up. */
+  agentSteer: (id: string, text: string) => invoke<void>("agents_steer", { id, text }),
   agentUndo: (id: string) => invoke<string[]>("agents_undo", { id }),
   agentRename: (id: string, name: string) => invoke<void>("agents_rename", { id, name }),
   agentDismiss: (id: string) => invoke<void>("agents_dismiss", { id }),

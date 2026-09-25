@@ -28,6 +28,8 @@ const STATUS_EVERY_MS: i64 = 3_000;
 /// Messages kept verbatim when older work is summarized.
 const KEEP_RECENT: usize = 6;
 pub const ASK_USER: &str = "ask_user";
+/// Hands parts of the work to helper agents and waits for their results.
+pub const DELEGATE: &str = "delegate";
 
 #[derive(Clone, Debug)]
 pub struct Limits {
@@ -104,6 +106,44 @@ pub trait Env: Sync {
     fn live(&self, agent: &Agent, line: &str);
     fn now_ms(&self) -> i64;
     fn sleep(&self, d: Duration) -> BoxFuture<'static, ()>;
+    /// What the user said to the agent while it works (steering), oldest
+    /// first. Each message is returned once.
+    fn steering(&self, agent: &Agent) -> Vec<String>;
+    /// Starts helper agents for `tasks` (or picks up the ones this call
+    /// already started) and waits for them. The text is their results.
+    fn delegate<'a>(
+        &'a self,
+        agent: &'a Agent,
+        call_id: &'a str,
+        tasks: &'a Value,
+    ) -> BoxFuture<'a, Result<String, String>>;
+}
+
+/// Adds text for the model as the user, joining the last message when it's
+/// already the user's (providers want the roles to alternate).
+fn push_user_text(agent: &mut Agent, text: String) {
+    match agent.messages.last_mut() {
+        Some(m) if m.role == Role::User => m.parts.push(Part::Text(text)),
+        _ => agent.messages.push(Message::user_text(text)),
+    }
+}
+
+/// Tool calls in the last message that never got a result: the agent was
+/// paused or Helpy closed while they ran.
+fn dangling_calls(agent: &Agent) -> Vec<(String, String, Value)> {
+    match agent.messages.last() {
+        Some(m) if m.role == Role::Assistant => m
+            .parts
+            .iter()
+            .filter_map(|p| match p {
+                Part::ToolUse {
+                    id, name, input, ..
+                } => Some((id.clone(), name.clone(), input.clone())),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// FNV-1a: a hash that stays the same across runs, for saved progress checks.
@@ -489,12 +529,29 @@ impl Run<'_> {
     async fn tool(
         &self,
         agent: &mut Agent,
+        call_id: &str,
         name: &str,
         args: &Value,
     ) -> Result<(String, bool), Flow> {
         // The user may edit the input while approving.
         let mut args = args.clone();
         let now = self.env.now_ms();
+        if name == DELEGATE {
+            // Helpers have their own limits; waiting for them doesn't count
+            // toward this agent's time.
+            agent.status_line = "Waiting for its helpers to finish.".into();
+            self.save(agent);
+            let result = tokio::select! {
+                _ = self.cancel.cancelled() => return Err(Flow::Exit),
+                r = self.env.delegate(agent, call_id, &args) => r,
+            };
+            self.waited
+                .fetch_add(self.env.now_ms() - now, Ordering::SeqCst);
+            return Ok(match result {
+                Ok(text) => (text, false),
+                Err(e) => (e, true),
+            });
+        }
         if name == ASK_USER {
             let question = args["question"].as_str().unwrap_or("").to_string();
             let options = args["options"]
@@ -672,12 +729,49 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
             });
         }
         parts.push(Part::Text(agent.goal.clone()));
+        if let Some(h) = &agent.handoff {
+            parts.push(Part::Text(h.clone()));
+        }
         agent.messages.push(Message {
             role: Role::User,
             parts,
         });
     }
     run.save(agent);
+
+    // Calls cut off by a pause or a restart get a result before going on.
+    // Helpers are picked up again; anything else may or may not have
+    // happened, so the agent is told to check.
+    let dangling = dangling_calls(agent);
+    if !dangling.is_empty() {
+        let mut results = Vec::new();
+        for (id, name, args) in dangling {
+            let (text, is_error) = if name == DELEGATE {
+                match run.tool(agent, &id, &name, &args).await {
+                    Ok(r) => r,
+                    Err(_) => return,
+                }
+            } else {
+                (
+                    "This action was interrupted (the agent was paused or Helpy closed) before its result came \
+                     back. It may or may not have happened; check before doing it again."
+                        .to_string(),
+                    true,
+                )
+            };
+            results.push(Part::ToolResult {
+                id,
+                name,
+                parts: vec![Part::Text(text)],
+                is_error,
+            });
+        }
+        agent.messages.push(Message {
+            role: Role::User,
+            parts: results,
+        });
+        run.save(agent);
+    }
 
     loop {
         if cancel.is_cancelled() {
@@ -691,6 +785,13 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
             let msg = format!("Stopped after {} steps, its step limit.", lim.max_steps);
             run.stop(agent, Limit::Steps, msg);
             return;
+        }
+        for said in env.steering(agent) {
+            agent.log(env.now_ms(), LogKind::Note, format!("You said: {said}"));
+            push_user_text(
+                agent,
+                format!("The user says this while you work (follow it): {said}"),
+            );
         }
         match run.compact(agent).await {
             Ok(()) => {}
@@ -781,7 +882,7 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
                 format!("{name} {}", truncate(&canonical(&args), 300)),
             );
 
-            let (output, is_error) = match run.tool(agent, &name, &args).await {
+            let (output, is_error) = match run.tool(agent, &id, &name, &args).await {
                 Ok(r) => r,
                 Err(_) => return,
             };
@@ -847,6 +948,12 @@ mod tests {
         tool_runs: Mutex<Vec<String>>,
         tool_args: Mutex<Vec<Value>>,
         saves: AtomicI64,
+        /// Handed to the agent at its next step.
+        steer: Mutex<Vec<String>>,
+        /// Delegate calls seen: (call id, tasks).
+        delegations: Mutex<Vec<(String, Value)>>,
+        /// How far the clock moves while helpers work.
+        delegate_ms: i64,
     }
 
     fn text(t: &str) -> Result<Completion, ProviderError> {
@@ -965,6 +1072,24 @@ mod tests {
                 if d >= Duration::from_secs(60) {
                     std::future::pending::<()>().await
                 }
+            })
+        }
+        fn steering(&self, _: &Agent) -> Vec<String> {
+            std::mem::take(&mut *self.steer.lock().unwrap())
+        }
+        fn delegate<'a>(
+            &'a self,
+            _: &'a Agent,
+            call_id: &'a str,
+            tasks: &'a Value,
+        ) -> BoxFuture<'a, Result<String, String>> {
+            Box::pin(async move {
+                self.clock.fetch_add(self.delegate_ms, Ordering::SeqCst);
+                self.delegations
+                    .lock()
+                    .unwrap()
+                    .push((call_id.to_string(), tasks.clone()));
+                Ok("## Helper\nFound 3 desks.".to_string())
             })
         }
     }
@@ -1484,5 +1609,112 @@ mod tests {
             ("Done.".into(), vec!["a".into(), "b".into(), "c".into()])
         );
         assert_eq!(split_suggestions("No list"), ("No list".into(), vec![]));
+    }
+
+    fn texts(a: &Agent) -> String {
+        a.messages
+            .iter()
+            .flat_map(|m| m.parts.iter())
+            .filter_map(|p| match p {
+                Part::Text(t) => Some(t.clone()),
+                Part::ToolResult { parts, .. } => parts.iter().find_map(|p| match p {
+                    Part::Text(t) => Some(t.clone()),
+                    _ => None,
+                }),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[tokio::test]
+    async fn helpers_results_come_back_and_their_time_doesnt_count() {
+        // Helpers take 40 minutes; the agent's own limit is 30.
+        let f = Fake {
+            delegate_ms: 40 * 60_000,
+            ..Default::default()
+        };
+        script(
+            &f,
+            vec![
+                tool_call(
+                    "I'm splitting this up.",
+                    DELEGATE,
+                    json!({"tasks": [{"name": "Desks", "goal": "Find desks"}]}),
+                ),
+                text("Here are 3 desks."),
+            ],
+        );
+        let mut a = agent();
+        go(&f, &mut a, &limits()).await;
+        assert_eq!(a.status, Status::Done);
+        assert_eq!(f.delegations.lock().unwrap().len(), 1);
+        assert!(texts(&a).contains("Found 3 desks."));
+    }
+
+    #[tokio::test]
+    async fn steering_reaches_the_agent_at_its_next_step() {
+        let f = Fake::default();
+        script(
+            &f,
+            vec![
+                tool_call("Looking.", "fetch", json!({"u": 1})),
+                text("Done."),
+            ],
+        );
+        f.steer.lock().unwrap().push("Only desks under £300".into());
+        let mut a = agent();
+        go(&f, &mut a, &limits()).await;
+        assert!(texts(&a).contains("Only desks under £300"));
+        assert!(a
+            .log
+            .iter()
+            .any(|l| l.text == "You said: Only desks under £300"));
+        // Roles still alternate: no two user messages in a row.
+        assert!(a.messages.windows(2).all(|w| w[0].role != w[1].role));
+    }
+
+    #[tokio::test]
+    async fn a_handoff_goes_with_the_task() {
+        let f = Fake::default();
+        script(&f, vec![text("Done.")]);
+        let mut a = agent();
+        a.handoff = Some("Results from Research: 3 desks".into());
+        go(&f, &mut a, &limits()).await;
+        assert!(texts(&a).starts_with("Find things\nResults from Research: 3 desks"));
+    }
+
+    #[tokio::test]
+    async fn calls_cut_off_by_a_pause_are_closed_on_resume() {
+        let f = Fake::default();
+        script(&f, vec![text("Done.")]);
+        let mut a = agent();
+        a.messages = vec![
+            Message::user_text("Find things"),
+            Message {
+                role: Role::Assistant,
+                parts: vec![
+                    Part::ToolUse {
+                        id: "t1".into(),
+                        name: "send_email".into(),
+                        input: json!({}),
+                        signature: None,
+                    },
+                    Part::ToolUse {
+                        id: "t2".into(),
+                        name: DELEGATE.into(),
+                        input: json!({"tasks": []}),
+                        signature: None,
+                    },
+                ],
+            },
+        ];
+        go(&f, &mut a, &limits()).await;
+        assert_eq!(a.status, Status::Done);
+        // The email isn't sent again; the helpers are picked up again.
+        assert!(f.tool_runs.lock().unwrap().is_empty());
+        assert_eq!(f.delegations.lock().unwrap()[0].0, "t2");
+        let t = texts(&a);
+        assert!(t.contains("may or may not have happened") && t.contains("Found 3 desks."));
     }
 }

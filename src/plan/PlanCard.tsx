@@ -103,6 +103,7 @@ export function PlanCard() {
                   <div className="pagent__top">
                     <strong>{a.name}</strong>
                     {a.keepOpen && <span className="tag tag--open">Stays open for changes</span>}
+                    {a.after.length > 0 && <span className="tag tag--after">After {joinList(a.after).replace(" or ", " and ")}</span>}
                   </div>
                   <p className="pagent__goal">{a.goal}</p>
                   {a.tools.length > 0 && (

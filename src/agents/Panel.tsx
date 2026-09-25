@@ -40,7 +40,10 @@ export function Panel() {
       filter === "all" ? true : filter === "finished" ? FINISHED.includes(a.status) : !FINISHED.includes(a.status),
     );
     const by = new Map<string, AgentView[]>();
-    for (const a of list.sort((x, y) => x.order - y.order)) by.set(a.batch, [...(by.get(a.batch) ?? []), a]);
+    // Helpers sit right under the agent that started them.
+    const rank = (a: AgentView) => (a.parent ? agents.get(a.parent) ?? a : a);
+    const sorted = list.sort((x, y) => rank(x).order - rank(y).order || rank(x).created - rank(y).created || Number(!!x.parent) - Number(!!y.parent) || x.created - y.created);
+    for (const a of sorted) by.set(a.batch, [...(by.get(a.batch) ?? []), a]);
     return [...by.entries()]
       .map(([id, list]) => ({ batch: batches.get(id), id, list }))
       .sort((a, b) => (b.batch?.created ?? 0) - (a.batch?.created ?? 0));
@@ -85,7 +88,7 @@ export function Panel() {
                 <button
                   key={a.id}
                   type="button"
-                  className={`row${!inbox && selected === a.id ? " is-on" : ""}`}
+                  className={`row${a.parent ? " row--helper" : ""}${!inbox && selected === a.id ? " is-on" : ""}`}
                   onClick={() => {
                     setSelected(a.id);
                     setInbox(false);
@@ -110,7 +113,7 @@ export function Panel() {
         {inbox ? (
           <Inbox agents={[...agents.values()]} />
         ) : current ? (
-          <Detail key={current.id} agent={current} batch={batches.get(current.batch)} line={live.get(current.id)} />
+          <Detail key={current.id} agent={current} batch={batches.get(current.batch)} line={live.get(current.id)} agentName={(id) => agents.get(id)?.name ?? "an earlier agent"} />
         ) : (
           <div className="ap__placeholder">
             <p>Pick an agent to see what it's doing, or describe a new task on the left.</p>
@@ -168,7 +171,7 @@ function NewTask() {
   );
 }
 
-function Detail({ agent: a, batch, line }: { agent: AgentView; batch: Batch | undefined; line: string | undefined }) {
+function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch: Batch | undefined; line: string | undefined; agentName: (id: string) => string }) {
   const [answer, setAnswer] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -245,6 +248,12 @@ function Detail({ agent: a, batch, line }: { agent: AgentView; batch: Batch | un
       </header>
 
       <p className="detail__goal">{a.goal}</p>
+      {(a.after.length > 0 || a.parent) && (
+        <p className="muted small">
+          {a.parent && `Helper of ${agentName(a.parent)}. `}
+          {a.after.length > 0 && `Started after ${a.after.map(agentName).join(" and ")}, with their results.`}
+        </p>
+      )}
       {batch && batch.request !== a.goal && <p className="muted small">Asked for: “{batch.request}”</p>}
       {message && <p className="note">{message}</p>}
 
@@ -341,15 +350,16 @@ function Detail({ agent: a, batch, line }: { agent: AgentView; batch: Batch | un
         </section>
       )}
 
-      {(a.status === "done" || a.status === "ready") && (
+      {["done", "ready", "running", "queued", "paused"].includes(a.status) && (
         <form
           className="followup"
           onSubmit={(e) => {
             e.preventDefault();
-            run(() => api.agentFollowUp(a.id, followUp)).then(() => setFollowUp(""));
+            const done = a.status === "done" || a.status === "ready";
+            run(() => (done ? api.agentFollowUp(a.id, followUp) : api.agentSteer(a.id, followUp)), done ? undefined : "It'll hear that at its next step.").then(() => setFollowUp(""));
           }}
         >
-          <input value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder={a.keepOpen ? "What should change?" : "Ask this agent for more…"} />
+          <input value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder={a.status === "done" || a.status === "ready" ? (a.keepOpen ? "What should change?" : "Ask this agent for more…") : "Tell it something while it works…"} />
           <button type="submit" className="sendbtn" aria-label="Send" disabled={!followUp.trim()}>
             <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
               <path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" />
