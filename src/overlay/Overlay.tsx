@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { CursorFrame } from "../bindings/CursorFrame";
 import type { Mark } from "../bindings/Mark";
 import type { MarksView } from "../bindings/MarksView";
+import type { AskActivity } from "../bindings/AskActivity";
 import { Buddy } from "../buddy/Buddy";
 import { followStep, type Point } from "../buddy/follow";
 import { CircleLayer } from "../circle/CircleLayer";
@@ -21,6 +22,8 @@ export function Overlay() {
   const [circling, setCircling] = useState(false);
   // Agents at work, for the buddy's badge.
   const [working, setWorking] = useState(0);
+  // A question being answered, and how many wait behind it.
+  const [activity, setActivity] = useState<AskActivity>({ running: false, queued: 0 });
   const el = useRef<HTMLDivElement>(null);
   const target = useRef<Point | null>(null);
   const pos = useRef<Point | null>(null);
@@ -47,6 +50,8 @@ export function Overlay() {
     );
     const offClear = listen(EVENTS.clearAnnotations, () => setMarks((m) => ({ id: m.id + 1, marks: [] })));
     const offCount = listen<number>(EVENTS.agentCount, (e) => setWorking(e.payload));
+    const offActivity = listen<AskActivity>(EVENTS.askActivity, (e) => setActivity(e.payload));
+    api.askActivity().then(setActivity, () => {});
     api.agents().then((l) => setWorking(l.agents.filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status)).length));
     api.overlayReady().then(setVisible);
     return () => {
@@ -55,6 +60,7 @@ export function Overlay() {
       offMarks.then((f) => f());
       offClear.then((f) => f());
       offCount.then((f) => f());
+      offActivity.then((f) => f());
     };
   }, []);
 
@@ -101,9 +107,10 @@ export function Overlay() {
           <Buddy
             style={b.style}
             size={b.size}
-            state="idle"
+            state={activity.running ? "thinking" : "idle"}
             animate={b.showStateAnimations}
             badge={b.showAgentBadge && working > 0 ? working : null}
+            queued={activity.queued}
             customSrc={customSrc}
           />
         </div>

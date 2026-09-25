@@ -4,7 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Ai } from "../bindings/Ai";
 import type { HotkeyStatus } from "../bindings/HotkeyStatus";
-import type { UsageToday } from "../bindings/UsageToday";
 import type { VoiceSupport } from "../bindings/VoiceSupport";
 import type { PlatformInfo } from "../bindings/PlatformInfo";
 import type { Settings } from "../bindings/Settings";
@@ -16,7 +15,7 @@ import { ApprovalRules, Blocklist, BuilderPicker, FolderList, FolderPicker, Sear
 import { ConnectorList, McpServers, OAuthApps } from "./ConnectorControls";
 import { TemplateEditor } from "./TemplateControls";
 import { TriggerEditor } from "./TriggerControls";
-import { UsageHistoryView } from "./Usage";
+import { MemoryNotes, UsagePanel } from "./Usage";
 import { Onboarding } from "./Onboarding";
 import type { AgentTools } from "../bindings/AgentTools";
 import type { Builder } from "../bindings/Builder";
@@ -183,7 +182,8 @@ export function App() {
 
   const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, support, update, commitAi, onError: (m) => setToast({ text: m, tone: "err" }) };
   const extras: Record<string, React.ReactNode> = {
-    "Retries and daily budget": <UsageLine settings={settings} />,
+    "Retries and daily budget": <UsagePanel settings={settings} />,
+    "Conversation memory": <MemoryNotes />,
     "Your screen": <ScreenRecipients settings={settings} />,
     Voice: <SampleButton />,
   };
@@ -490,35 +490,6 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
   }
 }
 
-/** Today's spending next to the limits, refreshed whenever settings change. */
-function UsageLine({ settings }: { settings: Settings }) {
-  const [usage, setUsage] = useState<UsageToday | null>(null);
-  const [open, setOpen] = useState(false);
-  useEffect(() => void api.usageToday().then(setUsage), [settings]);
-  if (!usage) return null;
-  const limit = settings.limits.dailyTokenBudget;
-  const share = limit > 0 ? Math.min(usage.tokens / limit, 1) : 0;
-  return (
-    <div className="usage">
-      <div className="usage__text">
-        <span>Today</span>
-        <strong className="mono">{usage.tokens.toLocaleString()}</strong>
-        <span>{limit > 0 ? `of ${limit.toLocaleString()} tokens` : "tokens, no limit"}</span>
-        {usage.cost > 0 && <span className="mono">· ${usage.cost.toFixed(2)}</span>}
-        <button type="button" className="link-btn usage__more" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Hide history" : "Last 30 days"}
-        </button>
-      </div>
-      {limit > 0 && (
-        <div className={`meter${share > 0.9 ? " meter--hot" : ""}`} role="meter" aria-valuenow={usage.tokens} aria-valuemin={0} aria-valuemax={limit} aria-label="Tokens used today">
-          <span style={{ width: `${share * 100}%` }} />
-        </div>
-      )}
-      {open && <UsageHistoryView refresh={usage} />}
-    </div>
-  );
-}
-
 /** Which provider receives screenshots under the current settings. */
 function ScreenRecipients({ settings }: { settings: Settings }) {
   const ai = settings.ai;
@@ -596,6 +567,11 @@ function SectionIcon({ id }: { id: SectionId }) {
       <>
         <rect x="6" y="6" width="12" height="12" rx="2.5" />
         <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
+      </>
+    ),
+    usage: (
+      <>
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
       </>
     ),
     agents: (

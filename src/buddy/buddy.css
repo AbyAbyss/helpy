@@ -58,3 +58,12 @@
 @media (prefers-reduced-motion: reduce) {
   .buddy--animate * { animation: none !important; }
 }
+
+/* Questions waiting behind the current answer */
+.buddy__badge--queue {
+  top: auto;
+  bottom: -4px;
+  background: var(--buddy-rim);
+  color: var(--buddy-eye);
+  border-color: var(--buddy-eye);
+}

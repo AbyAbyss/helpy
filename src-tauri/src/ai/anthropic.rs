@@ -140,14 +140,9 @@ pub async fn stream(
                     model = id.to_string();
                 }
                 let u = &m["usage"];
-                usage.input_tokens = [
-                    "input_tokens",
-                    "cache_creation_input_tokens",
-                    "cache_read_input_tokens",
-                ]
-                .iter()
-                .filter_map(|k| u[*k].as_u64())
-                .sum();
+                usage.input_tokens = u["input_tokens"].as_u64().unwrap_or(0);
+                usage.cache_write_tokens = u["cache_creation_input_tokens"].as_u64().unwrap_or(0);
+                usage.cache_read_tokens = u["cache_read_input_tokens"].as_u64().unwrap_or(0);
             }
             "content_block_start" => {
                 let b = &v["content_block"];

@@ -355,7 +355,7 @@ function TurnView({ turn: t }: { turn: Turn }) {
               className="cbtn cbtn--small"
               onClick={() => {
                 api.circleClose();
-                api.openSettingsSection("ai");
+                api.openSettingsSection(t.error?.action === "openLimits" ? "usage" : "ai");
               }}
             >
               {t.error.action === "openLimits" ? "Open limits" : "Open AI providers"}

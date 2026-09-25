@@ -2,7 +2,10 @@ import type { AskAction } from "../bindings/AskAction";
 import type { AskEvent } from "../bindings/AskEvent";
 
 export type Item =
-  | { kind: "user"; text: string; voice: boolean; images?: string[] }
+  /** `queued`: asked while another answer was running; it goes next. */
+  | { kind: "user"; text: string; voice: boolean; images?: string[]; queued?: boolean }
+  /** The request looked like a task but got a plain answer. */
+  | { kind: "offer"; text: string }
   /** `final` once its model call finished; a retry discards non-final text. */
   | { kind: "assistant"; text: string; final: boolean }
   | { kind: "screen"; thumbnail: string; monitor: string }
@@ -23,8 +26,16 @@ function seconds(ms: number) {
 
 export function apply(items: Item[], e: AskEvent): Item[] {
   switch (e.type) {
-    case "question":
-      return [...(e.fresh ? [] : items), { kind: "user", text: e.text, voice: e.voice, ...(e.images.length ? { images: e.images } : {}) }];
+    case "question": {
+      const user: Item = { kind: "user", text: e.text, voice: e.voice, ...(e.images.length ? { images: e.images } : {}) };
+      if (e.fresh) return [user];
+      // A queued question starting: its waiting row becomes the real one.
+      const queued = items.findIndex((i) => i.kind === "user" && i.queued && i.text === e.text);
+      const rest = queued >= 0 ? items.filter((_, i) => i !== queued) : items;
+      return [...rest.filter((i) => i.kind !== "offer"), user];
+    }
+    case "queued":
+      return [...items, { kind: "user", text: e.text, voice: e.voice, queued: true, ...(e.images.length ? { images: e.images } : {}) }];
     case "started":
       return items;
     case "text": {
@@ -48,8 +59,11 @@ export function apply(items: Item[], e: AskEvent): Item[] {
       return [...items, { kind: "step", number: e.number, total: e.total, text: e.instruction }];
     case "notice":
       return [...items, { kind: "notice", text: e.message }];
-    case "done":
-      return withoutRetry(items);
+    case "done": {
+      const kept = withoutRetry(items);
+      const asked = [...kept].reverse().find((i) => i.kind === "user" && !i.queued);
+      return e.offerAgents && asked?.kind === "user" ? [...kept, { kind: "offer", text: asked.text }] : kept;
+    }
     case "error":
       return [...withoutRetry(withoutPartial(items)), { kind: "error", text: e.message, action: e.action }];
   }
@@ -58,6 +72,6 @@ export function apply(items: Item[], e: AskEvent): Item[] {
 /** Whether to show the "thinking" dots: running and nothing streaming yet. */
 export function waiting(items: Item[], running: boolean) {
   if (!running) return false;
-  const last = items[items.length - 1];
+  const last = [...items].reverse().find((i) => !(i.kind === "user" && i.queued));
   return !last || (last.kind !== "assistant" && last.kind !== "retry" && !(last.kind === "permission" && last.answer === null));
 }

@@ -69,6 +69,11 @@ impl Speaker {
     pub fn is_speaking(&self) -> bool {
         self.pending.load(Ordering::SeqCst) > 0
     }
+
+    /// Changes on every `stop`, so a feed can tell it was interrupted.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
 }
 
 #[derive(Serialize, TS, Clone, Debug)]

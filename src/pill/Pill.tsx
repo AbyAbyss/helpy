@@ -48,6 +48,13 @@ export function Pill() {
       getCurrentWindow().listen("pill://handoff", () => setHandoff(true)),
       listen<AskEvent>(EVENTS.ask, ({ payload }) => {
         if (payload.type === "question") voiceTurn.current = payload.voice;
+        // A spoken question waiting behind the current answer: the rest of
+        // that answer is no longer the pill's.
+        if (payload.type === "queued" && payload.voice) {
+          voiceTurn.current = false;
+          setState({ mode: "working", caption: `“${payload.text}”`, tone: "normal", hint: "After this answer" });
+          return;
+        }
         setState((s) => onAsk(s, payload, voiceTurn.current));
       }),
     ];
@@ -134,6 +141,7 @@ export function Pill() {
       {caption && !handoff && (
         <div className="caption">
           <span className="caption__text">{caption}</span>
+          {state.hint && <span className="caption__hint">{state.hint}</span>}
           {hover && state.mode !== "listening" && <span className="caption__open">Open</span>}
         </div>
       )}

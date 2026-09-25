@@ -1,13 +1,76 @@
 import { useEffect, useState } from "react";
+import type { Settings } from "../bindings/Settings";
 import type { Total } from "../bindings/Total";
 import type { UsageHistory } from "../bindings/UsageHistory";
-import { api } from "../lib/ipc";
+import type { UsageToday } from "../bindings/UsageToday";
+import type { Note } from "../bindings/Note";
+import { listen } from "@tauri-apps/api/event";
+import { api, EVENTS } from "../lib/ipc";
 
 type Metric = "tokens" | "cost";
 
 const shortTokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 const money = (n: number) => `$${n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
 const dayLabel = (date: string) => new Date(`${date}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
+/**
+ * Today's spending in full (calls, tokens in and out, cached input, cost),
+ * the meter against the daily limit, what used it, and the 30-day history.
+ * Refreshed whenever settings change, which every saved call triggers.
+ */
+export function UsagePanel({ settings }: { settings: Settings }) {
+  const [usage, setUsage] = useState<UsageToday | null>(null);
+  const [today, setToday] = useState<UsageHistory | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    void api.usageToday().then(setUsage);
+    void api.usageHistory(1).then(setToday, () => {});
+  }, [settings]);
+  if (!usage) return null;
+  const limit = settings.limits.dailyTokenBudget;
+  const share = limit > 0 ? Math.min(usage.tokens / limit, 1) : 0;
+  const cached = usage.cacheReadTokens + usage.cacheWriteTokens;
+  const stats: [string, string, string?][] = [
+    ["Calls", usage.calls.toLocaleString()],
+    ["Input", shortTokens(usage.inputTokens), "tokens sent, not counting cached ones"],
+    ["Output", shortTokens(usage.outputTokens), "tokens the models wrote"],
+    ["Cached", shortTokens(cached), `${shortTokens(usage.cacheReadTokens)} read from the provider's cache (cheaper), ${shortTokens(usage.cacheWriteTokens)} written to it`],
+    ["Cost", usage.cost > 0 ? `$${usage.cost.toFixed(2)}` : "—", usage.cost > 0 ? "priced models only" : "no priced model used yet"],
+  ];
+  const withUse = (rows: Total[]) => rows.filter((r) => r.tokens > 0);
+  return (
+    <div className="usage">
+      <div className="usage__text">
+        <span>Today</span>
+        <strong className="mono">{usage.tokens.toLocaleString()}</strong>
+        <span>{limit > 0 ? `of ${limit.toLocaleString()} tokens` : "tokens, no limit"}</span>
+        <button type="button" className="link-btn usage__more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Hide history" : "Last 30 days"}
+        </button>
+      </div>
+      {limit > 0 && (
+        <div className={`meter${share > 0.9 ? " meter--hot" : ""}`} role="meter" aria-valuenow={usage.tokens} aria-valuemin={0} aria-valuemax={limit} aria-label="Tokens used today">
+          <span style={{ width: `${share * 100}%` }} />
+        </div>
+      )}
+      <dl className="ustats">
+        {stats.map(([label, value, help]) => (
+          <div key={label} className="ustats__cell" title={help}>
+            <dt>{label}</dt>
+            <dd className="mono">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {today && (withUse(today.features).length > 0 || withUse(today.models).length > 0) && (
+        <div className="uhist__lists">
+          <Breakdown title="Today by feature" rows={today.features} value={(t) => t.tokens} format={shortTokens} cost />
+          <Breakdown title="Today by model" rows={today.models} value={(t) => t.tokens} format={shortTokens} cost />
+        </div>
+      )}
+      {open && <UsageHistoryView refresh={usage} />}
+    </div>
+  );
+}
 
 /** The last 30 days of AI use, counted on this computer only. */
 export function UsageHistoryView({ refresh }: { refresh: unknown }) {
@@ -68,7 +131,7 @@ export function UsageHistoryView({ refresh }: { refresh: unknown }) {
   );
 }
 
-function Breakdown({ title, rows, value, format }: { title: string; rows: Total[]; value: (t: Total) => number; format: (n: number) => string }) {
+function Breakdown({ title, rows, value, format, cost }: { title: string; rows: Total[]; value: (t: Total) => number; format: (n: number) => string; cost?: boolean }) {
   const top = rows.filter((r) => value(r) > 0).slice(0, 5);
   const max = Math.max(...top.map(value), 0);
   if (top.length === 0) return null;
@@ -84,11 +147,41 @@ function Breakdown({ title, rows, value, format }: { title: string; rows: Total[
           <span className="uhist__track">
             <span style={{ width: `${(value(r) / max) * 100}%` }} />
           </span>
-          <span className="uhist__calls">
+          <span className="uhist__calls" title={`${shortTokens(r.inputTokens)} in · ${shortTokens(r.outputTokens)} out · ${shortTokens(r.cacheReadTokens + r.cacheWriteTokens)} cached`}>
             {r.calls} {r.calls === 1 ? "call" : "calls"}
+            {cost && r.cost > 0 && ` · ${money(r.cost)}`}
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** The notes Helpy has saved about the user, each removable. */
+export function MemoryNotes() {
+  const [notes, setNotes] = useState<Note[]>([]);
+  useEffect(() => {
+    const load = () => void api.notes().then(setNotes, () => {});
+    load();
+    const off = listen(EVENTS.memoryChanged, load);
+    return () => void off.then((f) => f());
+  }, []);
+  if (notes.length === 0) return <p className="group__note">Nothing remembered yet. Tell Helpy about yourself in a conversation and it saves what matters here.</p>;
+  return (
+    <div className="notes">
+      <ul className="notes__list">
+        {notes.map((n) => (
+          <li key={n.id} className="notes__row">
+            <span>{n.text}</span>
+            <button type="button" className="link-btn" onClick={() => api.noteDelete(n.id)} aria-label={`Forget "${n.text}"`}>
+              Forget
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="link-btn" onClick={() => api.notesClear()}>
+        Forget everything ({notes.length})
+      </button>
     </div>
   );
 }

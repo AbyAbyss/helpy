@@ -357,6 +357,20 @@ fn validate_ai(s: &Settings, errors: &mut Vec<FieldError>) {
         128_000.0,
     );
     check_range(errors, "ai.timeoutSecs", ai.timeout_secs as f64, 5.0, 600.0);
+    check_range(
+        errors,
+        "ai.contextTokens",
+        ai.context_tokens as f64,
+        4000.0,
+        1_000_000.0,
+    );
+    check_range(
+        errors,
+        "ai.freshAfterMinutes",
+        ai.fresh_after_minutes as f64,
+        0.0,
+        1440.0,
+    );
     if ai.custom_instructions.len() > 4000 {
         errors.push(FieldError::new(
             "ai.customInstructions",

@@ -59,7 +59,7 @@ export function Panel() {
   const send = async (text: string) => {
     const images = attach.images;
     const q = text.trim() || (images.length ? "Look at this." : "");
-    if (!q || running) return;
+    if (!q) return;
     setDraft("");
     attach.clear();
     try {
@@ -90,12 +90,22 @@ export function Panel() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  const startAgents = async (text: string) => {
+    setItems((prev) => prev.filter((i) => i.kind !== "offer"));
+    try {
+      await api.plan(text);
+    } catch (e) {
+      setItems((prev) => [...prev, { kind: "error", text: String(e), action: null }]);
+    }
+  };
+
   const answerPermission = (id: number, allow: boolean) => {
     api.askScreenAnswer(id, allow);
     setItems((prev) => prev.map((i) => (i.kind === "permission" && i.id === id ? { ...i, answer: allow ? "allowed" : "denied" } : i)));
   };
 
   const ready = status && !status.problem;
+  const waitingCount = items.filter((i) => i.kind === "user" && i.queued).length;
 
   return (
     <div className="panel-card">
@@ -108,6 +118,11 @@ export function Panel() {
           </span>
         )}
         <span className="ph__spacer" data-tauri-drag-region />
+        {waitingCount > 0 && (
+          <span className="ph__waiting" title="Asked after the current answer" data-tauri-drag-region>
+            {waitingCount} waiting
+          </span>
+        )}
         {ready && <ScreenChip note={status.screenNote} mode={settings?.answerStyle.screenAccess} />}
         <button type="button" className="ph__close" aria-label="Close (Esc)" title="Close (Esc)" onClick={dismiss}>
           <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" /></svg>
@@ -120,7 +135,7 @@ export function Panel() {
         ) : items.length === 0 ? (
           <Welcome onPick={(q) => { setDraft(q); input.current?.focus(); }} />
         ) : (
-          items.map((item, i) => <ItemView key={i} item={item} onPermission={answerPermission} />)
+          items.map((item, i) => <ItemView key={i} item={item} onPermission={answerPermission} onAgents={startAgents} />)
         )}
         {waiting(items, running) && (
           <div className="dots" aria-label="Thinking">
@@ -153,33 +168,47 @@ export function Panel() {
               }
             }}
           />
-          {running ? (
+          {running && !draft.trim() && !attach.images.length ? (
             <button type="button" className="send send--stop" aria-label="Stop" title="Stop (Esc)" onClick={() => api.askCancel()}>
               <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" /></svg>
             </button>
           ) : (
-            <button type="button" className="send" aria-label="Send" title="Send (Enter)" disabled={(!draft.trim() && !attach.images.length) || !ready} onClick={() => send(draft)}>
+            <button type="button" className="send" aria-label={running ? "Ask next" : "Send"} title={running ? "Asked after this answer (Enter)" : "Send (Enter)"} disabled={(!draft.trim() && !attach.images.length) || !ready} onClick={() => send(draft)}>
               <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M7 12V2M7 2 2.5 6.5M7 2l4.5 4.5" /></svg>
             </button>
           )}
         </div>
         <div className="composer__meta">
-          {attach.error ? <span className="attach-error">{attach.error}</span> : <span>{meta ?? "Enter to send · Shift+Enter for a new line · Paste a picture · Esc to close"}</span>}
+          {attach.error ? (
+            <span className="attach-error">{attach.error}</span>
+          ) : (
+            <span>{running ? "Still answering · a new question is asked next, without stopping this one · Esc to stop" : (meta ?? "Enter to send · Shift+Enter for a new line · Paste a picture · Esc to close")}</span>
+          )}
         </div>
       </footer>
     </div>
   );
 }
 
-function ItemView({ item, onPermission }: { item: Item; onPermission: (id: number, allow: boolean) => void }) {
+function ItemView({ item, onPermission, onAgents }: { item: Item; onPermission: (id: number, allow: boolean) => void; onAgents: (text: string) => void }) {
   const [big, setBig] = useState(false);
   switch (item.kind) {
     case "user":
       return (
-        <div className={`msg msg--user${item.voice ? " msg--voice" : ""}`}>
+        <div className={`msg msg--user${item.voice ? " msg--voice" : ""}${item.queued ? " msg--queued" : ""}`} title={item.queued ? "Asked after the current answer" : undefined}>
           {item.images && <AttachmentStrip images={item.images} />}
           {item.voice && <MicIcon />}
           {item.text}
+          {item.queued && <span className="msg__queued">next</span>}
+        </div>
+      );
+    case "offer":
+      return (
+        <div className="offer">
+          <span>Want Helpy to do this instead?</span>
+          <button type="button" className="offer__btn" onClick={() => onAgents(item.text)}>
+            Do it with agents
+          </button>
         </div>
       );
     case "assistant":
@@ -255,7 +284,7 @@ function ItemView({ item, onPermission }: { item: Item; onPermission: (id: numbe
 function ActionButton({ action }: { action: AskAction }) {
   const label = action === "openLimits" ? "Open limits" : "Open AI providers";
   return (
-    <button type="button" className="btn-s" onClick={() => api.openSettingsSection("ai")}>
+    <button type="button" className="btn-s" onClick={() => api.openSettingsSection(action === "openLimits" ? "usage" : "ai")}>
       {label}
     </button>
   );

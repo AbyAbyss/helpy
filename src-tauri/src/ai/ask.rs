@@ -6,6 +6,7 @@
 //! has seen the screen it can guide the user step by step (`show_step`, or a
 //! JSON reply for models without tool calling).
 
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -18,8 +19,10 @@ use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
 use super::call;
+use super::context;
 use super::error::{ErrorKind, ProviderError};
 use super::ledger::Ledger;
+use super::memory;
 use super::types::*;
 use crate::agents::runner::Gate;
 use crate::capture::{self, CaptureMeta, Shot};
@@ -44,7 +47,15 @@ pub struct AiState {
 #[derive(Default)]
 pub struct AskState {
     conversation: Mutex<Vec<Message>>,
+    /// Older questions condensed once the conversation outgrew its cap
+    /// (see `Turn::compact`); goes into the system prompt.
+    summary: Mutex<Option<String>>,
     running: Mutex<Option<CancellationToken>>,
+    /// Questions asked while one was being answered; they run next.
+    queue: Mutex<VecDeque<Pending>>,
+    /// A request that looked like a task but got a plain answer; "do it"
+    /// by voice hands it to the agents.
+    offer: Mutex<Option<String>>,
     permission: Mutex<Option<(u32, oneshot::Sender<bool>)>>,
     /// The newest screenshot in the conversation, which step coordinates refer to.
     screen: Mutex<Option<CaptureMeta>>,
@@ -53,12 +64,39 @@ pub struct AskState {
     last_turn: Mutex<Option<Instant>>,
 }
 
-/// A question after this long without one starts a new conversation.
-const FRESH_AFTER: Duration = Duration::from_secs(10 * 60);
 /// Questions kept in the conversation, with their answers and steps.
 const KEEP_QUESTIONS: usize = 10;
+/// Questions always kept word for word when older ones are summarized.
+const KEEP_VERBATIM: usize = 2;
+
+struct Pending {
+    text: String,
+    origin: Origin,
+    images: Vec<String>,
+}
 
 pub const EVENT: &str = "ask://event";
+/// Whether a question is being answered and how many wait behind it.
+pub const ACTIVITY_EVENT: &str = "ask://activity";
+/// The conversation's key in the database.
+const SAVED_KEY: &str = "conversation";
+
+#[derive(Serialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AskActivity {
+    pub running: bool,
+    pub queued: u32,
+}
+
+/// The conversation as saved between runs.
+#[derive(Serialize, serde::Deserialize, Default)]
+struct SavedConversation {
+    messages: Vec<Message>,
+    summary: Option<String>,
+    /// Unix milliseconds when the last question ended.
+    last_turn_ms: i64,
+}
 
 /// What the panel and the voice pill show while a question is answered.
 #[derive(Serialize, TS, Clone, Debug, PartialEq)]
@@ -72,6 +110,13 @@ pub enum AskEvent {
         text: String,
         voice: bool,
         fresh: bool,
+        images: Vec<String>,
+    },
+    /// Asked while another question was being answered; it runs next,
+    /// without stopping the current answer.
+    Queued {
+        text: String,
+        voice: bool,
         images: Vec<String>,
     },
     Started {
@@ -107,9 +152,13 @@ pub enum AskEvent {
     Notice {
         message: String,
     },
+    /// `offer_agents`: the request looked like a task but got a plain
+    /// answer, so offer to hand it to the agents.
     Done {
         model: String,
         tokens: u32,
+        #[serde(rename = "offerAgents")]
+        offer_agents: bool,
     },
     Error {
         message: String,
@@ -311,8 +360,9 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
               \"sort my downloads\", \"find me…\", \"build…\"), such as researching, organizing files, creating \
               reminders or calendar events, or building an app or site, call start_agents with the user's full \
               request. Do this even when the task could be done by clicking through an app: they asked for it to \
-              be done, not to be shown how. The user confirms a plan card before anything starts. Answer ordinary \
-              questions directly.";
+              be done, not to be shown how. You can't do tasks yourself, and describing the steps instead of \
+              calling start_agents leaves the task undone. The user confirms a plan card before anything starts. \
+              Answer ordinary questions directly.";
         s += "\n\nA message can hold several requests (\"hi, what's the time, and what's on my GitHub?\"). Handle \
               every one in the same reply: answer what you can directly, use tools for the rest (independent tool \
               calls can go together), and start agents only for the parts that need them.";
@@ -629,9 +679,22 @@ impl Turn<'_> {
                 "No model that can read images is set up",
             ));
         }
+        let mut system = system_prompt(&self.settings, &self.plan, &self.services());
+        if let Some(notes) = memory::prompt_section(self.app) {
+            system += "\n\n";
+            system += &notes;
+        }
+        if self.plan.agents && self.settings.ai.remember {
+            system += "\n\n";
+            system += memory::INSTRUCTIONS;
+        }
+        if let Some(summary) = self.app.state::<AskState>().summary.lock().unwrap().as_ref() {
+            system += "\n\nEarlier in this conversation (summarized):\n";
+            system += summary;
+        }
         let base = ChatRequest {
             model: String::new(),
-            system: system_prompt(&self.settings, &self.plan, &self.services()),
+            system,
             messages: crate::agents::runner::clear_stale_results(messages),
             tools: tools.to_vec(),
             max_tokens: ai.max_response_tokens,
@@ -699,6 +762,54 @@ impl Turn<'_> {
         ]
     }
 
+    /// Once the conversation outgrows "conversation memory", the older
+    /// questions are condensed into a summary (kept in `AskState`) and only
+    /// the newest ones stay word for word. If the summary can't be made, the
+    /// older questions are dropped instead, so answering still works.
+    async fn compact(&self, mut messages: Vec<Message>) -> Vec<Message> {
+        let ai = &self.settings.ai;
+        let state = self.app.state::<AskState>();
+        let size = ChatRequest {
+            model: String::new(),
+            system: system_prompt(&self.settings, &self.plan, &self.services()),
+            messages: messages.clone(),
+            tools: Vec::new(),
+            max_tokens: 0,
+            temperature: 0.0,
+        }
+        .estimated_tokens();
+        if size <= ai.context_tokens as u64 {
+            return messages;
+        }
+        let starts = question_starts(&messages);
+        if starts.len() <= KEEP_VERBATIM {
+            return messages;
+        }
+        let cut = starts[starts.len() - KEEP_VERBATIM];
+        let mut transcript = String::new();
+        if let Some(earlier) = state.summary.lock().unwrap().as_ref() {
+            transcript += &format!("Summary of the conversation before this:\n{earlier}\n\n");
+        }
+        transcript += &context::transcript(&messages[..cut]);
+        let req = context::summary_request(
+            "Summarize this conversation between a user and Helpy, a desktop assistant, for Helpy to \
+             continue from: what the user asked and was told, what they're working on, and details worth \
+             remembering (names, numbers, paths, links). Be concise.",
+            transcript,
+            ai.max_response_tokens,
+        );
+        let models = candidates(ai, &self.plan, false, false, false);
+        match call::stream(self.app, &self.settings, "ask", &models, req, &self.cancel, &|_| {}).await {
+            Ok(c) => {
+                log::info!("ask: summarized {cut} older messages to keep the conversation small");
+                *state.summary.lock().unwrap() = Some(c.text());
+            }
+            Err(e) => log::warn!("ask: couldn't summarize older questions, dropping them: {}", e.message),
+        }
+        messages.drain(..cut);
+        messages
+    }
+
     /// Shows one guidance step and waits for the user. Returns what goes
     /// back to the model (and whether it's an error), or Cancelled.
     async fn guide_step(
@@ -756,12 +867,14 @@ impl Turn<'_> {
         })
     }
 
+    /// Answers one question. Also returns whether Helpy acted on it (started
+    /// agents or showed steps) rather than only replying with text.
     async fn run(
         &self,
         mut messages: Vec<Message>,
         question: String,
         images: Vec<String>,
-    ) -> Result<(Vec<Message>, Completion), ProviderError> {
+    ) -> Result<(Vec<Message>, Completion, bool), ProviderError> {
         let mut user = Message::user_text(question);
         for data in images.into_iter().rev() {
             user.parts.insert(
@@ -800,12 +913,16 @@ impl Turn<'_> {
             if !self.services().is_empty() {
                 tools.extend(service_tools());
             }
+            if self.settings.ai.remember {
+                tools.push(memory::tool());
+            }
         }
         let json_steps = self.plan.guide == GuideMode::Json;
         let sentinel = self.plan.screen == ScreenMode::Sentinel;
         let ask_first = self.settings.answer_style.screen_access == ScreenAccess::Ask;
         let mut looked = false;
         let mut steps = 0;
+        let mut started_agents = false;
         let max_calls = MAX_CALLS + self.settings.guidance.max_steps as usize;
 
         for call in 0..max_calls {
@@ -837,7 +954,7 @@ impl Turn<'_> {
                         message: "The answer was cut off at the length limit. Raise \"Max response length\" in Settings → AI providers for longer answers.".into(),
                     });
                 }
-                return Ok((messages, completion));
+                return Ok((messages, completion, started_agents || steps > 0));
             }
 
             let mut reply = Vec::new();
@@ -876,6 +993,7 @@ impl Turn<'_> {
                                 .flatten();
                             match crate::agents::planner::plan(self.app, &request, image).await {
                                 Ok(plan) => {
+                                    started_agents = true;
                                     if plan.started && self.feed.is_some() {
                                         crate::windows::fly_pill_to_dock(self.app);
                                     }
@@ -896,6 +1014,13 @@ impl Turn<'_> {
                                 ),
                             }
                         }
+                        memory::REMEMBER => match memory::remember(
+                            self.app,
+                            input["fact"].as_str().unwrap_or_default(),
+                        ) {
+                            Ok(_) => (vec![Part::Text("Saved.".into())], false),
+                            Err(m) => (vec![Part::Text(m)], true),
+                        },
                         SERVICE_ACTIONS => self.service_actions(&input),
                         USE_SERVICE => self.use_service(&input).await,
                         step::SHOW_STEP => {
@@ -942,13 +1067,14 @@ pub enum Origin {
     Voice,
 }
 
-/// Answers one question in the ongoing conversation. Progress goes out as
-/// `ask://event` to every window, so the panel and the voice pill both follow
-/// it. Errors are reported as events; `Err` only means another question is
-/// still running.
 /// Pictures one question may carry.
 const MAX_IMAGES: usize = 4;
 
+/// Answers one question in the ongoing conversation. Progress goes out as
+/// `ask://event` to every window, so the panel and the voice pill both follow
+/// it. A question asked while another is being answered is queued and
+/// answered next, without stopping the current answer. Errors are reported
+/// as events; `Err` only means the question couldn't be accepted.
 pub async fn ask(
     app: &AppHandle,
     text: String,
@@ -959,33 +1085,143 @@ pub async fn ask(
         return Err(format!("Attach up to {MAX_IMAGES} pictures"));
     }
     let state = app.state::<AskState>();
+    {
+        let mut running = state.running.lock().unwrap();
+        if running.is_some() {
+            log::info!("ask: question queued (voice: {})", origin == Origin::Voice);
+            state.queue.lock().unwrap().push_back(Pending {
+                text: text.clone(),
+                origin,
+                images: images.clone(),
+            });
+            let _ = app.emit(
+                EVENT,
+                AskEvent::Queued {
+                    text,
+                    voice: origin == Origin::Voice,
+                    images,
+                },
+            );
+            drop(running);
+            announce(app);
+            return Ok(());
+        }
+        *running = Some(CancellationToken::new());
+    }
+    announce(app);
+    let mut next = Some(Pending {
+        text,
+        origin,
+        images,
+    });
+    while let Some(pending) = next {
+        answer(app, pending).await;
+        // Take the next question and mark it running in one go, so a question
+        // arriving now is either queued behind it or starts on its own.
+        {
+            let mut running = state.running.lock().unwrap();
+            next = state.queue.lock().unwrap().pop_front();
+            *running = next.as_ref().map(|_| CancellationToken::new());
+        }
+        announce(app);
+    }
+    Ok(())
+}
+
+/// What's running and waiting right now.
+pub fn activity(app: &AppHandle) -> AskActivity {
+    let state = app.state::<AskState>();
+    let running = state.running.lock().unwrap().is_some();
+    let queued = state.queue.lock().unwrap().len() as u32;
+    AskActivity { running, queued }
+}
+
+/// Tells every window and the tray what's running and waiting.
+fn announce(app: &AppHandle) {
+    let a = activity(app);
+    let _ = app.emit(ACTIVITY_EVENT, a);
+    crate::tray::set_activity(
+        app,
+        match (a.running, a.queued) {
+            (false, _) => None,
+            (true, 0) => Some("answering".into()),
+            (true, n) => Some(format!("answering, {n} waiting")),
+        },
+    );
+}
+
+#[tauri::command]
+pub fn ask_activity(app: AppHandle) -> AskActivity {
+    activity(&app)
+}
+
+/// Loads the conversation saved by the last run.
+pub fn restore(app: &AppHandle) {
+    let Some(saved) = app
+        .state::<crate::agents::AgentsState>()
+        .store()
+        .document::<SavedConversation>(SAVED_KEY)
+    else {
+        return;
+    };
+    let state = app.state::<AskState>();
+    let ago = (chrono::Utc::now().timestamp_millis() - saved.last_turn_ms).max(0) as u64;
+    *state.last_turn.lock().unwrap() = Instant::now().checked_sub(Duration::from_millis(ago));
+    *state.conversation.lock().unwrap() = saved.messages;
+    *state.summary.lock().unwrap() = saved.summary;
+}
+
+/// Saves the conversation for the next run (or forgets it when empty).
+fn persist(app: &AppHandle) {
+    let state = app.state::<AskState>();
+    let agents = app.state::<crate::agents::AgentsState>();
+    let store = agents.store();
+    let messages = state.conversation.lock().unwrap().clone();
+    if messages.is_empty() {
+        return store.delete_document(SAVED_KEY);
+    }
+    store.save_document(
+        SAVED_KEY,
+        &SavedConversation {
+            messages,
+            summary: state.summary.lock().unwrap().clone(),
+            last_turn_ms: chrono::Utc::now().timestamp_millis(),
+        },
+    );
+}
+
+/// One question, with `running` already holding its cancellation token.
+async fn answer(app: &AppHandle, pending: Pending) {
+    let Pending {
+        text,
+        origin,
+        images,
+    } = pending;
+    let state = app.state::<AskState>();
     let settings = app.state::<SettingsStore>().get();
     let emit = |e: AskEvent| {
         let _ = app.emit(EVENT, e);
     };
-    let cancel = CancellationToken::new();
-    // Speaking while Helpy is busy (a walkthrough, a slow answer) interrupts
-    // it; typed questions wait their turn.
-    if origin == Origin::Voice {
-        interrupt(app).await;
-    }
-    {
-        let mut running = state.running.lock().unwrap();
-        if running.is_some() {
-            return Err("Helpy is still answering the last question".into());
-        }
-        *running = Some(cancel.clone());
-    }
-    let fresh = state
-        .last_turn
+    let cancel = state
+        .running
         .lock()
         .unwrap()
-        .is_some_and(|t| t.elapsed() >= FRESH_AFTER);
+        .clone()
+        .expect("answer runs with a token");
+    let fresh_after = settings.ai.fresh_after_minutes;
+    let fresh = fresh_after > 0
+        && state
+            .last_turn
+            .lock()
+            .unwrap()
+            .is_some_and(|t| t.elapsed() >= Duration::from_secs(fresh_after as u64 * 60));
     log::info!("ask: question started (voice: {}, fresh: {fresh})", origin == Origin::Voice);
     if fresh {
         state.conversation.lock().unwrap().clear();
+        state.summary.lock().unwrap().take();
         state.screen.lock().unwrap().take();
     }
+    state.offer.lock().unwrap().take();
     emit(AskEvent::Question {
         text: text.clone(),
         voice: origin == Origin::Voice,
@@ -995,12 +1231,11 @@ pub async fn ask(
     let plan = match plan(&settings.ai, &settings.answer_style) {
         Ok(p) => p,
         Err(message) => {
-            *state.running.lock().unwrap() = None;
             emit(AskEvent::Error {
                 message,
                 action: Some(AskAction::OpenProviders),
             });
-            return Ok(());
+            return;
         }
     };
     let history = state.conversation.lock().unwrap().clone();
@@ -1016,18 +1251,24 @@ pub async fn ask(
         feed,
         cancel,
     };
-    let result = turn.run(history, text, images).await;
-    *state.running.lock().unwrap() = None;
+    let history = turn.compact(history).await;
+    let result = turn.run(history, text.clone(), images).await;
     *state.last_turn.lock().unwrap() = Some(Instant::now());
     log::info!("ask: question ended ({})", if result.is_ok() { "answered" } else { "stopped or failed" });
     guide::end(app);
 
     match result {
-        Ok((messages, completion)) => {
+        Ok((messages, completion, acted)) => {
             *state.conversation.lock().unwrap() = keep_recent(messages, KEEP_QUESTIONS);
+            persist(app);
+            let offer_agents = turn.plan.agents && !acted && looks_like_task(&text);
+            if offer_agents {
+                *state.offer.lock().unwrap() = Some(text);
+            }
             turn.send(AskEvent::Done {
                 model: completion.model.clone(),
                 tokens: completion.usage.total().min(u32::MAX as u64) as u32,
+                offer_agents,
             });
         }
         Err(e) => {
@@ -1042,7 +1283,65 @@ pub async fn ask(
             });
         }
     }
-    Ok(())
+}
+
+/// A request that asks Helpy to do something rather than explain it, going
+/// by its first words. Only used to offer the agents after a plain answer,
+/// so a wrong guess costs one chip the user can ignore.
+pub fn looks_like_task(text: &str) -> bool {
+    const VERBS: &[&str] = &[
+        "create", "make", "build", "sort", "clean", "tidy", "organize", "organise", "find", "search",
+        "send", "email", "write", "draft", "remind", "schedule", "add", "delete", "remove", "move",
+        "rename", "pull", "download", "extract", "book", "order", "research", "compare", "set",
+        "put", "save", "export", "import", "convert", "generate", "fix", "update", "install",
+        "open", "start", "run", "check", "look", "get", "fetch", "collect", "gather", "list",
+    ];
+    let lower = text.trim().to_lowercase();
+    let mut words = lower
+        .split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .filter(|w| !w.is_empty());
+    let mut first = words.next().unwrap_or_default();
+    // "Please", "hey Helpy", "can you", "could you", "I want you to" lead in.
+    loop {
+        match first {
+            "please" | "hey" | "helpy" | "ok" | "okay" | "so" | "now" | "just" | "go" | "ahead" | "and" => {}
+            "can" | "could" | "would" | "will" => {
+                if words.next() != Some("you") {
+                    return false;
+                }
+            }
+            "i" => {
+                if words.next() != Some("want") || words.next() != Some("you") || words.next() != Some("to") {
+                    return false;
+                }
+            }
+            _ => break,
+        }
+        first = match words.next() {
+            Some(w) => w,
+            None => return false,
+        };
+    }
+    VERBS.contains(&first)
+}
+
+/// "Do it" after an answer that offered the agents: the request to plan.
+pub fn take_offer(app: &AppHandle, said: &str) -> Option<String> {
+    let s = said
+        .trim()
+        .trim_end_matches(['.', '!'])
+        .to_lowercase()
+        .replace("please", "")
+        .replace("for me", "");
+    let words: Vec<&str> = s.split_whitespace().collect();
+    let asks = matches!(
+        words.as_slice(),
+        ["do", "it"] | ["just", "do", "it"] | ["yes", "do", "it"] | ["go", "ahead"] | ["go", "ahead", "and", "do", "it"] | ["do", "that"] | ["yes", "do", "that"]
+    );
+    if !asks {
+        return None;
+    }
+    app.state::<AskState>().offer.lock().unwrap().take()
 }
 
 #[tauri::command]
@@ -1050,37 +1349,27 @@ pub async fn ask_send(app: AppHandle, text: String, images: Option<Vec<String>>)
     ask(&app, text, Origin::Text, images.unwrap_or_default()).await
 }
 
-/// Stops the running answer and waits (briefly) until it has ended.
-async fn interrupt(app: &AppHandle) {
-    let state = app.state::<AskState>();
-    if state.running.lock().unwrap().is_none() {
-        return;
-    }
-    cancel(app);
-    for _ in 0..100 {
-        if state.running.lock().unwrap().is_none() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-}
-
 /// Drops all but the last `questions` questions and what followed each. A
 /// question is a user message that isn't a tool result, so tool calls and
 /// their results always stay together.
 fn keep_recent(mut messages: Vec<Message>, questions: usize) -> Vec<Message> {
-    let starts: Vec<usize> = messages
+    let starts = question_starts(&messages);
+    if starts.len() > questions {
+        messages.drain(..starts[starts.len() - questions]);
+    }
+    messages
+}
+
+/// Where each question starts: a user message that isn't a tool result.
+fn question_starts(messages: &[Message]) -> Vec<usize> {
+    messages
         .iter()
         .enumerate()
         .filter(|(_, m)| {
             m.role == Role::User && !m.parts.iter().any(|p| matches!(p, Part::ToolResult { .. }))
         })
         .map(|(i, _)| i)
-        .collect();
-    if starts.len() > questions {
-        messages.drain(..starts[starts.len() - questions]);
-    }
-    messages
+        .collect()
 }
 
 /// Stops the running answer, if any.
@@ -1088,9 +1377,11 @@ pub fn cancel(app: &AppHandle) {
     ask_cancel(app.state::<AskState>());
 }
 
+/// Stops the running answer and drops the questions waiting behind it.
 #[tauri::command]
 pub fn ask_cancel(state: tauri::State<AskState>) {
     log::info!("ask: cancel requested");
+    state.queue.lock().unwrap().clear();
     if let Some(c) = state.running.lock().unwrap().as_ref() {
         c.cancel();
     }
@@ -1099,10 +1390,13 @@ pub fn ask_cancel(state: tauri::State<AskState>) {
 
 /// Forgets the conversation (the panel was dismissed).
 #[tauri::command]
-pub fn ask_reset(state: tauri::State<AskState>) {
+pub fn ask_reset(app: AppHandle, state: tauri::State<AskState>) {
     ask_cancel(state.clone());
     state.conversation.lock().unwrap().clear();
+    state.summary.lock().unwrap().take();
+    state.offer.lock().unwrap().take();
     state.screen.lock().unwrap().take();
+    persist(&app);
 }
 
 #[tauri::command]
@@ -1141,6 +1435,28 @@ pub fn ask_status(store: tauri::State<SettingsStore>) -> AskStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn task_requests_are_told_from_questions_by_their_first_words() {
+        for t in [
+            "Create a reminder for 3pm tomorrow",
+            "please sort my downloads folder",
+            "Can you build me a small site?",
+            "Hey Helpy, find me three laptops under $800",
+            "I want you to draft an email to Sam",
+        ] {
+            assert!(looks_like_task(t), "{t}");
+        }
+        for t in [
+            "How do I create a reminder?",
+            "Where is my spam folder",
+            "What does this error mean?",
+            "Can I sort this by date?",
+            "",
+        ] {
+            assert!(!looks_like_task(t), "{t}");
+        }
+    }
 
     #[test]
     fn keeps_the_last_questions_with_their_tool_calls() {

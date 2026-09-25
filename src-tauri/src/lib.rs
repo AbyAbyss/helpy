@@ -116,6 +116,7 @@ pub fn run() {
 
             app.manage(voice::VoiceState::new(handle.clone()));
             app.manage(agents::AgentsState::load(app.path().app_data_dir()?));
+            ai::ask::restore(&handle);
             app.manage(connectors::ConnectorsState::load(
                 app.path().app_data_dir()?,
             ));
@@ -184,6 +185,10 @@ pub fn run() {
             ai::ask::ask_reset,
             ai::ask::ask_screen_answer,
             ai::ask::ask_status,
+            ai::ask::ask_activity,
+            ai::memory::ai_notes,
+            ai::memory::ai_note_delete,
+            ai::memory::ai_notes_clear,
             windows::ask_hide,
             windows::open_settings_section,
             guide::guide_action,

@@ -96,7 +96,10 @@
     "temperature": 0.7,
     "maxResponseTokens": 16000,
     "timeoutSecs": 60,
-    "customInstructions": ""
+    "customInstructions": "",
+    "contextTokens": 30000,
+    "freshAfterMinutes": 10,
+    "remember": true
   },
   "answerStyle": {
     "detail": "normal",

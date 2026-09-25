@@ -56,19 +56,88 @@ fn strip_inline(line: &str) -> String {
     out
 }
 
-/// For "read step instructions only": the numbered or bulleted items of an
-/// answer, or its first paragraph when it has no list.
-pub fn steps_only(markdown: &str) -> String {
-    let steps: Vec<String> = markdown
-        .lines()
-        .map(str::trim_start)
-        .filter(|l| is_list_item(l))
-        .map(speakable)
-        .collect();
-    if !steps.is_empty() {
-        return steps.join("\n");
+/// For "read step instructions only": says the numbered or bulleted items
+/// of a streaming answer as each line completes, and the opening paragraph
+/// sentence by sentence, so speech starts before the answer is done.
+#[derive(Default)]
+pub struct StepsReader {
+    buf: String,
+    splitter: SentenceSplitter,
+    /// Still inside the opening paragraph (no list item or blank line yet).
+    past_intro: bool,
+    /// The current line is being streamed to the splitter as it arrives.
+    streaming_line: bool,
+}
+
+impl StepsReader {
+    pub fn push(&mut self, piece: &str) -> Vec<String> {
+        self.buf.push_str(piece);
+        let mut out = Vec::new();
+        loop {
+            if self.streaming_line {
+                match self.buf.find('\n') {
+                    Some(nl) => {
+                        let line: String = self.buf.drain(..=nl).collect();
+                        out.extend(self.splitter.push(&line));
+                        self.streaming_line = false;
+                    }
+                    None => {
+                        out.extend(self.splitter.push(&std::mem::take(&mut self.buf)));
+                        break;
+                    }
+                }
+            } else if let Some(nl) = self.buf.find('\n') {
+                let line: String = self.buf.drain(..=nl).collect();
+                if let Some(step) = step_line(&line) {
+                    self.end_intro(&mut out);
+                    out.push(step);
+                } else if !self.past_intro {
+                    if line.trim().is_empty() {
+                        self.end_intro(&mut out);
+                    } else {
+                        out.extend(self.splitter.push(&line));
+                    }
+                }
+            } else if !self.past_intro && !could_start_list_item(&self.buf) {
+                self.streaming_line = true;
+            } else {
+                break;
+            }
+        }
+        out
     }
-    speakable(markdown.split("\n\n").next().unwrap_or_default())
+
+    /// Whatever is left once the answer is complete.
+    pub fn finish(&mut self) -> Vec<String> {
+        let rest = std::mem::take(&mut self.buf);
+        let mut out = Vec::new();
+        if self.streaming_line || !self.past_intro && step_line(&rest).is_none() {
+            out.extend(self.splitter.push(&rest));
+        } else if let Some(step) = step_line(&rest) {
+            out.push(step);
+        }
+        out.extend(self.splitter.finish());
+        out
+    }
+
+    fn end_intro(&mut self, out: &mut Vec<String>) {
+        if !self.past_intro {
+            self.past_intro = true;
+            out.extend(self.splitter.finish());
+        }
+    }
+}
+
+/// An unfinished line that may still turn into "1. " or "- ".
+fn could_start_list_item(line: &str) -> bool {
+    let t = line.trim_start();
+    let digits = t.chars().take_while(char::is_ascii_digit).count();
+    let rest = &t[digits..];
+    t.is_empty()
+        || t == "-"
+        || t == "*"
+        || is_list_item(t)
+        || digits > 0 && (rest.is_empty() || rest == "." || rest.starts_with(". "))
 }
 
 /// One line of an answer as a spoken step, if it's a list item.
@@ -109,10 +178,6 @@ impl SentenceSplitter {
     pub fn finish(&mut self) -> Option<String> {
         let rest = speakable(&std::mem::take(&mut self.buf));
         (!rest.is_empty()).then_some(rest)
-    }
-
-    pub fn reset(&mut self) {
-        self.buf.clear();
     }
 
     /// Byte index just after the first complete sentence, if any.
@@ -204,13 +269,24 @@ mod tests {
     }
 
     #[test]
-    fn steps_only_reads_list_items_or_the_first_paragraph() {
-        let md = "Here's how.\n\n1. Open Outlook.\n2. Click **Junk Email**.\n\nThat's it.";
-        assert_eq!(steps_only(md), "1. Open Outlook.\n2. Click Junk Email.");
-        assert_eq!(
-            steps_only("Spam lives in Junk Email.\n\nMore detail here."),
-            "Spam lives in Junk Email."
-        );
+    fn steps_reader_says_list_items_as_their_lines_complete() {
+        let mut r = StepsReader::default();
+        assert!(r.push("Here's how").is_empty());
+        assert_eq!(r.push(".\n\n1. Open Outlook.\n2. Click **Junk"), vec!["Here's how.", "1. Open Outlook."]);
+        assert!(r.push(" Email**").is_empty());
+        assert_eq!(r.push(".\n\nThat's it."), vec!["2. Click Junk Email."]);
+        assert!(r.finish().is_empty());
+    }
+
+    #[test]
+    fn steps_reader_streams_an_answer_without_a_list() {
+        let mut r = StepsReader::default();
+        assert_eq!(r.push("Spam lives in Junk Email. It's under"), vec!["Spam lives in Junk Email."]);
+        assert_eq!(r.push(" Inbox.\n\nMore detail here."), vec!["It's under Inbox."]);
+        assert!(r.finish().is_empty());
+        let mut r = StepsReader::default();
+        assert!(r.push("1").is_empty());
+        assert_eq!(r.finish(), vec!["1"]);
     }
 
     #[test]

@@ -113,7 +113,11 @@ pub async fn stream(
         }
         let u = &v["usageMetadata"];
         if u.is_object() {
-            usage.input_tokens = u["promptTokenCount"].as_u64().unwrap_or(0);
+            // promptTokenCount includes the cached part.
+            let prompt = u["promptTokenCount"].as_u64().unwrap_or(0);
+            let cached = u["cachedContentTokenCount"].as_u64().unwrap_or(0).min(prompt);
+            usage.input_tokens = prompt - cached;
+            usage.cache_read_tokens = cached;
             usage.output_tokens = u["candidatesTokenCount"].as_u64().unwrap_or(0)
                 + u["thoughtsTokenCount"].as_u64().unwrap_or(0);
         }

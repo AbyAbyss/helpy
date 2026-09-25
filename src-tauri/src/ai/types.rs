@@ -108,15 +108,22 @@ impl ChatRequest {
 /// roughly 1,800 tokens at one token per 28x28 patch; round up for safety.
 pub const IMAGE_TOKEN_ESTIMATE: u64 = 2000;
 
+/// Tokens one call used. `input_tokens` is the uncached input; the cache
+/// counts are the input served from, or written to, the provider's prompt
+/// cache, which is billed at a different rate.
 #[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Usage {
     pub input_tokens: u64,
     pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
 }
 
 impl Usage {
+    /// Every token the provider processed.
     pub fn total(&self) -> u64 {
-        self.input_tokens + self.output_tokens
+        self.input_tokens + self.output_tokens + self.cache_read_tokens + self.cache_write_tokens
     }
 }
 

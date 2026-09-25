@@ -10,6 +10,8 @@ type Props = {
   animate?: boolean;
   /** Running agents; hidden when 0 or null. */
   badge?: number | null;
+  /** Questions waiting behind the one being answered. */
+  queued?: number;
   customSrc?: string | null;
 };
 
@@ -18,7 +20,7 @@ const PIP = "M6 6 L26 13.5 A22 22 0 1 1 13.5 26 Z";
 // A plump four-point sparkle: tips are sharp, the middle is wide enough for a face.
 const SPARK = "M34 4 Q46 20 62 32 Q46 44 34 60 Q22 44 6 32 Q22 20 34 4 Z";
 
-export function Buddy({ style, size, state = "idle", animate = true, badge, customSrc }: Props) {
+export function Buddy({ style, size, state = "idle", animate = true, badge, queued = 0, customSrc }: Props) {
   const cls = `buddy buddy--${state} buddy--${style}${animate ? " buddy--animate" : ""}`;
   return (
     <div className={cls} style={{ width: size, height: size }} aria-hidden="true">
@@ -50,6 +52,7 @@ export function Buddy({ style, size, state = "idle", animate = true, badge, cust
         </svg>
       )}
       {badge ? <span className="buddy__badge">{badge}</span> : null}
+      {queued > 0 ? <span className="buddy__badge buddy__badge--queue">{queued}</span> : null}
     </div>
   );
 }

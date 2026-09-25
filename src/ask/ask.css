@@ -68,6 +68,15 @@ textarea {
   letter-spacing: -0.02em;
 }
 
+.ph__waiting {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  color: var(--ink-2);
+  font-size: 11px;
+}
+
 .ph__model {
   min-width: 0;
   overflow: hidden;
@@ -151,6 +160,43 @@ textarea {
   display: flex;
   align-items: baseline;
   gap: 6px;
+}
+
+.msg--queued {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
+.msg__queued {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* "Do it with agents" after an answer that only explained a task */
+.offer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.offer__btn {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.offer__btn:hover {
+  background: var(--surface-2);
 }
 
 .msg__mic {

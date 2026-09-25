@@ -5,13 +5,14 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "agents" | "connectors" | "voiceInput" | "voiceOutput" | "privacy";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "usage" | "answerStyle" | "guidance" | "circle" | "agents" | "connectors" | "voiceInput" | "voiceOutput" | "privacy";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, profile, appearance and language." },
   { id: "buddy", title: "Cursor buddy", blurb: "The small character that rides along with your mouse." },
   { id: "hotkeys", title: "Hotkeys", blurb: "Shortcuts that work from any app. Click one to change it." },
-  { id: "ai", title: "AI providers", blurb: "The models Helpy talks to, what each one is used for, and how much it may spend." },
+  { id: "ai", title: "AI providers", blurb: "The models Helpy talks to and what each one is used for." },
+  { id: "usage", title: "Usage & budgets", blurb: "Every token and dollar Helpy has spent, the daily limits, and how much of a conversation it keeps in mind." },
   { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
   { id: "guidance", title: "Visual guidance", blurb: "How Helpy points things out on your screen, and how walkthroughs move from step to step." },
   { id: "agents", title: "Agents", blurb: "Background agents: what they may do, where, and the limits they can never pass." },
@@ -299,29 +300,44 @@ export const FIELDS: Field[] = [
     control: { kind: "textarea", placeholder: "I use Windows 11 and Outlook desktop. I'm new to spreadsheets.", max: 4000 },
   },
   {
-    path: "limits.maxRetries", section: "ai", group: "Retries and daily budget", label: "Retries per failed request",
+    path: "limits.maxRetries", section: "usage", group: "Retries and daily budget", label: "Retries per failed request",
     help: "Timeouts, network errors, rate limits and provider errors are retried. A bad key or missing model never is.",
     keywords: "retry attempts", control: { kind: "number", min: 0, max: 10, unit: "times" },
   },
   {
-    path: "limits.backoffBaseMs", section: "ai", group: "Retries and daily budget", label: "First retry after",
+    path: "limits.backoffBaseMs", section: "usage", group: "Retries and daily budget", label: "First retry after",
     help: "Each later retry waits twice as long, up to the maximum below.",
     keywords: "backoff delay wait", control: { kind: "number", min: 100, max: 60000, unit: "ms" },
   },
   {
-    path: "limits.backoffMaxMs", section: "ai", group: "Retries and daily budget", label: "Longest wait between retries",
+    path: "limits.backoffMaxMs", section: "usage", group: "Retries and daily budget", label: "Longest wait between retries",
     help: "If a provider asks Helpy to wait longer than this, the request stops instead.",
     keywords: "backoff maximum delay", control: { kind: "number", min: 100, max: 600000, unit: "ms" },
   },
   {
-    path: "limits.dailyTokenBudget", section: "ai", group: "Retries and daily budget", label: "Daily token limit",
+    path: "limits.dailyTokenBudget", section: "usage", group: "Retries and daily budget", label: "Daily token limit",
     help: "Checked before every request. 0 turns it off.",
     keywords: "budget spend tokens usage cap", control: { kind: "number", min: 0, max: 1000000000, unit: "tokens" },
   },
   {
-    path: "limits.dailyCostBudget", section: "ai", group: "Retries and daily budget", label: "Daily cost limit",
+    path: "limits.dailyCostBudget", section: "usage", group: "Retries and daily budget", label: "Daily cost limit",
     help: "Needs a price on every model you use. Leave empty to turn it off.",
     keywords: "budget spend dollars money cost cap", control: { kind: "money", emptyLabel: "Off" },
+  },
+  {
+    path: "ai.contextTokens", section: "usage", group: "Conversation memory", label: "Summarize the conversation past",
+    help: "Once a conversation is bigger than this, older questions are condensed into a short summary and only the newest stay word for word. Smaller keeps each question cheaper; bigger remembers more.",
+    keywords: "context window compaction summary memory tokens", control: { kind: "number", min: 4000, max: 1000000, unit: "tokens" },
+  },
+  {
+    path: "ai.freshAfterMinutes", section: "usage", group: "Conversation memory", label: "Start a new conversation after",
+    help: "A question after this long without one starts fresh, so old context isn't sent along. 0 keeps the conversation going until the panel is closed.",
+    keywords: "fresh new conversation forget reset idle", control: { kind: "number", min: 0, max: 1440, unit: "minutes" },
+  },
+  {
+    path: "ai.remember", section: "usage", group: "Conversation memory", label: "Remember facts about you",
+    help: "Helpy may save short notes (the apps you use, preferences, names) and bring them into later conversations. The notes are listed below, where you can remove any of them.",
+    keywords: "memory notes remember facts long-term", control: { kind: "toggle" },
   },
 
   // Answer style

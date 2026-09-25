@@ -15,4 +15,17 @@ timeoutSecs: number,
 /**
  * Added to every request, e.g. "I use Windows 11 and Outlook desktop".
  */
-customInstructions: string, };
+customInstructions: string, 
+/**
+ * Older questions are summarized once a conversation is bigger than this.
+ */
+contextTokens: number, 
+/**
+ * A question after this long without one starts a new conversation.
+ * 0 keeps the conversation going.
+ */
+freshAfterMinutes: number, 
+/**
+ * Helpy may save short notes about the user for later conversations.
+ */
+remember: boolean, };

@@ -98,7 +98,7 @@ pub async fn stream(
                 .await;
                 match &result {
                     Ok(c) => {
-                        let cost = ledger::price(&m, c.usage);
+                        let cost = ledger::price(&m, p.kind, c.usage);
                         ai_state.ledger.record(&key_name, c.usage, cost);
                         on(Progress::Spent {
                             tokens: c.usage.total(),
@@ -118,9 +118,9 @@ pub async fn stream(
                     {
                         let usage = Usage {
                             input_tokens: estimate - req.max_tokens as u64,
-                            output_tokens: 0,
+                            ..Default::default()
                         };
-                        let cost = ledger::price(&m, usage);
+                        let cost = ledger::price(&m, p.kind, usage);
                         ai_state.ledger.record(&key_name, usage, cost);
                         on(Progress::Spent {
                             tokens: usage.total(),

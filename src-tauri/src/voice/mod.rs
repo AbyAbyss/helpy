@@ -68,6 +68,9 @@ struct Session {
     id: u64,
     stop: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
+    /// Recording is over and the question is being answered. A new
+    /// question may start now; it's answered after this one.
+    answering: Arc<AtomicBool>,
 }
 
 pub struct VoiceState {
@@ -171,7 +174,10 @@ pub fn start(app: &AppHandle, trigger: Trigger) {
     // A walkthrough started by voice runs inside that question's session;
     // once its recording is done, a reply to a step gets a session of its own.
     let reply = crate::guide::active(app) && !v.recording.load(Ordering::Relaxed);
-    if slot.is_some() && !reply {
+    let busy = slot
+        .as_ref()
+        .is_some_and(|s| !s.answering.load(Ordering::Relaxed));
+    if busy && !reply {
         return;
     }
     // A new question interrupts whatever Helpy was saying.
@@ -183,8 +189,14 @@ pub fn start(app: &AppHandle, trigger: Trigger) {
         id: v.next_id.fetch_add(1, Ordering::Relaxed),
         stop: Arc::new(AtomicBool::new(false)),
         cancel: Arc::new(AtomicBool::new(false)),
+        answering: Arc::new(AtomicBool::new(false)),
     };
-    let (id, stop, cancel) = (session.id, session.stop.clone(), session.cancel.clone());
+    let (id, stop, cancel, answering) = (
+        session.id,
+        session.stop.clone(),
+        session.cancel.clone(),
+        session.answering.clone(),
+    );
     *slot = Some(session);
     drop(slot);
 
@@ -195,7 +207,7 @@ pub fn start(app: &AppHandle, trigger: Trigger) {
     thread::Builder::new()
         .name("helpy-voice".into())
         .spawn(move || {
-            run_session(&app, trigger, &stop, &cancel);
+            run_session(&app, trigger, &stop, &cancel, &answering);
             let v = app.state::<VoiceState>();
             let mut slot = v.session.lock().unwrap();
             if slot.as_ref().is_some_and(|s| s.id == id) {
@@ -230,7 +242,13 @@ impl Drop for Recording<'_> {
     }
 }
 
-fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &AtomicBool) {
+fn run_session(
+    app: &AppHandle,
+    trigger: Trigger,
+    stop: &AtomicBool,
+    cancel: &AtomicBool,
+    answering: &AtomicBool,
+) {
     let s = app.state::<SettingsStore>().get();
     let vi = &s.voice_input;
     let mic_open = Recording::start(app);
@@ -378,12 +396,36 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
         }
         return emit_phase(app, VoicePhase::Idle { message: None });
     }
+    // "Do it" after an answer that only explained a task: plan the agents.
+    if let Some(request) = ask::take_offer(app, &text) {
+        emit_phase(
+            app,
+            VoicePhase::Thinking {
+                transcript: text.clone(),
+            },
+        );
+        return match tauri::async_runtime::block_on(crate::agents::planner::plan(app, &request, None)) {
+            Ok(plan) => {
+                if plan.started {
+                    crate::windows::fly_pill_to_dock(app);
+                }
+                emit_phase(
+                    app,
+                    VoicePhase::Idle {
+                        message: Some(plan.reply),
+                    },
+                )
+            }
+            Err(message) => emit_phase(app, VoicePhase::Error { message }),
+        };
+    }
     emit_phase(
         app,
         VoicePhase::Thinking {
             transcript: text.clone(),
         },
     );
+    answering.store(true, Ordering::Relaxed);
     if let Err(message) = tauri::async_runtime::block_on(ask::ask(app, text, ask::Origin::Voice, Vec::new())) {
         emit_phase(app, VoicePhase::Error { message });
     }
@@ -394,18 +436,39 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
 /// Feeds a voice question's answer to the speaker as it streams in.
 pub struct Feed {
     app: AppHandle,
-    splitter: Mutex<text::SentenceSplitter>,
-    answer: Mutex<String>,
-    steps_only: bool,
-    steps: Mutex<StepsRead>,
+    reader: Mutex<Reader>,
+    /// The speaker's generation when this answer started speaking. Once the
+    /// user interrupts (a new question, Escape), it moves on and the rest of
+    /// this answer stays silent.
+    generation: AtomicU64,
 }
 
-/// Reading steps only: how far the answer has been read, and whether any
-/// step was said.
-#[derive(Default)]
-struct StepsRead {
-    lines: usize,
-    spoken: bool,
+enum Reader {
+    Sentences(text::SentenceSplitter),
+    Steps(text::StepsReader),
+}
+
+impl Reader {
+    fn push(&mut self, piece: &str) -> Vec<String> {
+        match self {
+            Reader::Sentences(s) => s.push(piece),
+            Reader::Steps(r) => r.push(piece),
+        }
+    }
+
+    fn finish(&mut self) -> Vec<String> {
+        match self {
+            Reader::Sentences(s) => s.finish().into_iter().collect(),
+            Reader::Steps(r) => r.finish(),
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = match self {
+            Reader::Sentences(_) => Reader::Sentences(Default::default()),
+            Reader::Steps(_) => Reader::Steps(Default::default()),
+        };
+    }
 }
 
 impl Feed {
@@ -422,12 +485,15 @@ impl Feed {
     }
 
     fn build(app: &AppHandle, s: &Settings) -> Self {
+        let reader = if s.voice_output.read_aloud == ReadAloud::StepsOnly {
+            Reader::Steps(Default::default())
+        } else {
+            Reader::Sentences(Default::default())
+        };
         Self {
             app: app.clone(),
-            splitter: Mutex::default(),
-            answer: Mutex::default(),
-            steps_only: s.voice_output.read_aloud == ReadAloud::StepsOnly,
-            steps: Mutex::default(),
+            reader: Mutex::new(reader),
+            generation: AtomicU64::new(app.state::<VoiceState>().speaker.generation()),
         }
     }
 
@@ -444,65 +510,36 @@ impl Feed {
     /// Streamed answer text; whole sentences (or, reading steps only, whole
     /// list items) are spoken as they complete.
     pub fn text(&self, text: &str) {
-        self.answer.lock().unwrap().push_str(text);
-        if self.steps_only {
-            self.say_new_steps(false);
-        } else {
-            let speaker = &self.app.state::<VoiceState>().speaker;
-            for sentence in self.splitter.lock().unwrap().push(text) {
-                speaker.say(sentence);
-            }
-        }
+        let sentences = self.reader.lock().unwrap().push(text);
+        self.say(sentences);
     }
 
-    /// Says list items on lines not read yet; `all` includes the last line,
-    /// which only counts as complete once the answer is.
-    fn say_new_steps(&self, all: bool) {
-        let answer = self.answer.lock().unwrap();
-        let complete = if all {
-            answer.as_str()
-        } else {
-            match answer.rfind('\n') {
-                Some(end) => &answer[..end],
-                None => return,
-            }
-        };
-        let mut steps = self.steps.lock().unwrap();
+    fn say(&self, sentences: Vec<String>) {
         let speaker = &self.app.state::<VoiceState>().speaker;
-        let lines: Vec<&str> = complete.lines().collect();
-        for line in lines.iter().skip(steps.lines) {
-            if let Some(step) = text::step_line(line) {
-                speaker.say(step);
-                steps.spoken = true;
-            }
+        if speaker.generation() != self.generation.load(Ordering::Relaxed) {
+            return;
         }
-        steps.lines = lines.len();
+        for sentence in sentences {
+            speaker.say(sentence);
+        }
     }
 
     /// A new attempt: the failed one's words are discarded, so stop saying them.
     pub fn restart(&self) {
-        self.app.state::<VoiceState>().speaker.stop();
+        let speaker = &self.app.state::<VoiceState>().speaker;
+        speaker.stop();
+        self.generation.store(speaker.generation(), Ordering::Relaxed);
         self.reset();
     }
 
     /// The answer is complete: say what's left.
     pub fn finish(&self) {
-        let speaker = &self.app.state::<VoiceState>().speaker;
-        if self.steps_only {
-            self.say_new_steps(true);
-            // No list in it: read the first paragraph instead.
-            if !self.steps.lock().unwrap().spoken {
-                speaker.say(text::steps_only(&self.answer.lock().unwrap()));
-            }
-        } else if let Some(rest) = self.splitter.lock().unwrap().finish() {
-            speaker.say(rest);
-        }
+        let rest = self.reader.lock().unwrap().finish();
+        self.say(rest);
     }
 
     pub fn reset(&self) {
-        self.splitter.lock().unwrap().reset();
-        self.answer.lock().unwrap().clear();
-        *self.steps.lock().unwrap() = StepsRead::default();
+        self.reader.lock().unwrap().reset();
     }
 }
 

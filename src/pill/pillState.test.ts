@@ -17,7 +17,8 @@ describe("voice pill state", () => {
     let s = onAsk(working, { type: "text", text: "Open " }, true);
     s = onAsk(s, { type: "text", text: "Junk Email." }, true);
     expect(s).toMatchObject({ mode: "answering", caption: "Open Junk Email." });
-    expect(onAsk(s, { type: "done", model: "m", tokens: 1 }, true).mode).toBe("done");
+    expect(onAsk(s, { type: "done", model: "m", tokens: 1, offerAgents: false }, true).mode).toBe("done");
+    expect(onAsk(s, { type: "done", model: "m", tokens: 1, offerAgents: true }, true).hint).toContain("do it");
   });
 
   it("errors and empty recordings become a message", () => {

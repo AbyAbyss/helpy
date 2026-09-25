@@ -3,6 +3,8 @@
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
+use std::sync::Mutex;
+
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::settings::schema::BuiltinProfile;
@@ -20,6 +22,8 @@ pub struct Tray {
     voice: CheckMenuItem<Wry>,
     capture: CheckMenuItem<Wry>,
     profiles: Vec<CheckMenuItem<Wry>>,
+    /// What Helpy is doing right now ("answering, 1 waiting"), for the tooltip.
+    activity: Mutex<Option<String>>,
 }
 
 fn icon_for(paused: bool) -> Image<'static> {
@@ -32,12 +36,28 @@ fn icon_for(paused: bool) -> Image<'static> {
     Image::from_bytes(bytes).expect("bundled tray icon")
 }
 
-fn tooltip(s: &Settings) -> &'static str {
-    if s.privacy.capture_paused {
-        "Helpy (screen capture paused)"
+fn tooltip(s: &Settings, activity: Option<&str>) -> String {
+    let mut t = if s.privacy.capture_paused {
+        "Helpy (screen capture paused)".to_string()
     } else {
-        "Helpy"
+        "Helpy".to_string()
+    };
+    if let Some(a) = activity {
+        t += &format!(" · {a}");
     }
+    t
+}
+
+/// Shows what Helpy is doing in the tray tooltip; None when idle.
+pub fn set_activity(app: &AppHandle, activity: Option<String>) {
+    let Some(tray) = app.try_state::<Tray>() else {
+        return;
+    };
+    *tray.activity.lock().unwrap() = activity;
+    let s = app.state::<SettingsStore>().get();
+    let _ = tray
+        .icon
+        .set_tooltip(Some(tooltip(&s, tray.activity.lock().unwrap().as_deref())));
 }
 
 pub fn build(app: &AppHandle, s: &Settings) -> tauri::Result<()> {
@@ -110,7 +130,7 @@ pub fn build(app: &AppHandle, s: &Settings) -> tauri::Result<()> {
     let icon = TrayIconBuilder::with_id("helpy")
         .icon(icon_for(s.privacy.capture_paused))
         .icon_as_template(cfg!(target_os = "macos"))
-        .tooltip(tooltip(s))
+        .tooltip(tooltip(s, None))
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(on_menu_event)
@@ -122,6 +142,7 @@ pub fn build(app: &AppHandle, s: &Settings) -> tauri::Result<()> {
         voice,
         capture,
         profiles,
+        activity: Mutex::new(None),
     });
     Ok(())
 }
@@ -168,5 +189,7 @@ pub fn sync(app: &AppHandle, s: &Settings) {
     }
     let _ = tray.icon.set_icon(Some(icon_for(s.privacy.capture_paused)));
     let _ = tray.icon.set_icon_as_template(cfg!(target_os = "macos"));
-    let _ = tray.icon.set_tooltip(Some(tooltip(s)));
+    let _ = tray
+        .icon
+        .set_tooltip(Some(tooltip(s, tray.activity.lock().unwrap().as_deref())));
 }

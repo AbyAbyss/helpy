@@ -508,6 +508,13 @@ pub struct Ai {
     pub timeout_secs: u32,
     /// Added to every request, e.g. "I use Windows 11 and Outlook desktop".
     pub custom_instructions: String,
+    /// Older questions are summarized once a conversation is bigger than this.
+    pub context_tokens: u32,
+    /// A question after this long without one starts a new conversation.
+    /// 0 keeps the conversation going.
+    pub fresh_after_minutes: u32,
+    /// Helpy may save short notes about the user for later conversations.
+    pub remember: bool,
 }
 
 impl Default for Ai {
@@ -520,6 +527,9 @@ impl Default for Ai {
             max_response_tokens: 16000,
             timeout_secs: 60,
             custom_instructions: String::new(),
+            context_tokens: 30_000,
+            fresh_after_minutes: 10,
+            remember: true,
         }
     }
 }

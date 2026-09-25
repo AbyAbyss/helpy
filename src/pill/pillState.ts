@@ -7,6 +7,8 @@ export type PillState = {
   /** Live transcript, the question, or the answer so far. */
   caption: string;
   tone: "normal" | "error";
+  /** A short line under the caption, e.g. how to hand the task to agents. */
+  hint?: string;
 };
 
 export const initial: PillState = { mode: "listening", caption: "", tone: "normal" };
@@ -39,7 +41,7 @@ export function onAsk(s: PillState, e: AskEvent, voiceTurn: boolean): PillState 
     case "retry":
       return { mode: "working", caption: s.caption, tone: "normal" };
     case "done":
-      return { ...s, mode: "done" };
+      return { ...s, mode: "done", ...(e.offerAgents ? { hint: "Say “do it” to have agents do this" } : {}) };
     case "error":
       return { mode: "message", caption: e.message, tone: "error" };
     default:

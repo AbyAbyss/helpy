@@ -218,9 +218,17 @@ pub async fn stream(
             model = m.to_string();
         }
         if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
+            // prompt_tokens includes the cached part.
+            let prompt = u["prompt_tokens"].as_u64().unwrap_or(0);
+            let cached = u["prompt_tokens_details"]["cached_tokens"]
+                .as_u64()
+                .unwrap_or(0)
+                .min(prompt);
             usage = Some(Usage {
-                input_tokens: u["prompt_tokens"].as_u64().unwrap_or(0),
+                input_tokens: prompt - cached,
                 output_tokens: u["completion_tokens"].as_u64().unwrap_or(0),
+                cache_read_tokens: cached,
+                cache_write_tokens: 0,
             });
         }
         let Some(choice) = v["choices"].get(0) else {
@@ -327,6 +335,7 @@ fn estimate_usage(req: &ChatRequest, parts: &[Part]) -> Usage {
     Usage {
         input_tokens: req.estimated_tokens() - req.max_tokens as u64,
         output_tokens: out as u64 / 4 + 1,
+        ..Default::default()
     }
 }
 

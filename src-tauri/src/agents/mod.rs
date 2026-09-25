@@ -101,6 +101,11 @@ pub(crate) fn new_id(prefix: &str) -> String {
 impl AgentsState {
     /// Loads saved agents. Anything that was running when Helpy closed is
     /// paused, with its counters intact, until the user resumes it.
+    /// The database, shared with the ask conversation and memory notes.
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
+
     pub fn load(data_dir: PathBuf) -> Self {
         let store = Store::open(&data_dir.join("agents.db")).unwrap_or_else(|e| {
             log::error!("couldn't open the agents database: {e}; using a temporary one");

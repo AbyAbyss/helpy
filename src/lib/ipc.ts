@@ -1,6 +1,8 @@
 // Typed wrappers around Helpy's Rust commands and events.
 import { invoke } from "@tauri-apps/api/core";
+import type { AskActivity } from "../bindings/AskActivity";
 import type { AskStatus } from "../bindings/AskStatus";
+import type { Note } from "../bindings/Note";
 import type { CardView } from "../bindings/CardView";
 import type { CircleAction } from "../bindings/CircleAction";
 import type { AgentList } from "../bindings/AgentList";
@@ -43,6 +45,8 @@ export const EVENTS = {
   openSection: "settings://open-section",
   askShown: "ask://shown",
   ask: "ask://event",
+  askActivity: "ask://activity",
+  memoryChanged: "memory://changed",
   voiceState: "voice://state",
   voiceLevel: "voice://level",
   voicePartial: "voice://partial",
@@ -118,6 +122,10 @@ export const api = {
   askReset: () => invoke<void>("ask_reset"),
   askScreenAnswer: (id: number, allow: boolean) => invoke<void>("ask_screen_answer", { id, allow }),
   askStatus: () => invoke<AskStatus>("ask_status"),
+  askActivity: () => invoke<AskActivity>("ask_activity"),
+  notes: () => invoke<Note[]>("ai_notes"),
+  noteDelete: (id: number) => invoke<void>("ai_note_delete", { id }),
+  notesClear: () => invoke<void>("ai_notes_clear"),
   askHide: () => invoke<void>("ask_hide"),
   openSettingsSection: (section: string) => invoke<void>("open_settings_section", { section }),
 

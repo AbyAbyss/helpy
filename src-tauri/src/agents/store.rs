@@ -1,4 +1,5 @@
-//! Agents, batches and Helpy-kept reminders in SQLite, saved after every step.
+//! Agents, batches and Helpy-kept reminders in SQLite, saved after every
+//! step; also the ask conversation and the notes Helpy remembers.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -7,6 +8,7 @@ use rusqlite::{params, Connection};
 
 use super::model::{Agent, Batch};
 use super::tools::reminders::HelpyReminder;
+use crate::ai::memory::Note;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -30,7 +32,9 @@ impl Store {
             "PRAGMA journal_mode = WAL;
              CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, batch TEXT NOT NULL, created INTEGER NOT NULL, data TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS batches (id TEXT PRIMARY KEY, created INTEGER NOT NULL, data TEXT NOT NULL);
-             CREATE TABLE IF NOT EXISTS reminders (id TEXT PRIMARY KEY, at INTEGER NOT NULL, data TEXT NOT NULL);",
+             CREATE TABLE IF NOT EXISTS reminders (id TEXT PRIMARY KEY, at INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS documents (key TEXT PRIMARY KEY, data TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY AUTOINCREMENT, created INTEGER NOT NULL, text TEXT NOT NULL);",
         )?;
         Ok(Self { db: Mutex::new(db) })
     }
@@ -102,6 +106,80 @@ impl Store {
             "DELETE FROM batches WHERE id NOT IN (SELECT batch FROM agents)",
             [],
         );
+    }
+
+    /// One JSON document under a key (the ask conversation, for example).
+    pub fn document<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
+        let db = self.db.lock().unwrap();
+        db.query_row(
+            "SELECT data FROM documents WHERE key = ?1",
+            params![key],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|d| serde_json::from_str(&d).ok())
+    }
+
+    pub fn save_document<T: serde::Serialize>(&self, key: &str, value: &T) {
+        let Ok(data) = serde_json::to_string(value) else {
+            return;
+        };
+        let r = self.db.lock().unwrap().execute(
+            "INSERT OR REPLACE INTO documents (key, data) VALUES (?1, ?2)",
+            params![key, data],
+        );
+        if let Err(e) = r {
+            log::error!("couldn't save {key}: {e}");
+        }
+    }
+
+    pub fn delete_document(&self, key: &str) {
+        let _ = self
+            .db
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM documents WHERE key = ?1", params![key]);
+    }
+
+    pub fn notes(&self) -> Vec<Note> {
+        let db = self.db.lock().unwrap();
+        let Ok(mut stmt) = db.prepare("SELECT id, created, text FROM notes ORDER BY id") else {
+            return Vec::new();
+        };
+        stmt.query_map([], |r| {
+            Ok(Note {
+                id: r.get(0)?,
+                created: r.get(1)?,
+                text: r.get(2)?,
+            })
+        })
+        .map(|rows| rows.filter_map(Result::ok).collect())
+        .unwrap_or_default()
+    }
+
+    pub fn add_note(&self, text: &str, created: i64) -> Note {
+        let db = self.db.lock().unwrap();
+        let _ = db.execute(
+            "INSERT INTO notes (created, text) VALUES (?1, ?2)",
+            params![created, text],
+        );
+        Note {
+            id: db.last_insert_rowid(),
+            created,
+            text: text.to_string(),
+        }
+    }
+
+    pub fn delete_note(&self, id: i64) {
+        let _ = self
+            .db
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM notes WHERE id = ?1", params![id]);
+    }
+
+    pub fn clear_notes(&self) {
+        let _ = self.db.lock().unwrap().execute("DELETE FROM notes", []);
     }
 
     pub fn add_reminder(&self, r: &HelpyReminder) {

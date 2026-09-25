@@ -71,8 +71,9 @@ body,
 
 .caption {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: 8px;
+  gap: 4px 8px;
   max-width: 272px;
   padding: 7px 11px;
   border-radius: 12px;
@@ -97,6 +98,12 @@ body,
 
 .pill--error .caption {
   border-color: rgba(255, 90, 95, 0.4);
+}
+
+.caption__hint {
+  flex-basis: 100%;
+  font-size: 11.5px;
+  color: #c3cad6;
 }
 
 .caption__open {

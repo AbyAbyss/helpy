@@ -2,7 +2,7 @@
 
 Helpy is built phase by phase. Each phase ends with an app that runs (`npm run tauri dev`) and does something useful on its own. This file lists what each phase delivers, the crates and plugins it pulls in, and the platform risks that could change the design.
 
-Status: **Phases 1 to 9 are implemented**, with the additional requirements R1 to R7 below.
+Status: **Phases 1 to 10 are implemented**, with the additional requirements R1 to R7 below.
 
 ## Architecture in one paragraph
 
@@ -134,6 +134,20 @@ Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessib
   - **Usage**: the existing 90-day ledger now feeds a 30-day chart by day, feature (agents grouped) and model.
   - **Onboarding**: a welcome tour in the settings window on a fresh install (hello, model, profile, permissions, hotkeys). Settings files from before it existed count as onboarded.
   - **Verified** on Linux (X11) end to end: snapping onto a GTK button, a blanked password field in the screenshot the model received, the Chromium address reaching the planner while the agent panel was in front, and "Do it" clicking a GTK button. The Windows and macOS code for these features is compile-checked only (both targets) and still needs a run on a real PC and Mac.
+
+## Phase 10: harness (done)
+
+How questions, voice and agents share one conversation without getting in each other's way, and how tokens and cost stay visible and bounded.
+
+- **Questions never block.** A question asked while another is being answered (typed or spoken) is queued and answered next, without stopping the running answer. The panel shows it as a waiting row; Esc or Stop drops the running answer and the queue. `AskState.queue` in `ai/ask.rs`, `AskEvent::Queued`.
+- **Voice barge-in.** The voice hotkey works while Helpy is still answering: it stops the speech, listens, and the new question goes into the queue. The interrupted answer finishes silently into the panel (the `Feed` mutes itself once the speaker's generation moves on). A voice session is replaceable once its recording is over (`Session.answering`).
+- **Speech starts at the first sentence in every mode.** "Read steps only" used to wait for the whole answer when it had no list; `text::StepsReader` now reads the opening paragraph sentence by sentence and list items as their lines complete.
+- **Conversation memory.** Two settings under Usage & budgets: "Summarize the conversation past" (default 30k tokens) condenses older questions into a summary that rides in the system prompt, keeping the newest two questions word for word; "Start a new conversation after" (default 10 minutes, 0 = never) replaces the old fixed timeout. The summary call shares `ai/context.rs` with the agents' compaction. If the summary can't be made, the older questions are dropped instead.
+- **Tasks go to agents.** The ask prompt says plainly that describing steps leaves a task undone. As a deterministic fallback, when a request starts like an instruction ("create…", "sort…", "can you build…") and the answer neither started agents nor showed steps, the panel offers "Do it with agents" and the pill says to say "do it"; both hand the original request to the planner (`looks_like_task`, `take_offer`).
+- **Something is running: you can see it.** The cursor buddy switches to its thinking state while an answer streams and shows a second badge with the number of waiting questions; the panel header says "N waiting"; the tray tooltip reads "Helpy · answering, 1 waiting". One `ask://activity` event (`AskActivity`) drives all three.
+- **The conversation survives a restart.** The ask conversation, its summary and when the last question ended are saved as one document in `agents.db` after every answered question (`documents` table) and restored at launch, so "start a new conversation after" applies across restarts too. Closing the panel forgets it, on disk as well.
+- **Memory across conversations.** With "Remember facts about you" on (default), the ask model gets a `remember` tool for short facts about the user (apps, preferences, names, recurring tasks): at most 60 notes of 200 characters, no duplicates, and the model is told when memory is full. Notes live in the `notes` table, ride in the system prompt, and are listed under Usage & budgets with Forget buttons. No embeddings or vector search: the notes are small enough to send whole, and the agents' SQLite already holds the rest.
+- **Cost in full.** `Usage` carries cache reads and writes separately (Anthropic, OpenAI `cached_tokens`, Gemini `cachedContentTokenCount`), priced at each provider's fraction of the input price (Anthropic 0.1× read, 1.25× write; OpenAI 0.5×; Gemini 0.25×). The new **Usage & budgets** section shows today's calls, input, output, cached tokens and cost, today's use by feature and model, the daily limits, the 30-day history, and the memory settings. Retries and daily limits moved there from AI providers.
 
 ## Additional requirements (added by the user after Phase 2)
 

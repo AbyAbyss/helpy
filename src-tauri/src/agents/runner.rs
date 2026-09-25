@@ -417,37 +417,12 @@ impl Run<'_> {
         else {
             return Ok(());
         };
-        let mut transcript = String::new();
-        for m in &agent.messages[..cut] {
-            for p in &m.parts {
-                let line = match p {
-                    Part::Text(t) => t.clone(),
-                    Part::ToolUse { name, input, .. } => format!("[used {name} with {input}]"),
-                    Part::ToolResult { name, parts, .. } => {
-                        let text: Vec<_> = parts
-                            .iter()
-                            .filter_map(|p| match p {
-                                Part::Text(t) => Some(truncate(t, 1500)),
-                                _ => None,
-                            })
-                            .collect();
-                        format!("[{name} returned: {}]", text.join(" "))
-                    }
-                    _ => continue,
-                };
-                transcript += &format!("{:?}: {line}\n", m.role);
-            }
-        }
-        let req = ChatRequest {
-            model: String::new(),
-            system: "Summarize this agent's work so far for the agent itself to continue from: the goal, what was \
-                     done, what was found (keep names, numbers, paths and links), and what is left. Be concise."
-                .into(),
-            messages: vec![Message::user_text(transcript)],
-            tools: Vec::new(),
-            max_tokens: 2000.min(self.lim.max_response_tokens),
-            temperature: 0.2,
-        };
+        let req = crate::ai::context::summary_request(
+            "Summarize this agent's work so far for the agent itself to continue from: the goal, what was \
+             done, what was found (keep names, numbers, paths and links), and what is left. Be concise.",
+            crate::ai::context::transcript(&agent.messages[..cut]),
+            self.lim.max_response_tokens,
+        );
         if let Some(flow) = self.over_budget(agent, req.estimated_tokens()) {
             return Err(flow);
         }
