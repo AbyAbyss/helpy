@@ -24,6 +24,7 @@ import type { TemplateInfo } from "../bindings/TemplateInfo";
 import type { ToolGroup } from "../bindings/ToolGroup";
 import type { TriggerStatus } from "../bindings/TriggerStatus";
 import type { BrowserInfo } from "../bindings/BrowserInfo";
+import type { CoderInfo } from "../bindings/CoderInfo";
 import type { Connection } from "../bindings/Connection";
 import type { ConnectorInfo } from "../bindings/ConnectorInfo";
 import type { ImportReport } from "../bindings/ImportReport";
@@ -163,6 +164,7 @@ export const api = {
   agentSteer: (id: string, text: string) => invoke<void>("agents_steer", { id, text }),
   agentUndo: (id: string) => invoke<string[]>("agents_undo", { id }),
   browserInfo: () => invoke<BrowserInfo>("agents_browser_info"),
+  builders: () => invoke<CoderInfo[]>("agents_builders"),
   /** Downloads Chromium for agents (about 150 MB); resolves to its path. */
   browserDownload: () => invoke<string>("agents_browser_download"),
   /** The first rows of a CSV the agent saved. */

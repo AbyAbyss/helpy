@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AgentTools } from "../bindings/AgentTools";
 import type { BrowserInfo } from "../bindings/BrowserInfo";
+import type { Builder } from "../bindings/Builder";
+import type { CoderInfo } from "../bindings/CoderInfo";
+import type { Coder } from "../bindings/Coder";
 import type { Approvals } from "../bindings/Approvals";
 import type { Rule } from "../bindings/Rule";
 import type { SearchEngine } from "../bindings/SearchEngine";
 import { api } from "../lib/ipc";
-import { Segmented, Toggle } from "./controls";
+import { Segmented, Select, Toggle } from "./controls";
 
 const RULES = [
   { value: "allow", label: "Allow" },
@@ -21,6 +24,7 @@ export function ApprovalRules({ value, onChange }: { value: Approvals; onChange:
     { key: "fileDeletes", label: "Deleting files", help: "A backup is kept either way." },
     { key: "reminders", label: "Reminders and events", help: "Adding them to your reminders or calendar." },
     { key: "browserForms", label: "Typing into websites", help: "Filling in and sending forms in the agents' own browser." },
+    { key: "builds", label: "Building apps", help: "Each coding round, command and launch of a builder agent, in its own project folder." },
   ];
   return (
     <div className="rules">
@@ -45,6 +49,7 @@ export function ToolToggles({ value, onChange }: { value: AgentTools; onChange: 
     { key: "shell", label: "Shell commands" },
     { key: "reminders", label: "Reminders and calendar" },
     { key: "browser", label: "Web browser (for pages that need JavaScript, and scraping)" },
+    { key: "build", label: "Building apps and sites" },
   ];
   return (
     <div className="toggles">
@@ -90,6 +95,43 @@ function BrowserStatus() {
         </>
       )}
       {error && <span className="err-text"> {error}</span>}
+    </div>
+  );
+}
+
+const BUILDERS: { value: Builder; label: string; tool?: Coder }[] = [
+  { value: "auto", label: "Automatic" },
+  { value: "claudeCode", label: "Claude Code", tool: "claudeCode" },
+  { value: "codex", label: "OpenAI Codex", tool: "codex" },
+  { value: "openCode", label: "opencode", tool: "openCode" },
+  { value: "custom", label: "My own command" },
+  { value: "helpy", label: "Helpy itself" },
+];
+
+/** The coding tool builder agents use, marked installed or not. */
+export function BuilderPicker({ value, onChange }: { value: Builder; onChange: (v: Builder) => void }) {
+  const [found, setFound] = useState<CoderInfo[] | null>(null);
+  useEffect(() => void api.builders().then(setFound, () => setFound([])), []);
+  const has = (t?: Coder) => !!found?.find((f) => f.tool === t)?.path;
+  const chosen = BUILDERS.find((b) => b.value === value);
+  const auto = found && BUILDERS.find((b) => b.tool && has(b.tool));
+  return (
+    <div className="builder">
+      <Select
+        id="agents.builder"
+        value={value}
+        options={BUILDERS.map((b) => ({
+          value: b.value,
+          label: b.label + (b.tool && found ? (has(b.tool) ? " (installed)" : " (not found)") : ""),
+        }))}
+        onChange={(v) => onChange(v as Builder)}
+      />
+      {found && (
+        <div className="engine__msg">
+          {value === "auto" && (auto ? <>Using {auto.label}.</> : <>No coding tool found, so Helpy writes the code itself.</>)}
+          {chosen?.tool && !has(chosen.tool) && <>{chosen.label} isn't installed or isn't on your PATH, so builder agents can't use it.</>}
+        </div>
+      )}
     </div>
   );
 }

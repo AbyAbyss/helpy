@@ -11,11 +11,12 @@ import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } 
 import { useSettings, useTheme } from "../lib/useSettings";
 import { BuddyStage, BuddyStylePicker, useCustomBuddy } from "./BuddyPreview";
 import { GuidanceStage } from "./GuidancePreview";
-import { ApprovalRules, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
+import { ApprovalRules, BuilderPicker, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
 import { ConnectorList, McpServers, OAuthApps } from "./ConnectorControls";
 import { TemplateEditor } from "./TemplateControls";
 import { TriggerEditor } from "./TriggerControls";
 import type { AgentTools } from "../bindings/AgentTools";
+import type { Builder } from "../bindings/Builder";
 import type { Approvals } from "../bindings/Approvals";
 import type { SearchEngine } from "../bindings/SearchEngine";
 import { ProvidersEditor } from "./ai/Providers";
@@ -414,6 +415,8 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
       return <MoneyField id={id} value={saved as number | null} emptyLabel={c.emptyLabel} unit={c.unit} invalid={!!ctx.errors[path]} onChange={set} />;
     case "approvalRules":
       return <ApprovalRules value={saved as Approvals} onChange={set} />;
+    case "builder":
+      return <BuilderPicker value={saved as Builder} onChange={set} />;
     case "toolToggles":
       return <ToolToggles value={saved as AgentTools} onChange={set} />;
     case "folderList":

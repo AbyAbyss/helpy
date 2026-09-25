@@ -116,7 +116,8 @@
       "fileChanges": "allow",
       "fileDeletes": "ask",
       "reminders": "ask",
-      "browserForms": "ask"
+      "browserForms": "ask",
+      "builds": "ask"
     },
     "tools": {
       "webSearch": true,
@@ -124,7 +125,8 @@
       "files": true,
       "shell": true,
       "reminders": true,
-      "browser": true
+      "browser": true,
+      "build": true
     },
     "approvedFolders": [],
     "projectsFolder": "",
@@ -151,7 +153,9 @@
     "notifications": true,
     "historyDays": 30,
     "templates": [],
-    "triggers": []
+    "triggers": [],
+    "builder": "auto",
+    "builderCommand": ""
   },
   "connectors": {
     "apps": {},

@@ -725,6 +725,10 @@ pub struct Approvals {
     /// Typing into websites and sending their forms in the agents' browser.
     #[serde(default = "ask")]
     pub browser_forms: Rule,
+    /// Builder agents' coding rounds, the commands they run and what they
+    /// launch.
+    #[serde(default = "ask")]
+    pub builds: Rule,
 }
 
 fn ask() -> Rule {
@@ -738,6 +742,7 @@ impl Default for Approvals {
             file_deletes: Rule::Ask,
             reminders: Rule::Ask,
             browser_forms: Rule::Ask,
+            builds: Rule::Ask,
         }
     }
 }
@@ -779,6 +784,9 @@ pub struct AgentTools {
     /// A headless browser for pages that need JavaScript, clicks or forms.
     #[serde(default = "yes")]
     pub browser: bool,
+    /// Builder agents: apps and sites made in a project folder.
+    #[serde(default = "yes")]
+    pub build: bool,
 }
 
 fn yes() -> bool {
@@ -794,6 +802,7 @@ impl Default for AgentTools {
             shell: true,
             reminders: true,
             browser: true,
+            build: true,
         }
     }
 }
@@ -877,6 +886,25 @@ pub struct Agents {
     pub templates: Vec<Template>,
     /// Agents that start by themselves, on a schedule or when files arrive.
     pub triggers: Vec<Trigger>,
+    /// The coding tool builder agents hand their work to.
+    pub builder: Builder,
+    /// With Builder::Custom: the command, with {task} where the task goes.
+    pub builder_command: String,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Builder {
+    /// The first coding tool installed, else Helpy itself.
+    #[default]
+    Auto,
+    ClaudeCode,
+    Codex,
+    OpenCode,
+    Custom,
+    /// Helpy writes the code with its own tools.
+    Helpy,
 }
 
 impl Default for Agents {
@@ -913,6 +941,8 @@ impl Default for Agents {
             history_days: 30,
             templates: Vec::new(),
             triggers: Vec::new(),
+            builder: Builder::Auto,
+            builder_command: String::new(),
         }
     }
 }

@@ -13,4 +13,9 @@ reminders: Rule,
 /**
  * Typing into websites and sending their forms in the agents' browser.
  */
-browserForms: Rule, };
+browserForms: Rule, 
+/**
+ * Builder agents' coding rounds, the commands they run and what they
+ * launch.
+ */
+builds: Rule, };

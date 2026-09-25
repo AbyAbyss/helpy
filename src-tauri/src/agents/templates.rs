@@ -115,6 +115,24 @@ pub fn builtins() -> Vec<Template> {
             folders: Vec::new(),
         },
         Template {
+            id: "build-app".into(),
+            name: "Build an app".into(),
+            description: "Makes a small app, website or game in its own project folder and opens it for you.".into(),
+            params: vec![
+                param("what", "What to build", ParamKind::LongText, "", true),
+                param("name", "Name", ParamKind::Text, "My app", true),
+            ],
+            agents: vec![agent(
+                "{name}",
+                "Build this for me: {what}. Unless I asked for something else, make it a web app that runs by opening \
+                 index.html (plain HTML, CSS and JavaScript, no install step), looks clean and works on first try. \
+                 Check it works, then launch it and tell me in two or three sentences what you made and how to use it.",
+                &["build"],
+                &[],
+            )],
+            folders: Vec::new(),
+        },
+        Template {
             id: "morning-briefing".into(),
             name: "Morning briefing".into(),
             description: "Today's calendar and the email that needs you, in one short summary.".into(),

@@ -1,4 +1,4 @@
-use super::schema::Settings;
+use super::schema::{Builder, Settings};
 use super::FieldError;
 use crate::hotkeys;
 
@@ -163,6 +163,12 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
         errors.push(FieldError::new(
             "agents.searxngUrl",
             "Use an address starting with http:// or https://",
+        ));
+    }
+    if a.builder == Builder::Custom && a.builder_command.trim().is_empty() {
+        errors.push(FieldError::new(
+            "agents.builderCommand",
+            "Enter the command, or pick another option above",
         ));
     }
 
@@ -547,6 +553,15 @@ mod tests {
         s.buddy.opacity = 0.0;
         let paths: Vec<_> = validate(&s).into_iter().map(|e| e.path).collect();
         assert_eq!(paths, ["buddy.size", "buddy.opacity"]);
+    }
+
+    #[test]
+    fn a_custom_builder_needs_its_command() {
+        let mut s = Settings::default();
+        s.agents.builder = Builder::Custom;
+        assert_eq!(validate(&s)[0].path, "agents.builderCommand");
+        s.agents.builder_command = "aider --message {task}".into();
+        assert_eq!(validate(&s), vec![]);
     }
 
     #[test]

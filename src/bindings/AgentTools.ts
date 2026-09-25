@@ -4,4 +4,8 @@ export type AgentTools = { webSearch: boolean, fetch: boolean, files: boolean, s
 /**
  * A headless browser for pages that need JavaScript, clicks or forms.
  */
-browser: boolean, };
+browser: boolean, 
+/**
+ * Builder agents: apps and sites made in a project folder.
+ */
+build: boolean, };

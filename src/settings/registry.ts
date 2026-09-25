@@ -36,6 +36,7 @@ export type Control =
   | { kind: "money"; emptyLabel: string; unit?: string }
   | { kind: "approvalRules" }
   | { kind: "toolToggles" }
+  | { kind: "builder" }
   | { kind: "folderList" }
   | { kind: "folder"; placeholder: string }
   | { kind: "stringList"; placeholder: string }
@@ -574,6 +575,18 @@ FIELDS.push(
     path: "agents.projectsFolder", section: "agents", group: "Tools", label: "Projects folder",
     help: "Where agents build apps and sites, each in its own folder.", keywords: "projects folder builder apps sites",
     control: { kind: "folder", placeholder: "~/Helpy Projects" },
+  },
+  {
+    path: "agents.builder", section: "agents", group: "Tools", label: "Builder agents code with",
+    help: "Automatic uses Claude Code, Codex or opencode when one is installed (with its own sign-in), and otherwise Helpy writes the code itself with your AI model.",
+    keywords: "builder coding claude code codex opencode aider cli app website build",
+    control: { kind: "builder" },
+  },
+  {
+    path: "agents.builderCommand", section: "agents", group: "Tools", label: "Coding command",
+    help: "Runs in the project folder. {task} is replaced with the task, quoted.", keywords: "custom coding command aider cli",
+    control: { kind: "text", placeholder: "aider --yes --message {task}" },
+    when: (s) => s.agents.builder === "custom",
   },
   {
     path: "agents.backupDays", section: "agents", group: "Tools", label: "Keep backups of changed files",

@@ -4,6 +4,7 @@
 //! classed for the approval rules before it runs.
 
 pub mod browser;
+pub mod build;
 pub mod files;
 pub mod reminders;
 pub mod search;
@@ -17,7 +18,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use ts_rs::TS;
 
-use super::model::ActionKind;
+use super::model::{ActionKind, Agent};
 use super::runner::{Gate, ToolOutcome, ASK_USER, DELEGATE};
 use crate::ai::types::ToolDef;
 use crate::settings::schema::{Agents, Rule};
@@ -133,6 +134,14 @@ pub fn groups(a: &Agents) -> Vec<ToolGroup> {
         "open web pages in a real (headless) browser for sites that need JavaScript, click, fill in forms, read tables, \
          and save data as CSV files (for scraping, use this)",
         vec![rule_asks(a.approvals.browser_forms, "typing into websites")],
+    );
+    add(
+        a.tools.build,
+        "build",
+        "Build apps",
+        "make apps, websites, games and scripts in a project folder of its own (writing and running the code), \
+         and open the result for the user",
+        vec![rule_asks(a.approvals.builds, "coding and opening what it made")],
     );
     add(
         true,
@@ -283,8 +292,54 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
     out
 }
 
+/// The build tools. With a coding tool installed the agent hands it the
+/// coding; without one it writes the files itself.
+pub fn build_defs(coder: Option<build::Coder>) -> Vec<ToolDef> {
+    let rel = json!({ "type": "string", "description": "A path inside the project folder, e.g. src/app.js" });
+    let mut out = match coder {
+        Some(t) => vec![def(
+            "code",
+            &format!(
+                "Hand a coding task to {}, which writes, runs and fixes code in this agent's project folder. Describe \
+                 what to build (or, later, what to change) completely, including the look and how it's used. \
+                 Returns what it did. Later rounds continue from what's there.",
+                t.name()
+            ),
+            json!({ "task": { "type": "string" } }),
+            &["task"],
+        )],
+        None => vec![
+            def("project_list", "List the files in this agent's project folder.", json!({}), &[]),
+            def("project_read", "Read a file in the project folder.", json!({ "path": rel }), &["path"]),
+            def(
+                "project_write",
+                "Create or replace a file in the project folder. Missing folders are created.",
+                json!({ "path": rel, "content": { "type": "string" } }),
+                &["path", "content"],
+            ),
+            def(
+                "project_run",
+                "Run a command in the project folder (e.g. npm install, a test). Not for servers that keep running: use launch.",
+                json!({ "command": { "type": "string" } }),
+                &["command"],
+            ),
+        ],
+    };
+    out.push(def(
+        "launch",
+        "Open what you built for the user: a file in the project folder (e.g. index.html), or a local address after \
+         starting the project's server with `command` (e.g. target http://localhost:5173, command npm run dev).",
+        json!({ "target": { "type": "string" }, "command": { "type": "string" } }),
+        &["target"],
+    ));
+    out
+}
+
 fn group_of(tool: &str) -> Option<&'static str> {
     Some(match tool {
+        "code" | "project_list" | "project_read" | "project_write" | "project_run" | "launch" => {
+            "build"
+        }
         "web_search" => "search",
         "fetch_page" => "web",
         "list_folder" | "read_file" | "write_file" | "make_folder" | "move_file"
@@ -327,10 +382,23 @@ impl Toolbox {
     /// Built-in tool definitions plus those of connectors and MCP servers.
     pub fn defs(&self, groups: &[String]) -> Vec<ToolDef> {
         let mut out = defs(groups);
+        if groups.iter().any(|g| g == "build") {
+            out.extend(build_defs(self.coder().map(|c| c.0)));
+        }
         if let Some(x) = &self.external {
             out.extend(x.defs(groups));
         }
         out
+    }
+
+    /// The coding tool builder agents use; None when Helpy builds itself.
+    pub fn coder(&self) -> Option<(build::Coder, PathBuf)> {
+        build::pick(self.settings.builder, &self.settings.builder_command)
+    }
+
+    /// An agent's own project folder.
+    pub fn project(&self, agent: &Agent) -> PathBuf {
+        build::project_dir(&self.projects, &agent.id, &agent.name)
     }
 
     pub fn gate(&self, groups: &[String], tool: &str, args: &Value) -> Gate {
@@ -353,6 +421,7 @@ impl Toolbox {
                 source: match kind {
                     ActionKind::Reminder => "Reminders".into(),
                     ActionKind::Browser => "Web browser".into(),
+                    ActionKind::Build => "Builder".into(),
                     _ => "Files".into(),
                 },
                 editable: match (kind, tool) {
@@ -361,6 +430,11 @@ impl Toolbox {
                         .to_vec(),
                     (_, "write_file") => vec!["content".into()],
                     (ActionKind::Browser, _) => vec!["text".into()],
+                    (_, "code") => vec!["task".into()],
+                    (_, "project_run") => vec!["command".into()],
+                    (_, "launch") if !s(args, "command").trim().is_empty() => {
+                        vec!["command".into()]
+                    }
                     _ => Vec::new(),
                 },
                 kind,
@@ -441,6 +515,34 @@ impl Toolbox {
                 },
                 s(args, "text").to_string(),
             ),
+            "code" => rule(
+                a.builds,
+                ActionKind::Build,
+                format!(
+                    "Let {} work on the project",
+                    self.coder()
+                        .map(|c| c.0.name())
+                        .unwrap_or("the coding tool")
+                ),
+                s(args, "task").to_string(),
+            ),
+            "project_run"
+                if self.settings.shell_policy == crate::settings::schema::ShellPolicy::Never =>
+            {
+                Gate::Never("the user turned commands off in Settings → Agents.".into())
+            }
+            "project_run" => rule(
+                a.builds,
+                ActionKind::Build,
+                "Run a command in the project".into(),
+                s(args, "command").to_string(),
+            ),
+            "launch" => rule(
+                a.builds,
+                ActionKind::Build,
+                format!("Open {}", s(args, "target")),
+                s(args, "command").trim().to_string(),
+            ),
             _ => Gate::Allow,
         }
     }
@@ -449,11 +551,13 @@ impl Toolbox {
     /// are handed to `keep`.
     pub async fn run(
         &self,
-        agent: &str,
+        whole: &Agent,
         tool: &str,
         args: &Value,
         keep: &(dyn Fn(HelpyReminder) + Sync),
+        live: &(dyn Fn(String) + Sync),
     ) -> ToolOutcome {
+        let agent = whole.id.as_str();
         let file_result = |r: Result<(String, Vec<super::model::FileOp>), String>| match r {
             Ok((text, ops)) => ToolOutcome::Ok { text, ops },
             Err(e) => ToolOutcome::Permanent(e),
@@ -517,6 +621,37 @@ impl Toolbox {
             }
             "browser_tables" => self.browser.as_ref().unwrap().tables(agent).await,
             "save_csv" => browser::save_csv(&self.projects, s(args, "name"), args),
+            "code" => match self.coder() {
+                Some((t, program)) => {
+                    let custom = &self.settings.builder_command;
+                    build::code(
+                        t,
+                        &program,
+                        custom,
+                        &self.project(whole),
+                        s(args, "task"),
+                        live,
+                    )
+                    .await
+                }
+                None => ToolOutcome::Permanent(
+                    "No coding tool is set up; use project_write instead.".into(),
+                ),
+            },
+            "project_list" => build::list(&self.project(whole)),
+            "project_read" => build::read(&self.project(whole), s(args, "path")),
+            "project_write" => {
+                build::write(&self.project(whole), s(args, "path"), s(args, "content"))
+            }
+            "project_run" => {
+                let dir = self.project(whole);
+                let _ = std::fs::create_dir_all(&dir);
+                shell::run(s(args, "command"), &dir).await
+            }
+            "launch" => {
+                let command = args["command"].as_str();
+                build::launch(&self.project(whole), s(args, "target"), command).await
+            }
             "run_command" => {
                 let _ = std::fs::create_dir_all(&self.projects);
                 shell::run(s(args, "command"), &self.projects).await
@@ -660,6 +795,38 @@ mod tests {
     }
 
     #[test]
+    fn builder_tools_ask_first_and_respect_the_command_setting() {
+        let mut a = Agents::default();
+        a.builder = crate::settings::schema::Builder::Helpy;
+        let t = toolbox(&a);
+        let g = vec!["build".to_string()];
+        let names: Vec<_> = t.defs(&g).into_iter().map(|d| d.name).collect();
+        assert!(
+            names.contains(&"project_write".to_string()) && !names.contains(&"code".to_string())
+        );
+        assert!(matches!(
+            t.gate(&g, "project_write", &json!({})),
+            Gate::Allow
+        ));
+        assert!(
+            matches!(t.gate(&g, "launch", &json!({"target": "index.html"})), Gate::Ask { kind: ActionKind::Build, editable, .. } if editable.is_empty())
+        );
+        assert!(matches!(
+            t.gate(&g, "project_run", &json!({"command": "npm i"})),
+            Gate::Ask { .. }
+        ));
+        a.shell_policy = ShellPolicy::Never;
+        assert!(matches!(
+            toolbox(&a).gate(&g, "project_run", &json!({"command": "npm i"})),
+            Gate::Never(_)
+        ));
+        assert!(matches!(
+            t.gate(&["files".into()], "launch", &json!({})),
+            Gate::Never(_)
+        ));
+    }
+
+    #[test]
     fn groups_follow_settings_and_what_this_os_supports() {
         let mut a = Agents::default();
         let ids = |a: &Agents| groups(a).into_iter().map(|g| g.id).collect::<Vec<_>>();
@@ -672,12 +839,16 @@ mod tests {
                 "shell",
                 "reminders",
                 "browser",
+                "build",
                 "team"
             ]
         );
         a.tools.fetch = false;
         a.shell_policy = ShellPolicy::Never;
-        assert_eq!(ids(&a), ["search", "files", "reminders", "browser", "team"]);
+        assert_eq!(
+            ids(&a),
+            ["search", "files", "reminders", "browser", "build", "team"]
+        );
         let files = groups(&a).into_iter().find(|g| g.id == "files").unwrap();
         assert_eq!(files.asks, ["deleting files"]);
         // Calendar events are only offered where the OS has a calendar.

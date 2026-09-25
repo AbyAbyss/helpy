@@ -89,6 +89,8 @@ pub enum ActionKind {
     Connector,
     /// Typing into a website or sending its form.
     Browser,
+    /// A builder agent's coding round, project command or launch.
+    Build,
 }
 
 /// Something the agent is waiting on the user for.

@@ -441,7 +441,8 @@ impl Env for AppEnv {
         Box::pin(async move {
             let app = self.app.clone();
             let keep = move |r: HelpyReminder| app.state::<AgentsState>().store.add_reminder(&r);
-            self.toolbox.run(&agent.id, tool, args, &keep).await
+            let live = |line: String| self.live(agent, &line);
+            self.toolbox.run(agent, tool, args, &keep, &live).await
         })
     }
 
@@ -1358,6 +1359,14 @@ pub fn agents_browser_info(app: AppHandle) -> BrowserInfo {
     BrowserInfo {
         path: tools::browser::find_browser(b.data()).map(|p| p.display().to_string()),
     }
+}
+
+/// The coding tools builder agents can hand their work to.
+#[tauri::command]
+pub async fn agents_builders() -> Vec<tools::build::CoderInfo> {
+    tauri::async_runtime::spawn_blocking(tools::build::installed)
+        .await
+        .unwrap_or_default()
 }
 
 /// Downloads Chromium for agents, for computers without a Chrome-type browser.
