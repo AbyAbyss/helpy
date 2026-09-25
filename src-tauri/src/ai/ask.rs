@@ -434,8 +434,9 @@ impl Turn<'_> {
         let _ = self.app.emit(EVENT, e);
     }
 
-    /// Screenshot for the model, or the reason there isn't one.
-    async fn screen(&self, ask_first: bool) -> Result<Shot, String> {
+    /// Screenshot for the model, or the reason there isn't one. `guiding`:
+    /// the visual guidance model reads it (after a walkthrough's first step).
+    async fn screen(&self, ask_first: bool, guiding: bool) -> Result<Shot, String> {
         let state = self.app.state::<AskState>();
         if self.settings.privacy.capture_paused {
             self.send(AskEvent::Notice {
@@ -456,7 +457,15 @@ impl Turn<'_> {
                 return Err("The user chose not to share their screen. Answer without it.".into());
             }
         }
-        match capture::capture_cursor_monitor(self.app).await {
+        let reader = match guiding {
+            true => self.plan.guide_model.as_ref().or(self.plan.vision.as_ref()),
+            false => self.plan.vision.as_ref(),
+        };
+        let limit = reader
+            .and_then(|r| self.settings.ai.model(r))
+            .map(|(p, m)| capture::ImageLimit::for_model(p.kind, &m.id))
+            .unwrap_or(capture::ImageLimit::DEFAULT);
+        match capture::capture_cursor_monitor(self.app, limit).await {
             Ok(shot) => {
                 *state.screen.lock().unwrap() = Some(shot.meta);
                 self.send(AskEvent::Screen {
@@ -612,7 +621,7 @@ impl Turn<'_> {
                  still want help, or finish with a short answer if they don't"
             ),
         };
-        Ok(match self.screen(false).await {
+        Ok(match self.screen(false, true).await {
             Ok(shot) => (
                 Self::screenshot_parts(&format!("{done}. Here is their screen now"), shot),
                 false,
@@ -628,7 +637,7 @@ impl Turn<'_> {
     ) -> Result<(Vec<Message>, Completion), ProviderError> {
         let mut user = Message::user_text(question);
         if self.plan.screen == ScreenMode::Attach {
-            if let Ok(shot) = self.screen(false).await {
+            if let Ok(shot) = self.screen(false, false).await {
                 let mut parts = Self::screenshot_parts("My screen", shot);
                 parts.append(&mut user.parts);
                 user.parts = parts;
@@ -698,7 +707,7 @@ impl Turn<'_> {
                 reply = parts;
             } else if wants_screen {
                 looked = true;
-                match self.screen(ask_first).await {
+                match self.screen(ask_first, false).await {
                     Ok(shot) => reply = Self::screenshot_parts("Here is my screen", shot),
                     Err(reason) => reply.push(Part::Text(reason)),
                 }
@@ -713,7 +722,7 @@ impl Turn<'_> {
                         ),
                         VIEW_SCREEN => {
                             looked = true;
-                            match self.screen(ask_first).await {
+                            match self.screen(ask_first, false).await {
                                 Ok(shot) => (Self::screenshot_parts("Screenshot", shot), false),
                                 Err(reason) => (vec![Part::Text(reason)], false),
                             }

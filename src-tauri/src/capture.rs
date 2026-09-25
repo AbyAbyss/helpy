@@ -12,7 +12,7 @@ use ts_rs::TS;
 
 use crate::ai::error::{ErrorKind, ProviderError};
 use crate::overlay::{MonitorRect, Overlays};
-use crate::settings::schema::Privacy;
+use crate::settings::schema::{Privacy, ProviderKind};
 use crate::settings::SettingsStore;
 
 /// Longest edge sent to a model. Larger screens are scaled down.
@@ -83,15 +83,65 @@ pub struct Shot {
 
 /// Size that fits within MAX_EDGE, keeping the aspect ratio.
 pub fn fit(width: u32, height: u32) -> (u32, u32) {
-    let long = width.max(height);
-    if long <= MAX_EDGE {
-        return (width, height);
+    ImageLimit::DEFAULT.fit(width, height)
+}
+
+/// The largest screenshot a model reads without its provider shrinking it
+/// first. Staying inside it keeps the pixel size Helpy states the size the
+/// model sees, so its coordinates land where it means.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ImageLimit {
+    pub long_edge: u32,
+    pub short_edge: u32,
+    pub pixels: u32,
+}
+
+impl ImageLimit {
+    pub const DEFAULT: Self = Self {
+        long_edge: MAX_EDGE,
+        short_edge: MAX_EDGE,
+        pixels: u32::MAX,
+    };
+
+    pub fn for_model(kind: ProviderKind, model: &str) -> Self {
+        // Claude models from Opus 4.7 on read up to 2576 px and 4784 image
+        // tokens (28x28 px each) at full size; earlier ones 1568 px and about
+        // 1.15 megapixels.
+        const HIGH_RES: [&str; 6] = ["opus-4-7", "opus-4-8", "opus-5", "sonnet-5", "fable", "mythos"];
+        match kind {
+            ProviderKind::Anthropic if HIGH_RES.iter().any(|m| model.contains(m)) => Self {
+                long_edge: 2576,
+                short_edge: 2576,
+                pixels: 4784 * 784,
+            },
+            ProviderKind::Anthropic => Self {
+                long_edge: 1568,
+                short_edge: 1568,
+                pixels: 1_150_000,
+            },
+            // OpenAI fits images in 2048 px, then brings the short side to 768.
+            ProviderKind::OpenAi => Self {
+                long_edge: 2048,
+                short_edge: 768,
+                pixels: u32::MAX,
+            },
+            _ => Self::DEFAULT,
+        }
     }
-    let s = MAX_EDGE as f64 / long as f64;
-    (
-        ((width as f64 * s).round() as u32).max(1),
-        ((height as f64 * s).round() as u32).max(1),
-    )
+
+    /// Size within the limit, keeping the aspect ratio.
+    pub fn fit(self, width: u32, height: u32) -> (u32, u32) {
+        let (long, short) = (width.max(height) as f64, width.min(height) as f64);
+        let s = (self.long_edge as f64 / long)
+            .min(self.short_edge as f64 / short)
+            .min((self.pixels as f64 / (long * short)).sqrt());
+        if s >= 1.0 {
+            return (width, height);
+        }
+        // Rounded down, so the result never goes over a limit.
+        let size = |v: u32| ((v as f64 * s + 1e-6).floor() as u32).max(1);
+        (size(width), size(height))
+    }
 }
 
 pub fn jpeg(img: &DynamicImage, quality: u8) -> Vec<u8> {
@@ -104,8 +154,12 @@ pub fn jpeg(img: &DynamicImage, quality: u8) -> Vec<u8> {
     out
 }
 
-pub fn encode(raw: RgbaImage, monitor: &MonitorRect) -> (String, String, CaptureMeta) {
-    let (w, h) = fit(raw.width(), raw.height());
+pub fn encode(
+    raw: RgbaImage,
+    monitor: &MonitorRect,
+    limit: ImageLimit,
+) -> (String, String, CaptureMeta) {
+    let (w, h) = limit.fit(raw.width(), raw.height());
     let img = DynamicImage::ImageRgba8(raw);
     let sized = if (w, h) == (img.width(), img.height()) {
         img.clone()
@@ -136,11 +190,14 @@ pub struct Frame {
 /// Captures the monitor the cursor is on. Helpy's own windows are left out:
 /// Windows and macOS exclude them from capture; on Linux they're hidden for
 /// the moment of the capture.
-pub async fn capture_cursor_monitor(app: &AppHandle) -> Result<Shot, ProviderError> {
+pub async fn capture_cursor_monitor(
+    app: &AppHandle,
+    limit: ImageLimit,
+) -> Result<Shot, ProviderError> {
     let frame = grab_cursor_monitor(app).await?;
     let monitor = frame.monitor;
     let (jpeg_base64, thumbnail_data_url, meta) =
-        tokio::task::spawn_blocking(move || encode(frame.image, &monitor))
+        tokio::task::spawn_blocking(move || encode(frame.image, &monitor, limit))
             .await
             .map_err(|e| ProviderError::new(ErrorKind::Setup, e.to_string()))?;
     Ok(Shot {
@@ -293,6 +350,28 @@ mod tests {
     }
 
     #[test]
+    fn sizes_screenshots_for_the_model_that_reads_them() {
+        // A 14" MacBook Pro screen, 3024x1964 physical pixels.
+        let size = |kind, model| ImageLimit::for_model(kind, model).fit(3024, 1964);
+        // Current Claude: the 4784-token cap binds before 2576 px.
+        let (w, h) = size(ProviderKind::Anthropic, "claude-sonnet-5");
+        assert_eq!((w, h), (2403, 1560));
+        assert!(w * h <= 4784 * 784);
+        assert_eq!(size(ProviderKind::Anthropic, "claude-opus-5-5"), (2403, 1560));
+        // Earlier Claude: about 1.15 megapixels.
+        let (w, h) = size(ProviderKind::Anthropic, "claude-sonnet-4-5");
+        assert_eq!((w, h), (1330, 864));
+        // OpenAI: the short side at 768, as OpenAI would scale it.
+        assert_eq!(size(ProviderKind::OpenAi, "gpt-4.1-mini"), (1182, 768));
+        // Everything else keeps the old 1568 px edge.
+        assert_eq!(size(ProviderKind::Gemini, "gemini-2.5-pro"), (1568, 1018));
+        // Small screens are never enlarged.
+        let claude = ImageLimit::for_model(ProviderKind::Anthropic, "claude-sonnet-5");
+        assert_eq!(claude.fit(1280, 800), (1280, 800));
+        assert_eq!(ImageLimit::for_model(ProviderKind::OpenAi, "x").fit(1024, 640), (1024, 640));
+    }
+
+    #[test]
     fn maps_model_coordinates_back_through_resize_and_dpi() {
         // A 4K monitor at 200% to the right of a 1080p one, sent at 1568x882.
         let m = MonitorRect {
@@ -327,6 +406,7 @@ mod tests {
         let (full, thumb, meta) = encode(
             RgbaImage::from_pixel(2000, 1000, image::Rgba([200, 30, 40, 255])),
             &m,
+            ImageLimit::DEFAULT,
         );
         assert_eq!((meta.image_width, meta.image_height), (1568, 784));
         let bytes = base64::engine::general_purpose::STANDARD
