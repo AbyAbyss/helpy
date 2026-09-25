@@ -693,9 +693,21 @@ pub struct ConnectorInfo {
     pub provider: Option<String>,
     pub needs_secret: bool,
     pub has_secret: bool,
+    /// The redirect address to register with the OAuth app.
+    pub redirect: Option<String>,
+    /// Every scope it may ask for, for the setup guide.
+    pub scopes: Vec<String>,
     pub token: Option<TokenHelp>,
     pub connection: Option<Connection>,
     pub actions: Vec<ActionInfo>,
+}
+
+/// What to register: providers that ignore the port get it without one.
+fn redirect(spec: &OAuthSpec) -> String {
+    match spec.port {
+        0 => format!("http://{}/callback", spec.host),
+        port => format!("http://{}:{port}/callback", spec.host),
+    }
 }
 
 #[tauri::command]
@@ -714,6 +726,17 @@ pub fn connectors_list(app: AppHandle) -> Vec<ConnectorInfo> {
                 has_secret: spec
                     .as_ref()
                     .is_some_and(|s| app_secret(s.provider).is_some()),
+                redirect: spec.as_ref().map(redirect),
+                scopes: spec
+                    .as_ref()
+                    .map(|s| {
+                        s.read_scopes
+                            .iter()
+                            .chain(s.write_scopes)
+                            .map(|x| x.to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 token: c.token(),
                 connection: state.connection(c.id()),
                 actions: c

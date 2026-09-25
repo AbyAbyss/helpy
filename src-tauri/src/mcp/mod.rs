@@ -143,9 +143,12 @@ fn secret(id: &str, kind: &str, key: &str) -> Option<String> {
 }
 
 /// The server's variables and headers with secret values filled in.
-fn resolved(m: &McpServer) -> (Vec<(String, String)>, Vec<(String, String)>) {
+type Pairs = Vec<(String, String)>;
+
+fn resolved(m: &McpServer) -> (Pairs, Pairs) {
     let fill = |kind: &str, list: &[crate::settings::schema::KeyValue]| {
         list.iter()
+            .filter(|kv| !kv.key.is_empty())
             .map(|kv| {
                 let v = if kv.secret {
                     secret(&m.id, kind, &kv.key).unwrap_or_default()

@@ -91,7 +91,7 @@ Crates: `rdev`.
 - Tools: web search, fetch, files in approved folders with backups, shell with policy.
 - Test suite: fake provider and fake tools that fail in scripted ways to prove every limit.
 
-- As built: agents are persisted as one JSON document per agent in SQLite (`agents.db`), saved after every step. The runner talks to the outside world through an `Env` trait, which is how the tests drive it with a scripted provider and tools. Repeat and no-progress detection use a stable FNV hash, so `sha2` wasn't needed. Web search is an adapter trait (DuckDuckGo, Brave, SearXNG). Floating cards are the R2 dock and hover cards. Retries and backoff for agent steps use the global limits under AI providers, so there's one set of retry settings. Approvals are answered on the agent's card and in the panel; the approval inbox window is Phase 7. Templates, triggers, chained runs, dependencies, orchestrators and voice steering are Phase 8 as planned.
+- As built: agents are persisted as one JSON document per agent in SQLite (`agents.db`), saved after every step. The runner talks to the outside world through an `Env` trait, which is how the tests drive it with a scripted provider and tools. Repeat and no-progress detection use a stable FNV hash, so `sha2` wasn't needed. Web search is an adapter trait (DuckDuckGo, Brave, SearXNG). Floating cards are the R2 dock and hover cards. Retries and backoff for agent steps use the global limits under AI providers, so there's one set of retry settings. Approvals are answered on the agent's card and in the panel; the approval inbox is Phase 7. Templates, triggers, chained runs, dependencies, orchestrators and voice steering are Phase 8 as planned.
 
 Crates: `rusqlite` (bundled), `tokio` (process), `tauri-plugin-notification`, `tauri-plugin-clipboard-manager` (Phase 5), `scraper`, `html2text`.
 
@@ -102,6 +102,8 @@ Crates: `rusqlite` (bundled), `tokio` (process), `tauri-plugin-notification`, `t
 - Approval inbox and per-connector action rules, checked in the tool dispatcher so no code path can skip them.
 
 Crates: `oauth2`, `rmcp`, `tiny_http` (redirect listener).
+
+- As built: all seven services in Phase 7, not only Gmail and Notion: Gmail, Google Calendar, Google Drive, Notion, Outlook (mail and calendar), Slack and GitHub. OAuth is a small in-house module rather than `oauth2`, because the same code also does MCP authorization discovery (RFC 9728 and 8414), dynamic client registration (RFC 7591) and resource indicators (RFC 8707). The loopback listener uses tokio, so `tiny_http` wasn't needed. Users bring their own OAuth app per provider, with a guide in settings; Notion, Slack and GitHub also accept a pasted token. MCP uses `rmcp` for stdio and Streamable HTTP only; the deprecated SSE transport isn't supported. The approval inbox is a view in the agent panel rather than its own window. Adding a service means one type implementing `Connector`, listed in the registry; adding a catalog MCP server is one list entry.
 
 ## Phase 8: advanced agents
 

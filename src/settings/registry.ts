@@ -5,7 +5,7 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "agents" | "voiceInput" | "voiceOutput";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "agents" | "connectors" | "voiceInput" | "voiceOutput";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, appearance and language." },
@@ -15,6 +15,7 @@ export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
   { id: "guidance", title: "Visual guidance", blurb: "How Helpy points things out on your screen, and how walkthroughs move from step to step." },
   { id: "agents", title: "Agents", blurb: "Background agents: what they may do, where, and the limits they can never pass." },
+  { id: "connectors", title: "Connectors", blurb: "Services and MCP servers agents can use, and what they may do there without asking." },
   { id: "circle", title: "Circle to explain", blurb: "Draw around anything on screen to have it explained, labelled, copied or translated." },
   { id: "voiceInput", title: "Voice input", blurb: "How Helpy hears you: the microphone, the speech engine, and when it stops listening." },
   { id: "voiceOutput", title: "Voice output", blurb: "Whether Helpy reads answers aloud, and in which voice." },
@@ -51,7 +52,10 @@ export type Control =
   | { kind: "piperVoice" }
   | { kind: "providers" }
   | { kind: "routing" }
-  | { kind: "fallbackChain" };
+  | { kind: "fallbackChain" }
+  | { kind: "connectors" }
+  | { kind: "oauthApps" }
+  | { kind: "mcpServers" };
 
 export type Field = {
   path: SettingPath;
@@ -332,6 +336,24 @@ const secs = (v: number) => (v === 0 ? "Off" : `${v.toFixed(1)} s`);
 
 FIELDS.push(
   // Voice input
+  {
+    path: "connectors.builtin", section: "connectors", group: "Services", label: "Services",
+    help: "Connect a service, then choose what agents may do there. Sending and posting ask you first unless you change it.",
+    keywords: "gmail google calendar drive notion outlook microsoft slack github connect account sign in token oauth permission read only",
+    control: { kind: "connectors" },
+  },
+  {
+    path: "connectors.apps", section: "connectors", group: "Services", label: "Your OAuth apps",
+    help: "Signing in to Google, Microsoft, Notion, Slack or GitHub goes through an OAuth app you make once. Each has a short guide.",
+    keywords: "oauth app client id secret google cloud azure developer",
+    control: { kind: "oauthApps" },
+  },
+  {
+    path: "connectors.mcp", section: "connectors", group: "MCP servers", label: "MCP servers",
+    help: "Programs on this computer (stdio) or remote servers (Streamable HTTP) that give agents more tools.",
+    keywords: "mcp model context protocol server jira atlassian linear aws sentry stripe playwright stdio http json import export headers environment keys",
+    control: { kind: "mcpServers" },
+  },
   {
     path: "voiceInput.engine", section: "voiceInput", group: "Speech recognition", label: "Engine",
     help: "On this computer is private and free. Cloud engines send your recording to that service.",

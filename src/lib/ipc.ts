@@ -19,6 +19,12 @@ import type { SystemVoice } from "../bindings/SystemVoice";
 import type { VoiceSupport } from "../bindings/VoiceSupport";
 import type { WhisperModel } from "../bindings/WhisperModel";
 import type { Settings } from "../bindings/Settings";
+import type { Connection } from "../bindings/Connection";
+import type { ConnectorInfo } from "../bindings/ConnectorInfo";
+import type { ImportReport } from "../bindings/ImportReport";
+import type { Preset } from "../bindings/Preset";
+import type { ServerStatus } from "../bindings/ServerStatus";
+import type { ToolInfo } from "../bindings/ToolInfo";
 
 export const EVENTS = {
   settingsChanged: "settings://changed",
@@ -47,6 +53,8 @@ export const EVENTS = {
   agentCount: "agents://count",
   agentPlan: "agents://plan",
   agentsFocus: "agents://focus",
+  connectorsChanged: "connectors://changed",
+  mcpChanged: "mcp://changed",
 } as const;
 
 type Section = keyof Settings;
@@ -164,6 +172,25 @@ export const api = {
   agentVoiceFollowUp: (id: string) => invoke<void>("agents_voice_follow_up", { id }),
   dockLayout: (width: number, height: number) => invoke<void>("dock_layout", { width, height }),
   dockFocus: (on: boolean) => invoke<void>("dock_focus", { on }),
+  /** Opens an https page in the browser. */
+  openLink: (url: string) => invoke<void>("open_link", { url }),
+  connectors: () => invoke<ConnectorInfo[]>("connectors_list"),
+  /** Signs in in the browser; resolves once the user is back. */
+  connectorConnect: (id: string) => invoke<Connection>("connectors_connect", { id }),
+  connectorSetToken: (id: string, token: string) => invoke<Connection>("connectors_set_token", { id, token }),
+  connectorDisconnect: (id: string) => invoke<void>("connectors_disconnect", { id }),
+  connectorTest: (id: string) => invoke<string>("connectors_test", { id }),
+  /** An OAuth app's client secret, kept in the keychain. Empty removes it. */
+  setAppSecret: (provider: string, secret: string) => invoke<void>("connectors_set_app_secret", { provider, secret }),
+  mcpStatus: () => invoke<ServerStatus[]>("mcp_status"),
+  mcpConnect: (id: string) => invoke<ToolInfo[]>("mcp_connect", { id }),
+  mcpSignIn: (id: string) => invoke<ToolInfo[]>("mcp_sign_in", { id }),
+  mcpSignOut: (id: string) => invoke<void>("mcp_sign_out", { id }),
+  /** A secret variable ("env"), header ("header") or OAuth client secret ("oauth"). */
+  mcpSetSecret: (id: string, kind: "env" | "header" | "oauth", key: string, value: string) => invoke<void>("mcp_set_secret", { id, kind, key, value }),
+  mcpImport: (json: string) => invoke<ImportReport>("mcp_import", { json }),
+  mcpExport: () => invoke<string>("mcp_export"),
+  mcpCatalog: () => invoke<Preset[]>("mcp_catalog"),
 };
 
 export function asFieldErrors(e: unknown): FieldError[] {

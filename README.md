@@ -6,13 +6,13 @@ Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first c
 
 The full phase plan, crate list and platform risks are in [docs/PLAN.md](docs/PLAN.md).
 
-## What works today (Phases 1 to 6)
+## What works today (Phases 1 to 7)
 
 - **Cursor buddy.** A small character follows the pointer on every monitor, with per-monitor DPI handled in Rust. Three built-in styles (Pip, Spark, Dot) or your own SVG/PNG. Size, opacity, offset and follow smoothness are adjustable. It auto-hides in fullscreen apps and, optionally, when the mouse rests.
 - **Overlays.** One transparent, always-on-top, click-through window per monitor. They're hidden from the taskbar and excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE` on Windows, `NSWindowSharingNone` on macOS). They are rebuilt when monitors are plugged in or removed.
-- **Tray.** Toggle the buddy, toggle voice guidance, pause screen capture, circle to explain, open the agent panel, switch behavior profile, open settings, quit. The icon changes when capture is paused. The approval inbox is shown but disabled until Phase 7.
-- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (voice ask, text ask, circle to explain, open agent panel, pause all agents, open settings, pause capture, clear annotations) are registered with the OS. The others are saved and marked "Not active yet".
-- **Settings window.** Search (Ctrl/Cmd+F), instant apply, per-section reset, JSON import/export, inline validation, and light/dark/system theme. Sections: General, Cursor buddy (with a live preview that follows your mouse), Hotkeys, AI providers, Answer style, Visual guidance (with a live preview), Agents, Circle to explain, Voice input, Voice output.
+- **Tray.** Toggle the buddy, toggle voice guidance, pause screen capture, circle to explain, open the agent panel, open the approval inbox, switch behavior profile, open settings, quit. The icon changes when capture is paused.
+- **Global hotkeys.** All nine actions can be rebound. Duplicates are rejected, and combinations the OS already uses get a warning. The hotkeys for actions that exist now (voice ask, text ask, circle to explain, open agent panel, open approval inbox, pause all agents, open settings, pause capture, clear annotations) are registered with the OS. The rest are saved and marked "Not active yet".
+- **Settings window.** Search (Ctrl/Cmd+F), instant apply, per-section reset, JSON import/export, inline validation, and light/dark/system theme. Sections: General, Cursor buddy (with a live preview that follows your mouse), Hotkeys, AI providers, Answer style, Visual guidance (with a live preview), Agents, Connectors, Circle to explain, Voice input, Voice output.
 - **AI providers.** Anthropic, OpenAI, Google Gemini, Ollama, LM Studio, llama.cpp server and any OpenAI-compatible endpoint, all streaming. Add a provider from a preset, find local models with one click, load a provider's model list, test the connection, and choose which model each feature uses. API keys go in the OS keychain.
 - **Text questions (Alt+Shift+T).** A panel opens next to the cursor. Answers stream in, and follow-ups keep the context until you close it (Esc). Answer style decides whether Helpy sends a screenshot with every question, asks you first, or lets the model decide. Screenshots are of the monitor under the cursor, downscaled to 1568 px, and never include Helpy's own windows.
 - **Voice (Alt+Shift+Space).** Hold to talk, or press to start and stop. A small glowing waveform appears by the cursor, shows what you're saying, then a short caption of the answer; click it for the full conversation. Speech recognition runs on your computer with Whisper, or through OpenAI or Deepgram. Answers are read aloud sentence by sentence as they arrive, in a system voice, a Piper voice or an OpenAI voice. Esc stops listening, answering and speaking. Optional wake word ("hey helpy"), noise suppression, auto-stop on silence, and a microphone picker with a live level meter.
@@ -24,6 +24,10 @@ The full phase plan, crate list and platform risks are in [docs/PLAN.md](docs/PL
   - Limits are enforced in Rust and can't be talked around: steps and tool calls per agent, a time limit, per-agent, per-batch and daily token and cost budgets checked before every call (failed attempts count), and stuck detection (the same action or reply repeated, or several steps with nothing new). Long-running agents summarize older work to stay within their model. Agents are saved after every step, so an agent running when Helpy quits comes back paused with its limits where they were.
   - **The dock:** a glowing chip per agent at the screen edge. Blue is working, green done, yellow a question, red needs permission or went wrong. Hover a chip for its card: what it's doing in plain words, the last command, progress, and the buttons it needs (approve, answer, retry, raise a budget once, undo). Finished open-ended agents (an app, a site) stay ready for changes; follow up by text or voice and the same agent carries on. When a spoken request becomes an agent, the voice waveform glides into the dock and becomes its chip.
   - **The agent panel (Alt+Shift+A):** every agent grouped by request, with its live status, full result, a timeline of what it did, tokens, cost and time, and pause, resume, cancel, retry, run again, rename, remove, export to Markdown and undo.
+- **Connectors.** Agents can use Gmail, Google Calendar, Google Drive, Notion, Outlook (mail and calendar), Slack and GitHub. Each has a few focused actions: Gmail can search, read, draft and send; Slack can search, list channels, read history and post; and so on. Sign in happens in the browser (OAuth with PKCE and a loopback redirect) through an OAuth app you make once, with a short guide in settings for each provider. Notion, Slack and GitHub also take a pasted token. Tokens live in the keychain and refresh on their own.
+  - Each service can be read-only or read and write, and every action has its own rule (Allow, Ask me, Never). Reads are allowed, drafts are allowed, and anything that sends, posts or creates asks first. Rules are checked where tools run, so no path skips them.
+  - **MCP servers:** add programs that run on your computer (stdio, e.g. `npx` or `uvx`) or remote servers (Streamable HTTP). Environment variables and headers can be marked secret, and those values go to the keychain. Remote servers that want a sign-in (Jira, Linear, Sentry…) use OAuth discovered from the server as the MCP spec describes, with dynamic client registration when the server offers it. Pick a ready-made entry (Atlassian, Linear, Notion, GitHub, Sentry, Stripe, Context7, AWS, files, Playwright), fill in your own, or paste the `mcpServers` JSON other apps use; export works the same way, with secrets left out. The older SSE transport isn't supported. Tools the server marks read-only are allowed; others ask first.
+  - **The approval inbox (Alt+Shift+I):** everything waiting for your OK across all agents, with the full content. Text fields (an email body, a post, an issue) can be edited before approving, and several actions from one place can be approved at once. By voice: "approve", "reject", or "approve all from Gmail". "Connect my Gmail" starts the sign-in.
 - **Retry and budget limits, enforced in Rust.** Timeouts, network errors, rate limits (honoring `retry-after`), provider 5xx errors and garbled output are retried with exponential backoff, up to 3 times by default. Bad keys, missing models and refusals are never retried on the same model. Fallback models get one attempt each and count toward the retry limit. A daily token limit (and an optional cost limit) is checked before every call, retries included, and spending is saved to disk so it survives restarts.
 
 ## Run it
@@ -60,7 +64,10 @@ cd src-tauri && cargo test        # backend: settings, hotkeys, monitor math, pr
                                   # circle to explain (cropping, the PARTS reply, model choice), and agents:
                                   # a scripted fake provider and fake tools prove every limit (steps, tool
                                   # calls, time, budgets, repeats, no progress, retries, approvals, restarts),
-                                  # plus file undo, path escapes, private-address fetches and search parsing
+                                  # plus file undo, path escapes, private-address fetches and search parsing,
+                                  # and connectors: the OAuth flow against a mock server (PKCE checked),
+                                  # MCP discovery, each service's parsing, MCP JSON import/export, and a
+                                  # real stdio MCP server round trip
 ```
 
 ## Project layout
@@ -75,6 +82,9 @@ src-tauri/src/
   circle/       circle to explain: selection mode, cropping, the PARTS reply, actions
   agents/       the agent runner and its limits, planner, tools (files with undo, web,
                 search adapters, shell, reminders), SQLite store, scheduler, commands
+  connectors/   OAuth (PKCE, loopback, MCP discovery), the Connector trait and one file per
+                service (google, microsoft, notion, slack, github)
+  mcp/          MCP client (stdio and Streamable HTTP), JSON import/export, the catalog
   voice/        microphone, audio processing, Whisper and cloud speech to text, text to speech
                 (system, Piper, OpenAI), wake word, and the listening session
   overlay.rs    per-monitor overlay windows
@@ -93,7 +103,7 @@ src/
   circle/       selection, the result card, and diagram label placement
   plan/         the agent plan card
   dock/         the agent dock and its hover cards
-  agents/       the agent panel
+  agents/       the agent panel and the approval inbox
   settings/     settings window app; registry.ts lists every setting's label and control
 design/         source SVGs for the app and tray icons
 ```

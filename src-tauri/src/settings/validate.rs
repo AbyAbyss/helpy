@@ -420,14 +420,15 @@ fn validate_mcp(servers: &[crate::settings::schema::McpServer], errors: &mut Vec
         if m.name.trim().is_empty() {
             errors.push(FieldError::new(path, "Every MCP server needs a name"));
         }
+        // A server that's off may be half filled in.
         match m.transport {
-            McpTransport::Stdio if m.command.trim().is_empty() => {
+            McpTransport::Stdio if m.enabled && m.command.trim().is_empty() => {
                 errors.push(FieldError::new(
                     path,
                     format!("{name}: give the command that starts it"),
                 ));
             }
-            McpTransport::Http if !is_http_url(&m.url) => {
+            McpTransport::Http if m.enabled && !is_http_url(&m.url) => {
                 errors.push(FieldError::new(
                     path,
                     format!("{name}: the address must start with http:// or https://"),
@@ -440,7 +441,8 @@ fn validate_mcp(servers: &[crate::settings::schema::McpServer], errors: &mut Vec
                 && k.bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b"-_!#$%&'*+.^`|~".contains(&b))
         };
-        for h in &m.headers {
+        // Rows without a name yet are skipped when the server starts.
+        for h in m.headers.iter().filter(|h| !h.key.is_empty()) {
             if !token(&h.key) {
                 errors.push(FieldError::new(
                     path,
@@ -449,7 +451,7 @@ fn validate_mcp(servers: &[crate::settings::schema::McpServer], errors: &mut Vec
             }
         }
         for e in &m.env {
-            if e.key.trim().is_empty() || e.key.contains('=') {
+            if e.key.trim() != e.key || e.key.contains('=') {
                 errors.push(FieldError::new(
                     path,
                     format!("{name}: \"{}\" isn't a valid variable name", e.key),

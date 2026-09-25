@@ -7,4 +7,12 @@ export type ConnectorInfo = { id: string, name: string, about: string,
 /**
  * The OAuth app it uses, if it signs in with OAuth.
  */
-provider: string | null, needsSecret: boolean, hasSecret: boolean, token: TokenHelp | null, connection: Connection | null, actions: Array<ActionInfo>, };
+provider: string | null, needsSecret: boolean, hasSecret: boolean, 
+/**
+ * The redirect address to register with the OAuth app.
+ */
+redirect: string | null, 
+/**
+ * Every scope it may ask for, for the setup guide.
+ */
+scopes: Array<string>, token: TokenHelp | null, connection: Connection | null, actions: Array<ActionInfo>, };

@@ -200,7 +200,8 @@ fn has_side_effects(agents: &[PlanAgent]) -> bool {
     agents
         .iter()
         .flat_map(|a| &a.tools)
-        .any(|t| matches!(t.as_str(), "files" | "shell" | "reminders"))
+        // Connectors and MCP servers can send, post and change things.
+        .any(|t| !matches!(t.as_str(), "search" | "web"))
 }
 
 /// Plans a request with the planning model, then shows the plan card, or

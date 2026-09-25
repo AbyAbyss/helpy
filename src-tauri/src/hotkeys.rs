@@ -26,6 +26,7 @@ const WIRED: &[&str] = &[
     "circleToExplain",
     "pauseAllAgents",
     "openAgentPanel",
+    "openApprovalInbox",
     "textAsk",
     "voiceAsk",
 ];

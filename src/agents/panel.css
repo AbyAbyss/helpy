@@ -122,9 +122,9 @@ body {
 
 /* ---------- Approval inbox ---------- */
 
-.inboxrow {
+.row.inboxrow {
   width: auto;
-  margin: 0 8px 6px;
+  margin: 0 12px 10px;
 }
 
 .inbox {
@@ -168,6 +168,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.approval__field .field,
+.approval .field {
+  flex: none;
 }
 
 .approval__field > span {
