@@ -20,8 +20,8 @@ fn asset() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("linux", "x86_64") => Some("piper_linux_x86_64.tar.gz"),
         ("linux", "aarch64") => Some("piper_linux_aarch64.tar.gz"),
-        ("macos", "x86_64") => Some("piper_macos_x64.tar.gz"),
-        ("macos", "aarch64") => Some("piper_macos_aarch64.tar.gz"),
+        // The macOS archives of this release are broken: the arm64 one holds
+        // x86_64 binaries, and both leave out the dylibs piper links to.
         ("windows", "x86_64") => Some("piper_windows_amd64.zip"),
         _ => None,
     }
@@ -249,13 +249,13 @@ mod tests {
 
     #[test]
     fn every_desktop_target_has_an_archive() {
-        if cfg!(any(
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "windows"
-        )) && matches!(std::env::consts::ARCH, "x86_64" | "aarch64")
+        if cfg!(any(target_os = "linux", target_os = "windows"))
+            && matches!(std::env::consts::ARCH, "x86_64" | "aarch64")
         {
             assert!(available());
+        }
+        if cfg!(target_os = "macos") {
+            assert!(!available());
         }
     }
 

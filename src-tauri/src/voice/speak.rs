@@ -78,12 +78,22 @@ pub struct SystemVoice {
     pub language: String,
 }
 
+/// The one system synthesizer. On macOS creating a second fails (the
+/// backend registers an Objective-C class each time), and the crate's handle
+/// isn't really thread-safe, so it's only ever used under this lock.
+fn with_system<R>(f: impl FnOnce(&mut tts::Tts) -> Result<R, String>) -> Result<R, String> {
+    static SYSTEM: Mutex<Option<tts::Tts>> = Mutex::new(None);
+    let mut system = SYSTEM.lock().unwrap();
+    if system.is_none() {
+        *system = Some(
+            tts::Tts::default().map_err(|e| format!("The system voice isn't available: {e}"))?,
+        );
+    }
+    f(system.as_mut().unwrap())
+}
+
 pub fn system_voices() -> Result<Vec<SystemVoice>, String> {
-    let tts =
-        tts::Tts::default().map_err(|e| format!("The system voices aren't available: {e}"))?;
-    let mut out: Vec<SystemVoice> = tts
-        .voices()
-        .map_err(|e| e.to_string())?
+    let mut out: Vec<SystemVoice> = with_system(|tts| tts.voices().map_err(|e| e.to_string()))?
         .into_iter()
         .map(|v| SystemVoice {
             id: v.id(),
@@ -99,7 +109,6 @@ struct Worker {
     app: AppHandle,
     generation: Arc<AtomicU64>,
     sink: Option<rodio::MixerDeviceSink>,
-    system: Option<tts::Tts>,
 }
 
 fn worker(
@@ -112,7 +121,6 @@ fn worker(
         app: app.clone(),
         generation,
         sink: None,
-        system: None,
     };
     let mut last_error_generation = u64::MAX;
     let mut speaking = false;
@@ -148,6 +156,8 @@ impl Worker {
         let vo = &s.voice_output;
         match vo.engine {
             TtsEngine::System => self.speak_system(s, gen, text),
+            // Piper can be chosen on a system where it no longer runs (macOS).
+            TtsEngine::Piper if !piper::available() => self.speak_system(s, gen, text),
             TtsEngine::Piper => {
                 let (samples, rate) =
                     piper::synthesize(&self.app, &vo.piper_voice, text, vo.speed)?;
@@ -167,39 +177,36 @@ impl Worker {
     }
 
     fn speak_system(&mut self, s: &Settings, gen: u64, text: &str) -> Result<(), String> {
-        if self.system.is_none() {
-            self.system = Some(
-                tts::Tts::default()
-                    .map_err(|e| format!("The system voice isn't available: {e}"))?,
-            );
-        }
         let generation = self.generation.clone();
-        let tts = self.system.as_mut().unwrap();
         let vo = &s.voice_output;
-        if let Some(id) = &vo.system_voice {
-            if let Some(v) = tts
-                .voices()
-                .ok()
-                .and_then(|vs| vs.into_iter().find(|v| &v.id() == id))
-            {
-                let _ = tts.set_voice(&v);
+        with_system(|tts| {
+            if let Some(id) = &vo.system_voice {
+                if let Some(v) = tts
+                    .voices()
+                    .ok()
+                    .and_then(|vs| vs.into_iter().find(|v| &v.id() == id))
+                {
+                    let _ = tts.set_voice(&v);
+                }
             }
-        }
-        let rate = (tts.normal_rate() * vo.speed as f32).clamp(tts.min_rate(), tts.max_rate());
-        let _ = tts.set_rate(rate);
-        let volume = tts.min_volume() + (tts.max_volume() - tts.min_volume()) * vo.volume as f32;
-        let _ = tts.set_volume(volume);
-        tts.speak(text, false).map_err(|e| e.to_string())?;
-        // Some backends report "not speaking" for a moment after starting.
-        thread::sleep(Duration::from_millis(150));
-        while tts.is_speaking().unwrap_or(false) {
-            if generation.load(Ordering::SeqCst) != gen {
-                let _ = tts.stop();
-                break;
+            let rate =
+                (tts.normal_rate() * vo.speed as f32).clamp(tts.min_rate(), tts.max_rate());
+            let _ = tts.set_rate(rate);
+            let volume =
+                tts.min_volume() + (tts.max_volume() - tts.min_volume()) * vo.volume as f32;
+            let _ = tts.set_volume(volume);
+            tts.speak(text, false).map_err(|e| e.to_string())?;
+            // Some backends report "not speaking" for a moment after starting.
+            thread::sleep(Duration::from_millis(150));
+            while tts.is_speaking().unwrap_or(false) {
+                if generation.load(Ordering::SeqCst) != gen {
+                    let _ = tts.stop();
+                    break;
+                }
+                thread::sleep(Duration::from_millis(30));
             }
-            thread::sleep(Duration::from_millis(30));
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     fn play(&mut self, samples: Vec<f32>, rate: u32, volume: f64, gen: u64) -> Result<(), String> {
@@ -276,4 +283,13 @@ async fn openai_speech(
         .await
         .map_err(|e| e.to_string())?;
     Ok((dsp::pcm16_to_f32(&bytes), 24_000))
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    #[test]
+    fn system_voices_can_be_listed_twice() {
+        assert!(!super::system_voices().unwrap().is_empty());
+        assert!(!super::system_voices().unwrap().is_empty());
+    }
 }

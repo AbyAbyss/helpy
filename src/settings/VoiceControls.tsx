@@ -309,13 +309,24 @@ export function PiperVoicePicker({ value, onChange }: { value: string; onChange:
               {busy === v.key ? (
                 <Progress p={progress[`piper:${v.key}`] ?? progress["piper:engine"]} />
               ) : v.installed ? (
-                v.key === value ? (
-                  <span className="pill pill--ok">In use</span>
-                ) : (
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => onChange(v.key)}>
-                    Use
+                <>
+                  {v.key === value ? (
+                    <span className="pill pill--ok">In use</span>
+                  ) : (
+                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => onChange(v.key)}>
+                      Use
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`Delete ${v.name}`}
+                    title="Delete from this computer"
+                    onClick={() => api.piperRemove(v.key).then(refresh, (e) => setError(String(e)))}
+                  >
+                    ×
                   </button>
-                )
+                </>
               ) : (
                 <button type="button" className="btn btn--ghost btn--sm" disabled={busy !== null} onClick={() => install(v.key)}>
                   Download
