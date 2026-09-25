@@ -21,6 +21,9 @@ pub enum Progress<'a> {
     /// earlier attempt is void.
     Started(&'a str),
     Text(&'a str),
+    /// An attempt was billed (or may have been): tokens and cost, if the
+    /// model has a price. Failed attempts count too.
+    Spent { tokens: u64, cost: Option<f64> },
     /// The last attempt failed and another follows after `wait`.
     Retry {
         retry: u32,
@@ -90,9 +93,14 @@ pub async fn stream(
                 )
                 .await;
                 match &result {
-                    Ok(c) => ai_state
-                        .ledger
-                        .record(&key_name, c.usage, ledger::price(&m, c.usage)),
+                    Ok(c) => {
+                        let cost = ledger::price(&m, c.usage);
+                        ai_state.ledger.record(&key_name, c.usage, cost);
+                        on(Progress::Spent {
+                            tokens: c.usage.total(),
+                            cost,
+                        });
+                    }
                     // The provider may have processed (and billed) the input.
                     Err(e)
                         if matches!(
@@ -108,9 +116,12 @@ pub async fn stream(
                             input_tokens: estimate - req.max_tokens as u64,
                             output_tokens: 0,
                         };
-                        ai_state
-                            .ledger
-                            .record(&key_name, usage, ledger::price(&m, usage));
+                        let cost = ledger::price(&m, usage);
+                        ai_state.ledger.record(&key_name, usage, cost);
+                        on(Progress::Spent {
+                            tokens: usage.total(),
+                            cost,
+                        });
                     }
                     Err(_) => {}
                 }

@@ -46,6 +46,46 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
         ));
     }
 
+    let a = &s.agents;
+    check_range(&mut errors, "agents.maxRunning", a.max_running as f64, 1.0, 10.0);
+    check_range(&mut errors, "agents.backupDays", a.backup_days as f64, 1.0, 365.0);
+    check_range(&mut errors, "agents.timeLimitMinutes", a.time_limit_minutes as f64, 1.0, 1440.0);
+    check_range(&mut errors, "agents.agentTokenBudget", a.agent_token_budget as f64, 0.0, 1e9);
+    check_range(&mut errors, "agents.batchTokenBudget", a.batch_token_budget as f64, 0.0, 1e9);
+    check_range(&mut errors, "agents.maxSteps", a.max_steps as f64, 1.0, 500.0);
+    check_range(&mut errors, "agents.maxToolCalls", a.max_tool_calls as f64, 1.0, 1000.0);
+    check_range(&mut errors, "agents.repeatThreshold", a.repeat_threshold as f64, 2.0, 20.0);
+    check_range(&mut errors, "agents.noProgressSteps", a.no_progress_steps as f64, 2.0, 100.0);
+    check_range(&mut errors, "agents.contextTokens", a.context_tokens as f64, 8000.0, 1_000_000.0);
+    check_range(&mut errors, "agents.doneSeconds", a.done_seconds as f64, 0.0, 3600.0);
+    check_range(&mut errors, "agents.historyDays", a.history_days as f64, 1.0, 365.0);
+    for (path, v) in [
+        ("agents.agentCostBudget", a.agent_cost_budget),
+        ("agents.batchCostBudget", a.batch_cost_budget),
+    ] {
+        if v.is_some_and(|v| !(v > 0.0 && v <= 10_000.0)) {
+            errors.push(FieldError::new(path, "Must be more than $0 and at most $10,000"));
+        }
+    }
+    for f in a.approved_folders.iter().chain(
+        Some(&a.projects_folder).filter(|p| !p.is_empty()),
+    ) {
+        if !std::path::Path::new(f).is_absolute() {
+            let path = if f == &a.projects_folder {
+                "agents.projectsFolder"
+            } else {
+                "agents.approvedFolders"
+            };
+            errors.push(FieldError::new(path, format!("\"{f}\" isn't a full folder path")));
+        }
+    }
+    if !a.searxng_url.is_empty() && !is_http_url(&a.searxng_url) {
+        errors.push(FieldError::new(
+            "agents.searxngUrl",
+            "Use an address starting with http:// or https://",
+        ));
+    }
+
     if s.circle.translate_to == "auto" || !is_language_tag(&s.circle.translate_to) {
         errors.push(FieldError::new(
             "circle.translateTo",

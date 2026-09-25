@@ -477,6 +477,7 @@ impl Turn<'_> {
                     self.send(AskEvent::Text { text });
                 }
             }
+            call::Progress::Spent { .. } => {}
             call::Progress::Retry {
                 retry,
                 limit,

@@ -108,6 +108,47 @@
     "labelDetail": "names",
     "translateTo": "en"
   },
+  "agents": {
+    "maxRunning": 3,
+    "defaultMode": "auto",
+    "confirmPlans": "always",
+    "approvals": {
+      "fileChanges": "allow",
+      "fileDeletes": "ask",
+      "reminders": "ask"
+    },
+    "tools": {
+      "webSearch": true,
+      "fetch": true,
+      "files": true,
+      "shell": true,
+      "reminders": true
+    },
+    "approvedFolders": [],
+    "projectsFolder": "",
+    "backupDays": 14,
+    "shellPolicy": "ask",
+    "shellAllowlist": [],
+    "searchEngine": "auto",
+    "searxngUrl": "",
+    "timeLimitMinutes": 30,
+    "agentTokenBudget": 400000,
+    "agentCostBudget": null,
+    "batchTokenBudget": 1000000,
+    "batchCostBudget": null,
+    "onFailure": "stop",
+    "maxSteps": 25,
+    "maxToolCalls": 50,
+    "repeatThreshold": 3,
+    "noProgressSteps": 8,
+    "contextTokens": 60000,
+    "dock": true,
+    "dockSide": "right",
+    "speakStatus": false,
+    "doneSeconds": 60,
+    "notifications": true,
+    "historyDays": 30
+  },
   "limits": {
     "maxRetries": 3,
     "backoffBaseMs": 2000,

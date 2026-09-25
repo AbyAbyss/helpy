@@ -332,7 +332,7 @@ async fn run(
                 emit(app, CircleEvent::Text { text });
             }
         }
-        Progress::Text(_) => {}
+        Progress::Text(_) | Progress::Spent { .. } => {}
         Progress::Retry {
             retry,
             limit,

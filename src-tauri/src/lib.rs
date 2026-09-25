@@ -1,3 +1,4 @@
+mod agents;
 mod ai;
 mod buddy;
 mod capture;
@@ -73,6 +74,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(hotkeys::Hotkeys::default())
         .manage(overlay::Overlays::default())
         .manage(cursor::CursorShared::default())
@@ -94,12 +96,14 @@ pub fn run() {
             });
 
             app.manage(voice::VoiceState::new(handle.clone()));
+            app.manage(agents::AgentsState::load(app.path().app_data_dir()?));
             tray::build(&handle, &s)?;
             hotkeys::sync(&handle, &s);
             overlay::sync(&handle);
             cursor::spawn(handle.clone());
             voice::setup(&handle);
             guide::setup(&handle);
+            agents::setup(&handle);
             if handle.autolaunch().is_enabled().unwrap_or(false) != s.general.launch_at_login {
                 apply_autostart(&handle, s.general.launch_at_login);
             }
@@ -153,6 +157,22 @@ pub fn run() {
             circle::circle_action,
             circle::circle_close,
             circle::circle_copy,
+            agents::agents_list,
+            agents::agents_answer,
+            agents::agents_pause,
+            agents::agents_resume,
+            agents::agents_cancel,
+            agents::agents_retry,
+            agents::agents_raise,
+            agents::agents_follow_up,
+            agents::agents_undo,
+            agents::agents_rename,
+            agents::agents_dismiss,
+            agents::agents_seen,
+            agents::agents_delete,
+            agents::agents_duplicate,
+            agents::agents_set_brave_key,
+            agents::agents_has_brave_key,
             voice::voice_input_devices,
             voice::voice_meter_start,
             voice::voice_meter_stop,

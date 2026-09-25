@@ -3,13 +3,13 @@
 
 use serde_json::Value;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Role {
     User,
     Assistant,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Part {
     Text(String),
     /// Base64 image data.
@@ -35,7 +35,7 @@ pub enum Part {
     AnthropicBlock(Value),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Message {
     pub role: Role,
     pub parts: Vec<Part>,
@@ -108,7 +108,7 @@ impl ChatRequest {
 /// roughly 1,800 tokens at one token per 28x28 patch; round up for safety.
 pub const IMAGE_TOKEN_ESTIMATE: u64 = 2000;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Usage {
     pub input_tokens: u64,
     pub output_tokens: u64,

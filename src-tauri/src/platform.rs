@@ -105,3 +105,19 @@ pub fn windows_build() -> Option<u32> {
     let chars = (len as usize / 2).saturating_sub(1).min(buf.len());
     String::from_utf16_lossy(&buf[..chars]).trim().parse().ok()
 }
+
+/// Whether Outlook desktop is installed (its COM class is registered).
+#[cfg(windows)]
+pub fn outlook_installed() -> bool {
+    use windows::core::w;
+    use windows::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, HKEY, HKEY_CLASSES_ROOT, KEY_READ};
+    let mut key = HKEY::default();
+    // SAFETY: key is a valid out pointer; it's closed when opened.
+    unsafe {
+        let ok = RegOpenKeyExW(HKEY_CLASSES_ROOT, w!("Outlook.Application"), 0, KEY_READ, &mut key).is_ok();
+        if ok {
+            let _ = RegCloseKey(key);
+        }
+        ok
+    }
+}

@@ -24,6 +24,7 @@ const WIRED: &[&str] = &[
     "pauseCapture",
     "clearAnnotations",
     "circleToExplain",
+    "pauseAllAgents",
     "textAsk",
     "voiceAsk",
 ];
@@ -300,6 +301,7 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
         "openSettings" => crate::windows::show_settings(app),
         "textAsk" => crate::windows::show_ask(app),
         "circleToExplain" => crate::circle::toggle(app),
+        "pauseAllAgents" => crate::agents::pause_all(app),
         "pauseCapture" => {
             let s = app.state::<SettingsStore>().get();
             let _ = settings::settings_set(

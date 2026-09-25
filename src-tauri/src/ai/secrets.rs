@@ -62,6 +62,18 @@ pub fn key_for(
     }
 }
 
+/// Key of a tool service agents use (Brave Search).
+pub fn get_service(service: &str) -> Result<Option<String>, ProviderError> {
+    get_account(&format!("tool:{service}"))
+}
+
+pub fn set_service(service: &str, key: &str) -> Result<(), ProviderError> {
+    if key.trim().is_empty() {
+        return delete_account(&format!("tool:{service}"));
+    }
+    set_account(&format!("tool:{service}"), key)
+}
+
 /// Key of a speech service that isn't an AI provider (Deepgram).
 pub fn get_speech(service: &str) -> Result<Option<String>, ProviderError> {
     get_account(&format!("speech:{service}"))

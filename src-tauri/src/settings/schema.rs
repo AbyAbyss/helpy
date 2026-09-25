@@ -22,6 +22,7 @@ pub struct Settings {
     pub answer_style: AnswerStyle,
     pub guidance: Guidance,
     pub circle: Circle,
+    pub agents: Agents,
     pub limits: Limits,
 }
 
@@ -39,6 +40,7 @@ pub const SECTIONS: &[&str] = &[
     "answerStyle",
     "guidance",
     "circle",
+    "agents",
     "limits",
 ];
 
@@ -673,6 +675,219 @@ impl Default for Circle {
             default_action: CircleAction::Explain,
             label_detail: LabelDetail::Names,
             translate_to: "en".into(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum DefaultRunMode {
+    /// The planner picks from the request.
+    #[default]
+    Auto,
+    Parallel,
+    Sequential,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ConfirmPlans {
+    #[default]
+    Always,
+    /// Plans that only read and search start right away.
+    SideEffectsOnly,
+}
+
+/// What happens when an agent wants to do something of this kind.
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Rule {
+    Allow,
+    #[default]
+    Ask,
+    Never,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Approvals {
+    /// Writing, moving and renaming files in approved folders (backed up, undoable).
+    pub file_changes: Rule,
+    pub file_deletes: Rule,
+    /// Reminders and calendar events. (Shell commands follow the shell policy.)
+    pub reminders: Rule,
+}
+
+impl Default for Approvals {
+    fn default() -> Self {
+        Self {
+            file_changes: Rule::Allow,
+            file_deletes: Rule::Ask,
+            reminders: Rule::Ask,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ShellPolicy {
+    Never,
+    /// Every command waits for approval.
+    #[default]
+    Ask,
+    /// Only commands starting with an entry of the allowlist run, without asking.
+    Allowlist,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SearchEngine {
+    /// Brave when its key is set, otherwise SearXNG when its address is set,
+    /// otherwise DuckDuckGo.
+    #[default]
+    Auto,
+    DuckDuckGo,
+    Brave,
+    Searxng,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct AgentTools {
+    pub web_search: bool,
+    pub fetch: bool,
+    pub files: bool,
+    pub shell: bool,
+    pub reminders: bool,
+}
+
+impl Default for AgentTools {
+    fn default() -> Self {
+        Self {
+            web_search: true,
+            fetch: true,
+            files: true,
+            shell: true,
+            reminders: true,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum OnFailure {
+    #[default]
+    Stop,
+    /// Pause and ask whether to retry, skip the step, or cancel.
+    Ask,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum DockSide {
+    #[default]
+    Right,
+    Left,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Agents {
+    // Running and approvals
+    pub max_running: u32,
+    pub default_mode: DefaultRunMode,
+    pub confirm_plans: ConfirmPlans,
+    pub approvals: Approvals,
+
+    // Tools and access
+    pub tools: AgentTools,
+    /// Folders agents may read and change, as absolute paths.
+    pub approved_folders: Vec<String>,
+    /// Where builder agents make new projects. Empty uses "Helpy Projects"
+    /// in the home folder.
+    pub projects_folder: String,
+    /// Days to keep backups of files agents changed.
+    pub backup_days: u32,
+    pub shell_policy: ShellPolicy,
+    pub shell_allowlist: Vec<String>,
+    pub search_engine: SearchEngine,
+    /// A SearXNG instance, e.g. "http://localhost:8888".
+    pub searxng_url: String,
+
+    // Limits
+    pub time_limit_minutes: u32,
+    /// Per agent. 0 turns it off.
+    #[ts(type = "number")]
+    pub agent_token_budget: u64,
+    pub agent_cost_budget: Option<f64>,
+    /// Per batch of agents started together. 0 turns it off.
+    #[ts(type = "number")]
+    pub batch_token_budget: u64,
+    pub batch_cost_budget: Option<f64>,
+    pub on_failure: OnFailure,
+    pub max_steps: u32,
+    pub max_tool_calls: u32,
+    /// The same tool with the same arguments this many times means stuck.
+    pub repeat_threshold: u32,
+    /// This many steps without anything new means stuck.
+    pub no_progress_steps: u32,
+    /// Older work is summarized once an agent's conversation passes this.
+    pub context_tokens: u32,
+
+    // Dock and notifications
+    pub dock: bool,
+    pub dock_side: DockSide,
+    /// Read each new status line aloud.
+    pub speak_status: bool,
+    /// Finished agents leave the dock after this many seconds. 0 keeps them.
+    pub done_seconds: u32,
+    pub notifications: bool,
+    /// Days to keep finished agents in the panel.
+    pub history_days: u32,
+}
+
+impl Default for Agents {
+    fn default() -> Self {
+        Self {
+            max_running: 3,
+            default_mode: DefaultRunMode::Auto,
+            confirm_plans: ConfirmPlans::Always,
+            approvals: Approvals::default(),
+            tools: AgentTools::default(),
+            approved_folders: Vec::new(),
+            projects_folder: String::new(),
+            backup_days: 14,
+            shell_policy: ShellPolicy::Ask,
+            shell_allowlist: Vec::new(),
+            search_engine: SearchEngine::Auto,
+            searxng_url: String::new(),
+            time_limit_minutes: 30,
+            agent_token_budget: 400_000,
+            agent_cost_budget: None,
+            batch_token_budget: 1_000_000,
+            batch_cost_budget: None,
+            on_failure: OnFailure::Stop,
+            max_steps: 25,
+            max_tool_calls: 50,
+            repeat_threshold: 3,
+            no_progress_steps: 8,
+            context_tokens: 60_000,
+            dock: true,
+            dock_side: DockSide::Right,
+            speak_status: false,
+            done_seconds: 60,
+            notifications: true,
+            history_days: 30,
         }
     }
 }
