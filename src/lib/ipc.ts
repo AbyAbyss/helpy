@@ -1,6 +1,7 @@
 // Typed wrappers around Helpy's Rust commands and events.
 import { invoke } from "@tauri-apps/api/core";
 import type { AskStatus } from "../bindings/AskStatus";
+import type { CardView } from "../bindings/CardView";
 import type { LocalServer } from "../bindings/LocalServer";
 import type { ModelInfo } from "../bindings/ModelInfo";
 import type { ProviderConfig } from "../bindings/ProviderConfig";
@@ -30,6 +31,9 @@ export const EVENTS = {
   speaking: "voice://speaking",
   speakError: "voice://speak-error",
   download: "voice://download",
+  guideMarks: "guide://marks",
+  guideCard: "guide://card",
+  clearAnnotations: "overlay://clear",
 } as const;
 
 type Section = keyof Settings;
@@ -105,6 +109,10 @@ export const api = {
   voicePillHide: () => invoke<void>("voice_pill_hide"),
   voiceCancel: () => invoke<void>("voice_cancel"),
   voiceSupport: () => invoke<VoiceSupport>("voice_support"),
+
+  // Visual guidance. Steps arrive as EVENTS.guideMarks and EVENTS.guideCard.
+  guideAction: (action: "next" | "repeat" | "stop") => invoke<void>("guide_action", { action }),
+  guideCard: () => invoke<CardView | null>("guide_card"),
 };
 
 export function asFieldErrors(e: unknown): FieldError[] {

@@ -5,7 +5,7 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "voiceInput" | "voiceOutput";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "voiceInput" | "voiceOutput";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, appearance and language." },
@@ -13,6 +13,7 @@ export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "hotkeys", title: "Hotkeys", blurb: "Shortcuts that work from any app. Click one to change it." },
   { id: "ai", title: "AI providers", blurb: "The models Helpy talks to, what each one is used for, and how much it may spend." },
   { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
+  { id: "guidance", title: "Visual guidance", blurb: "How Helpy points things out on your screen, and how walkthroughs move from step to step." },
   { id: "voiceInput", title: "Voice input", blurb: "How Helpy hears you: the microphone, the speech engine, and when it stops listening." },
   { id: "voiceOutput", title: "Voice output", blurb: "Whether Helpy reads answers aloud, and in which voice." },
 ];
@@ -31,6 +32,7 @@ export type Control =
   /** A dollar amount that can be left empty to turn it off. */
   | { kind: "money"; emptyLabel: string }
   | { kind: "text"; placeholder: string }
+  | { kind: "color"; swatches: string[] }
   | { kind: "buddyStyle" }
   | { kind: "whisperModels" }
   | { kind: "micPicker" }
@@ -389,10 +391,102 @@ FIELDS.push(
     control: { kind: "text", placeholder: "hey helpy" }, when: (s) => s.voiceInput.wakeWord,
   },
 
+  // Visual guidance
+  {
+    path: "guidance.highlightColor", section: "guidance", group: "Look", label: "Colour",
+    help: "Used for highlights, arrows and pointers.", keywords: "highlight colour color red accent",
+    control: { kind: "color", swatches: ["#e5484d", "#ff8a00", "#ffd60a", "#30c85e", "#3e8bff", "#a855f7"] },
+  },
+  {
+    path: "guidance.highlightThickness", section: "guidance", group: "Look", label: "Line thickness",
+    keywords: "highlight outline width stroke", control: { kind: "slider", min: 1, max: 8, step: 1, format: px },
+  },
+  {
+    path: "guidance.glow", section: "guidance", group: "Look", label: "Glow",
+    help: "A soft halo that makes marks easier to spot on busy screens.", keywords: "highlight shadow halo",
+    control: { kind: "toggle" },
+  },
+  {
+    path: "guidance.dim", section: "guidance", group: "Look", label: "Dim the rest of the screen",
+    help: "Darkens everything outside a highlight.", keywords: "dim darken spotlight focus background",
+    control: { kind: "slider", min: 0, max: 0.7, step: 0.05, format: (v) => (v === 0 ? "Off" : pct(v)), ends: ["Off", "Dark"] },
+  },
+  {
+    path: "guidance.labelStyle", section: "guidance", group: "Look", label: "Labels",
+    keywords: "label style pointer bubble",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "accent", label: "Coloured" },
+        { value: "dark", label: "Dark" },
+      ],
+    },
+  },
+  {
+    path: "guidance.arrowStyle", section: "guidance", group: "Look", label: "Arrows",
+    keywords: "arrow curved straight",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "curved", label: "Curved" },
+        { value: "straight", label: "Straight" },
+      ],
+    },
+  },
+  {
+    path: "guidance.animationSpeed", section: "guidance", group: "Motion", label: "Animation speed",
+    keywords: "animation fast slow", when: (s) => !s.guidance.reduceMotion,
+    control: { kind: "slider", min: 0.5, max: 2, step: 0.25, format: (v) => `${v.toFixed(2)}×`, ends: ["Slower", "Faster"] },
+  },
+  {
+    path: "guidance.reduceMotion", section: "guidance", group: "Motion", label: "Reduce motion",
+    help: "Marks appear without drawing in or pulsing. Helpy also follows your system setting.",
+    keywords: "animation accessibility still", control: { kind: "toggle" },
+  },
+  {
+    path: "guidance.advance", section: "guidance", group: "Walkthroughs", label: "Next step",
+    help: "Clicking near the highlighted spot needs Accessibility permission on macOS. Without it, use Next.",
+    keywords: "auto advance click next step walkthrough",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "onClick", label: "When I click the spot" },
+        { value: "nextButton", label: "When I press Next" },
+      ],
+    },
+  },
+  {
+    path: "guidance.cardPosition", section: "guidance", group: "Walkthroughs", label: "Step card",
+    help: "The small card with Next, Repeat and Stop.", keywords: "step card position top bottom",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "nearTarget", label: "Next to the spot" },
+        { value: "top", label: "Top" },
+        { value: "bottom", label: "Bottom" },
+      ],
+    },
+  },
+  {
+    path: "guidance.annotationSeconds", section: "guidance", group: "Walkthroughs", label: "Hide marks after",
+    help: "0 keeps them until you've done the step. Repeat shows them again.", keywords: "annotation duration timeout fade",
+    control: { kind: "number", min: 0, max: 600, unit: "sec" },
+  },
+  {
+    path: "guidance.maxSteps", section: "guidance", group: "Walkthroughs", label: "Most steps per walkthrough",
+    help: "Helpy stops and answers in text after this many.", keywords: "limit steps runaway",
+    control: { kind: "number", min: 1, max: 30, unit: "steps" },
+  },
+  {
+    path: "guidance.showCoordinates", section: "guidance", group: "Troubleshooting", label: "Show raw coordinates",
+    help: "Prints the model's numbers next to each mark, to check where it thinks things are.",
+    keywords: "debug coordinates pixels position", control: { kind: "toggle" },
+  },
+
   // Voice output
   {
     path: "voiceOutput.voiceGuidance", section: "voiceOutput", group: "Speaking", label: "Read answers aloud",
-    help: "For spoken questions. Also in the tray menu. Press Esc to stop talking.",
+    help: "For spoken questions and walkthrough steps. Also in the tray menu and on the step card. Press Esc to stop talking.",
     keywords: "voice guidance tts speak read aloud mute", control: { kind: "toggle" },
   },
   {

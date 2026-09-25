@@ -1,0 +1,230 @@
+/* Guidance marks. --t scales every duration (1 / animation speed). */
+.ann {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font: 650 13px/1.2 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ann__svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.ann__dim {
+  animation: ann-fade calc(var(--t) * 260ms) ease-out both;
+}
+
+.ann__stroke {
+  fill: none;
+  stroke: var(--mark);
+  stroke-width: var(--thick);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ann--glow .ann__stroke,
+.ann--glow .ann__dot {
+  filter: drop-shadow(0 0 5px var(--mark)) drop-shadow(0 0 1px var(--mark));
+}
+
+.ann__box,
+.ann__shaft {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: ann-draw calc(var(--t) * 420ms) cubic-bezier(0.45, 0, 0.2, 1) both;
+}
+
+.ann__pulse {
+  stroke-width: calc(var(--thick) + 4px);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ann-pulse calc(var(--t) * 1800ms) ease-out calc(var(--t) * 420ms) infinite;
+}
+
+.ann__head {
+  fill: var(--mark);
+  stroke: var(--mark);
+  stroke-width: 1.5;
+  animation: ann-pop calc(var(--t) * 200ms) ease-out calc(var(--t) * 360ms) both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.ann__dot {
+  fill: var(--mark);
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.ann__ring {
+  fill: none;
+  stroke: var(--mark);
+  stroke-width: 2.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ann-ring calc(var(--t) * 1500ms) ease-out infinite;
+}
+
+/* Text sits in HTML for crisp layout; positions come from the marks. */
+.ann__tag,
+.ann__bubble {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  animation: ann-rise calc(var(--t) * 240ms) ease-out calc(var(--t) * 200ms) both;
+}
+
+.ann__tag--above {
+  transform: translateY(-100%);
+}
+
+.ann__tag--mid {
+  transform: translateY(-50%);
+}
+
+.ann__tag--mid.ann__tag--end {
+  transform: translate(-100%, -50%);
+}
+
+.ann__label {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--mark);
+  color: var(--mark-ink);
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.55);
+}
+
+.ann--dark .ann__label {
+  background: rgba(18, 21, 29, 0.94);
+  color: #eef1f6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 3px 0 0 var(--mark),
+    0 6px 16px -6px rgba(0, 0, 0, 0.6);
+}
+
+/* The pointer: a rounded label whose triangle tail touches the point. */
+.ann__bubble {
+  flex-direction: column;
+  transform: translate(-50%, calc(-100% - 14px));
+}
+
+.ann__bubble--below {
+  flex-direction: column-reverse;
+  transform: translate(-50%, 14px);
+}
+
+.ann__label--bubble {
+  position: relative;
+  padding: 8px 13px;
+  border-radius: 999px;
+  font-size: 13.5px;
+}
+
+.ann__label--bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  margin-left: -7px;
+  border: 7px solid transparent;
+  border-top: 8px solid var(--mark);
+  border-bottom: 0;
+}
+
+.ann--dark .ann__label--bubble::after {
+  border-top-color: rgba(18, 21, 29, 0.94);
+}
+
+.ann__bubble--below .ann__label--bubble::after {
+  top: auto;
+  bottom: 100%;
+  border-top: 0;
+  border-bottom: 8px solid var(--mark);
+}
+
+.ann--dark .ann__bubble--below .ann__label--bubble::after {
+  border-bottom-color: rgba(18, 21, 29, 0.94);
+}
+
+.ann__raw {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(10, 12, 16, 0.85);
+  color: #9ff0c4;
+  font: 500 11px var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+@keyframes ann-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@keyframes ann-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ann-rise {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@keyframes ann-pop {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+@keyframes ann-pulse {
+  0% {
+    opacity: 0.55;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.08;
+  }
+}
+
+@keyframes ann-ring {
+  0% {
+    opacity: 0.9;
+    scale: 0.5;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.6;
+  }
+}
+
+.ann--still *,
+.ann--still *::after {
+  animation: none !important;
+}
+
+.ann--still .ann__pulse {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ann *,
+  .ann *::after {
+    animation: none !important;
+  }
+  .ann__pulse {
+    opacity: 0;
+  }
+}

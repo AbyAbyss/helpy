@@ -23,6 +23,29 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
     range("buddy.smoothness", b.smoothness, 0.0, 0.95);
     range("buddy.idleSeconds", b.idle_seconds as f64, 2.0, 3600.0);
 
+    let g = &s.guidance;
+    range(
+        "guidance.highlightThickness",
+        g.highlight_thickness as f64,
+        1.0,
+        8.0,
+    );
+    range("guidance.dim", g.dim, 0.0, 0.7);
+    range(
+        "guidance.annotationSeconds",
+        g.annotation_seconds as f64,
+        0.0,
+        600.0,
+    );
+    range("guidance.animationSpeed", g.animation_speed, 0.5, 2.0);
+    range("guidance.maxSteps", g.max_steps as f64, 1.0, 30.0);
+    if !is_hex_color(&g.highlight_color) {
+        errors.push(FieldError::new(
+            "guidance.highlightColor",
+            "Use a colour like #e5484d",
+        ));
+    }
+
     if !INTERFACE_LANGUAGES.contains(&s.general.interface_language.as_str()) {
         errors.push(FieldError::new(
             "general.interfaceLanguage",
@@ -248,6 +271,10 @@ fn is_http_url(s: &str) -> bool {
         .is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.host().is_some())
 }
 
+fn is_hex_color(c: &str) -> bool {
+    c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
 /// "auto", or a simple BCP 47 tag: 2-3 letter language, optional region/script.
 fn is_language_tag(tag: &str) -> bool {
     if tag == "auto" {
@@ -372,6 +399,24 @@ mod tests {
         let mut s = Settings::default();
         s.limits.backoff_max_ms = 1000;
         assert_eq!(validate(&s)[0].path, "limits.backoffMaxMs");
+    }
+
+    #[test]
+    fn guidance_colour_and_ranges() {
+        let mut s = Settings::default();
+        s.guidance.highlight_color = "red".into();
+        s.guidance.max_steps = 0;
+        s.guidance.dim = 0.9;
+        let paths: Vec<_> = validate(&s).into_iter().map(|e| e.path).collect();
+        assert_eq!(
+            paths,
+            [
+                "guidance.dim",
+                "guidance.maxSteps",
+                "guidance.highlightColor"
+            ]
+        );
+        assert!(is_hex_color("#0aF3c9") && !is_hex_color("#abc"));
     }
 
     #[test]

@@ -115,10 +115,13 @@ fn emit_phase(app: &AppHandle, phase: VoicePhase) {
 }
 
 /// Escape is taken from other apps only while Helpy is listening, answering
-/// a voice question or speaking.
-fn update_escape(app: &AppHandle) {
+/// a voice question, speaking or showing a walkthrough.
+pub fn update_escape(app: &AppHandle) {
     let v = app.state::<VoiceState>();
-    crate::hotkeys::set_escape(app, v.listening() || v.speaker.is_speaking());
+    crate::hotkeys::set_escape(
+        app,
+        v.listening() || v.speaker.is_speaking() || crate::guide::active(app),
+    );
 }
 
 // ---------- Hotkeys ----------

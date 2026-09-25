@@ -20,6 +20,7 @@ pub struct Settings {
     pub privacy: Privacy,
     pub ai: Ai,
     pub answer_style: AnswerStyle,
+    pub guidance: Guidance,
     pub limits: Limits,
 }
 
@@ -35,6 +36,7 @@ pub const SECTIONS: &[&str] = &[
     "privacy",
     "ai",
     "answerStyle",
+    "guidance",
     "limits",
 ];
 
@@ -527,6 +529,94 @@ pub struct AnswerStyle {
     pub detail: Detail,
     pub tone: Tone,
     pub screen_access: ScreenAccess,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum LabelStyle {
+    /// Filled with the highlight colour.
+    #[default]
+    Accent,
+    Dark,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ArrowStyle {
+    #[default]
+    Curved,
+    Straight,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Advance {
+    /// A click on or near the target moves to the next step.
+    #[default]
+    OnClick,
+    /// Only the Next button does.
+    NextButton,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum CardPosition {
+    #[default]
+    NearTarget,
+    Top,
+    Bottom,
+}
+
+/// How highlights, pointers and walkthroughs look and behave.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+#[ts(export)]
+pub struct Guidance {
+    /// "#rrggbb".
+    pub highlight_color: String,
+    /// Outline width in logical pixels.
+    pub highlight_thickness: u32,
+    pub glow: bool,
+    /// How dark everything outside a highlight gets, 0 (off) to 0.7.
+    pub dim: f64,
+    pub label_style: LabelStyle,
+    pub arrow_style: ArrowStyle,
+    pub advance: Advance,
+    /// Hide the marks after this many seconds; the step card stays. 0 keeps
+    /// them until the step is done.
+    pub annotation_seconds: u32,
+    pub card_position: CardPosition,
+    /// 1.0 is normal; higher is faster.
+    pub animation_speed: f64,
+    pub reduce_motion: bool,
+    /// Steps per walkthrough before Helpy stops.
+    pub max_steps: u32,
+    /// Shows the model's raw coordinates next to each mark.
+    pub show_coordinates: bool,
+}
+
+impl Default for Guidance {
+    fn default() -> Self {
+        Self {
+            highlight_color: "#e5484d".into(),
+            highlight_thickness: 3,
+            glow: true,
+            dim: 0.25,
+            label_style: LabelStyle::Accent,
+            arrow_style: ArrowStyle::Curved,
+            advance: Advance::OnClick,
+            annotation_seconds: 0,
+            card_position: CardPosition::NearTarget,
+            animation_speed: 1.0,
+            reduce_motion: false,
+            max_steps: 12,
+            show_coordinates: false,
+        }
+    }
 }
 
 /// Retry and spending limits, enforced in Rust for every model call.

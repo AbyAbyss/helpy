@@ -34,9 +34,6 @@ pub struct CaptureMeta {
     pub image_height: u32,
 }
 
-// The mapping is used by visual guidance (Phase 4) to put highlights where
-// the model points; it is tested here so screenshots are right from the start.
-#[allow(dead_code)]
 impl CaptureMeta {
     fn new(m: &MonitorRect, image_width: u32, image_height: u32) -> Self {
         Self {
@@ -71,7 +68,6 @@ impl CaptureMeta {
 pub struct Shot {
     pub jpeg_base64: String,
     pub thumbnail_data_url: String,
-    #[allow(dead_code)]
     pub meta: CaptureMeta,
     pub monitor_name: String,
 }
@@ -208,6 +204,7 @@ async fn hide_own_windows(app: &AppHandle) -> Vec<tauri::WebviewWindow> {
             w.label().starts_with("overlay-")
                 || w.label() == crate::windows::ASK
                 || w.label() == crate::windows::PILL
+                || w.label() == crate::windows::STEP
         })
         .filter(|w| w.is_visible().unwrap_or(false))
         .collect();
@@ -221,8 +218,8 @@ async fn hide_own_windows(app: &AppHandle) -> Vec<tauri::WebviewWindow> {
 
 #[cfg(target_os = "linux")]
 fn restore_own_windows(mut windows: Vec<tauri::WebviewWindow>) {
-    // Overlays first, so the ask panel is mapped last and stays on top.
-    windows.sort_by_key(|w| w.label() == crate::windows::ASK);
+    // Overlays first, so the panel and step card are mapped last and stay on top.
+    windows.sort_by_key(|w| !w.label().starts_with("overlay-"));
     for w in windows {
         let _ = w.show();
         if w.label().starts_with("overlay-") {

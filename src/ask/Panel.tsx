@@ -195,6 +195,21 @@ function ItemView({ item, onPermission }: { item: Item; onPermission: (id: numbe
           <span>Looked at {item.monitor}</span>
         </button>
       );
+    case "step":
+      return (
+        <div className="step-item">
+          <span className="step-item__num" aria-hidden="true">
+            {item.number}
+          </span>
+          <span>
+            <span className="step-item__of">
+              Step {item.number}
+              {item.total != null && ` of ${item.total}`}
+            </span>
+            {item.text}
+          </span>
+        </div>
+      );
     case "permission":
       if (item.answer) return <div className="note">{item.answer === "allowed" ? "You let Helpy look at your screen." : "You kept your screen private."}</div>;
       return (

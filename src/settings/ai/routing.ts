@@ -6,7 +6,12 @@ import type { Routing } from "../../bindings/Routing";
 export const ROUTES: { key: keyof Routing; label: string; built: boolean; help?: string }[] = [
   { key: "ask", label: "Questions (voice and text)", built: true },
   { key: "visionFallback", label: "Screen questions", built: true, help: "Used when the questions model can't read images." },
-  { key: "visualGuidance", label: "Visual guidance", built: false },
+  {
+    key: "visualGuidance",
+    label: "Visual guidance",
+    built: true,
+    help: "Runs walkthroughs after the first step. Needs a model that can read images. Empty uses the questions model.",
+  },
   { key: "circleToExplain", label: "Circle to explain", built: false },
   { key: "agentPlanning", label: "Agent planning", built: false },
   { key: "agentOrchestrator", label: "Agent orchestrators", built: false },

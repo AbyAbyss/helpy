@@ -2,17 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { CursorFrame } from "../bindings/CursorFrame";
+import type { Mark } from "../bindings/Mark";
+import type { MarksView } from "../bindings/MarksView";
 import { Buddy } from "../buddy/Buddy";
 import { followStep, type Point } from "../buddy/follow";
+import { Annotations } from "../guide/Annotations";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings } from "../lib/useSettings";
 
-/** The click-through layer on one monitor. Phase 1 draws only the buddy. */
+/** The click-through layer on one monitor: guidance marks and the buddy. */
 export function Overlay() {
   const [settings] = useSettings();
   const [visible, setVisible] = useState(false);
   const [inside, setInside] = useState(false);
   const [customSrc, setCustomSrc] = useState<string | null>(null);
+  const [marks, setMarks] = useState<{ id: number; marks: Mark[] }>({ id: 0, marks: [] });
   const el = useRef<HTMLDivElement>(null);
   const target = useRef<Point | null>(null);
   const pos = useRef<Point | null>(null);
@@ -32,10 +36,18 @@ export function Overlay() {
       pos.current ??= target.current;
     });
     const offVisible = listen<boolean>(EVENTS.buddyVisible, (e) => setVisible(e.payload));
+    // Every overlay hears each step; only the one on the step's monitor draws it.
+    const self = getCurrentWebviewWindow().label;
+    const offMarks = listen<MarksView>(EVENTS.guideMarks, ({ payload }) =>
+      setMarks((m) => ({ id: m.id + 1, marks: payload.overlay === self ? payload.marks : [] })),
+    );
+    const offClear = listen(EVENTS.clearAnnotations, () => setMarks((m) => ({ id: m.id + 1, marks: [] })));
     api.overlayReady().then(setVisible);
     return () => {
       offCursor.then((f) => f());
       offVisible.then((f) => f());
+      offMarks.then((f) => f());
+      offClear.then((f) => f());
     };
   }, []);
 
@@ -70,16 +82,22 @@ export function Overlay() {
   const shown = visible && inside;
 
   return (
-    <div ref={el} className="overlay-buddy" style={{ opacity: shown ? b.opacity : 0 }}>
-      <div style={{ transform: `translate(${b.offsetX}px, ${b.offsetY}px)` }}>
-        <Buddy
-          style={b.style}
-          size={b.size}
-          state="idle"
-          animate={b.showStateAnimations}
-          customSrc={customSrc}
-        />
+    <>
+      {marks.marks.length > 0 && (
+        // Keyed per step so its draw-in animation plays again on Repeat.
+        <Annotations key={marks.id} marks={marks.marks} width={window.innerWidth} height={window.innerHeight} look={settings.guidance} />
+      )}
+      <div ref={el} className="overlay-buddy" style={{ opacity: shown ? b.opacity : 0 }}>
+        <div style={{ transform: `translate(${b.offsetX}px, ${b.offsetY}px)` }}>
+          <Buddy
+            style={b.style}
+            size={b.size}
+            state="idle"
+            animate={b.showStateAnimations}
+            customSrc={customSrc}
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -87,6 +87,21 @@
     "tone": "casual",
     "screenAccess": "whenNeeded"
   },
+  "guidance": {
+    "highlightColor": "#e5484d",
+    "highlightThickness": 3,
+    "glow": true,
+    "dim": 0.25,
+    "labelStyle": "accent",
+    "arrowStyle": "curved",
+    "advance": "onClick",
+    "annotationSeconds": 0,
+    "cardPosition": "nearTarget",
+    "animationSpeed": 1.0,
+    "reduceMotion": false,
+    "maxSteps": 12,
+    "showCoordinates": false
+  },
   "limits": {
     "maxRetries": 3,
     "backoffBaseMs": 2000,

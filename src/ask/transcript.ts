@@ -6,6 +6,7 @@ export type Item =
   /** `final` once its model call finished; a retry discards non-final text. */
   | { kind: "assistant"; text: string; final: boolean }
   | { kind: "screen"; thumbnail: string; monitor: string }
+  | { kind: "step"; number: number; total: number | null; text: string }
   | { kind: "permission"; id: number; answer: "allowed" | "denied" | null }
   | { kind: "retry"; text: string }
   | { kind: "notice"; text: string }
@@ -43,6 +44,8 @@ export function apply(items: Item[], e: AskEvent): Item[] {
       return [...items, { kind: "permission", id: e.id, answer: null }];
     case "screen":
       return [...items, { kind: "screen", thumbnail: e.thumbnail, monitor: e.monitor }];
+    case "step":
+      return [...items, { kind: "step", number: e.number, total: e.total, text: e.instruction }];
     case "notice":
       return [...items, { kind: "notice", text: e.message }];
     case "done":

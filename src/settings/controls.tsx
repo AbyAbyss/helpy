@@ -243,3 +243,28 @@ export function MoneyField({ id, value, emptyLabel, invalid, onChange }: { id: s
     </label>
   );
 }
+
+/** A few preset swatches plus the system colour picker for anything else. */
+export function ColorField({ id, value, swatches, onChange }: { id: string; value: string; swatches: string[]; onChange: (v: string) => void }) {
+  const custom = !swatches.includes(value.toLowerCase());
+  return (
+    <div id={id} className="swatches" role="radiogroup">
+      {swatches.map((c) => (
+        <button
+          key={c}
+          type="button"
+          role="radio"
+          aria-checked={c === value.toLowerCase()}
+          aria-label={c}
+          title={c}
+          className="swatch"
+          style={{ background: c }}
+          onClick={() => onChange(c)}
+        />
+      ))}
+      <label className={`swatch swatch--custom${custom ? " is-on" : ""}`} title="Pick any colour" style={custom ? { background: value } : undefined}>
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Pick any colour" />
+      </label>
+    </div>
+  );
+}

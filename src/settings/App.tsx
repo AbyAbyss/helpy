@@ -10,10 +10,11 @@ import type { Settings } from "../bindings/Settings";
 import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
 import { BuddyStage, BuddyStylePicker, useCustomBuddy } from "./BuddyPreview";
+import { GuidanceStage } from "./GuidancePreview";
 import { ProvidersEditor } from "./ai/Providers";
 import { FallbackEditor, RoutingEditor } from "./ai/Routing";
 import { allModels, refKey } from "./ai/routing";
-import { HotkeyField, MoneyField, NumberField, Segmented, Select, Slider, TextArea, Toggle } from "./controls";
+import { ColorField, HotkeyField, MoneyField, NumberField, Segmented, Select, Slider, TextArea, Toggle } from "./controls";
 import { FIELDS, SECTIONS, searchFields, type Field, type SectionId } from "./registry";
 import { DeepgramField, MicPicker, PiperVoicePicker, ProviderSelect, SampleButton, SystemVoiceSelect, TextInput, WhisperModels } from "./VoiceControls";
 
@@ -242,6 +243,7 @@ export function App() {
               </aside>
             )}
             {section === "buddy" && <BuddyStage buddy={settings.buddy} customSrc={customSrc} />}
+            {section === "guidance" && <GuidanceStage look={settings.guidance} />}
             {section === "hotkeys" && (
               <p className="page__note">
                 Hotkeys marked <span className="pill pill--idle">Not active yet</span> are saved and checked for conflicts now. They start working once their feature is built.
@@ -405,6 +407,8 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
       return <MoneyField id={id} value={saved as number | null} emptyLabel={c.emptyLabel} invalid={!!ctx.errors[path]} onChange={set} />;
     case "text":
       return <TextInput id={id} value={saved as string} placeholder={c.placeholder} invalid={!!ctx.errors[path]} onCommit={set} />;
+    case "color":
+      return <ColorField id={id} value={value as string} swatches={c.swatches} onChange={set} />;
     case "whisperModels":
       return <WhisperModels value={saved as string} onChange={set} />;
     case "micPicker":
@@ -527,6 +531,12 @@ function SectionIcon({ id }: { id: SectionId }) {
       <>
         <rect x="6" y="6" width="12" height="12" rx="2.5" />
         <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
+      </>
+    ),
+    guidance: (
+      <>
+        <rect x="3.5" y="5" width="11" height="8" rx="2" />
+        <path d="M13 15l7 2.6-3 1.1-1.1 3z" />
       </>
     ),
     answerStyle: <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM7 10h10M7 13h6" />,

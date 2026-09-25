@@ -16,6 +16,7 @@ export default defineConfig(() => ({
         overlay: "overlay.html",
         ask: "ask.html",
         pill: "pill.html",
+        step: "step.html",
       },
     },
   },

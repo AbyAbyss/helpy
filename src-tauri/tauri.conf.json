@@ -58,6 +58,26 @@
         "visibleOnAllWorkspaces": true,
         "minWidth": 40,
         "minHeight": 40
+      },
+      {
+        "label": "step",
+        "url": "step.html",
+        "title": "Helpy step",
+        "width": 360,
+        "height": 170,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": true,
+        "shadow": false,
+        "visible": false,
+        "focus": false,
+        "focusable": false,
+        "contentProtected": true,
+        "visibleOnAllWorkspaces": true,
+        "minWidth": 40,
+        "minHeight": 40
       }
     ],
     "security": {

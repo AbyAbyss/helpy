@@ -2,7 +2,7 @@
 
 Helpy is built phase by phase. Each phase ends with an app that runs (`npm run tauri dev`) and does something useful on its own. This file lists what each phase delivers, the crates and plugins it pulls in, and the platform risks that could change the design.
 
-Status: **Phases 1 to 3 are implemented.** Phases 4 to 9 are planned, plus the additional requirements R1 to R6 below.
+Status: **Phases 1 to 4 are implemented.** Phases 5 to 9 are planned, plus the additional requirements R1 to R7 below.
 
 ## Architecture in one paragraph
 
@@ -62,12 +62,13 @@ Not in Phase 2: per-agent and per-batch budgets (Phase 6), provider usage charts
 
 Crates: `rodio` (playback, and its cpal for capture), `whisper-rs`, `nnnoiseless`, `tts`, `flate2`, `tar`, `zip`, `reqwest` multipart.
 
-## Phase 4: visual guidance
+## Phase 4: visual guidance (done)
 
 - Structured actions (highlight, point, arrow, speak) as a tool schema; strict-JSON fallback with validation for models without reliable tool calling.
 - Annotations render in the overlay. The step card is the only clickable element, done by making a small separate window for it (click-through is per window, not per pixel, on most platforms).
 - Click detection near the target without stealing clicks: a low-level mouse hook (`rdev` listen-only) on Windows/macOS/X11.
 - Escape to clear is registered as a global shortcut only while annotations are visible, so it never steals Escape from other apps otherwise.
+- As built: guidance lives inside the ask flow. Once the model has seen the screen it can call `show_step`, which returns only after the user has done the step, with a fresh screenshot. So a walkthrough is the ordinary tool loop, capped by the max-steps setting on top of the usual call limit. The visual guidance model, if routed, takes over from the second step. The ask panel and voice pill hide during a walkthrough and come back after it. "Do it for me" is deferred to Phase 9 (R7), and precision snapping stays in Phase 9 as planned.
 
 Crates: `rdev`.
 
@@ -104,7 +105,7 @@ Crates: `cron`, `notify` (folder watch), `chromiumoxide`.
 
 ## Phase 9: polish
 
-Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessibility-sys`, AT-SPI via `atspi`), privacy features (blocklist, password field blur, offline mode), usage tracking, behavior profiles, onboarding.
+Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessibility-sys`, AT-SPI via `atspi`), privacy features (blocklist, password field blur, offline mode), usage tracking, behavior profiles, onboarding, and "Do it for me" guidance (R7).
 
 ## Additional requirements (added by the user after Phase 2)
 
@@ -149,6 +150,10 @@ These come on top of the original brief. Each one names the phase that builds it
 
 - The voice hotkey shows only a small glowing waveform beside the cursor, with no panel. Clicking it opens the full ask panel with the conversation. **Phase 3.**
 - When a request turns out to be an agent task, the waveform slides to the dock and morphs into that agent's chip, taking on its status glow. **Phase 6.**
+
+### R7. "Do it for me" in visual guidance
+
+Deferred from Phase 4 at the user's request, to be built later. When it's turned on (off by default), the step card gets a "Do it" button. Helpy shows exactly where it will click, waits for the user to confirm, then clicks the target itself. One confirmation per click, never a batch. It needs a mouse-control crate (`enigo`) and Accessibility permission on macOS, and it should click the snapped element rather than raw model coordinates, so it lands after accessibility snapping. **Phase 9.**
 
 ## Platform risks
 

@@ -102,7 +102,7 @@ export function BuddyStage({ buddy, customSrc }: { buddy: BuddySettings; customS
 }
 
 /** A quiet sketch of an ordinary app window, so the buddy has something to sit on. */
-function MockApp() {
+export function MockApp() {
   return (
     <div className="mock" aria-hidden="true">
       <div className="mock__bar">

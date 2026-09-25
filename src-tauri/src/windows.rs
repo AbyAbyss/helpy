@@ -7,6 +7,8 @@ use crate::overlay::Overlays;
 pub const SETTINGS: &str = "settings";
 pub const ASK: &str = "ask";
 pub const PILL: &str = "pill";
+/// The walkthrough step card.
+pub const STEP: &str = "step";
 
 /// Voice pill size in logical pixels (matches tauri.conf.json).
 const PILL_SIZE: (f64, f64) = (300.0, 120.0);

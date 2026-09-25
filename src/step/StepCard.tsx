@@ -1,0 +1,132 @@
+import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { LogicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { CardView } from "../bindings/CardView";
+import { api, EVENTS } from "../lib/ipc";
+import { useSettings } from "../lib/useSettings";
+
+/**
+ * The walkthrough card: the only part of a walkthrough that takes clicks.
+ * Everything drawn on the overlay stays click-through.
+ */
+export function StepCard() {
+  const [card, setCard] = useState<CardView | null>(null);
+  const [settings] = useSettings();
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.guideCard().then((c) => c && setCard(c));
+    const off = listen<CardView>(EVENTS.guideCard, (e) => setCard(e.payload));
+    return () => void off.then((f) => f());
+  }, []);
+
+  // The window is only as big as the card.
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const win = getCurrentWindow();
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      win.setSize(new LogicalSize(Math.ceil(r.width), Math.ceil(r.height))).catch(() => {});
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const voice = settings?.voiceOutput.voiceGuidance ?? false;
+  const toggleVoice = () => {
+    api.set("voiceOutput.voiceGuidance", !voice);
+    if (voice) api.stopSpeaking();
+  };
+
+  return (
+    <div ref={root} className="step" data-still={settings?.guidance.reduceMotion || undefined}>
+      {card && (
+        <div className="card" key={card.number} role="dialog" aria-live="polite" aria-label={`Step ${card.number}`}>
+          <header className="card__head">
+            <Mark />
+            <span className="card__count">
+              Step {card.number}
+              {card.total != null && <> of {card.total}</>}
+            </span>
+            {card.total != null && card.total > 1 && <Progress number={card.number} total={card.total} />}
+            <button
+              type="button"
+              className="icon-btn"
+              aria-pressed={voice}
+              title={voice ? "Stop reading steps aloud" : "Read steps aloud"}
+              onClick={toggleVoice}
+            >
+              <SpeakerIcon on={voice} />
+            </button>
+          </header>
+
+          <p className="card__text">{card.instruction}</p>
+
+          {card.checking ? (
+            <p className="card__hint card__hint--busy">
+              <span className="spinner" aria-hidden="true" />
+              Checking your screen…
+            </p>
+          ) : (
+            <p className="card__hint">
+              {card.clickAdvances ? "Click the highlighted spot, or press Next." : "Press Next once you've done it."}
+            </p>
+          )}
+
+          <footer className="card__actions">
+            <button type="button" className="btn btn--quiet" onClick={() => api.guideAction("stop")}>
+              Stop <kbd>Esc</kbd>
+            </button>
+            <span className="card__spacer" />
+            <button type="button" className="btn" disabled={card.checking} onClick={() => api.guideAction("repeat")}>
+              <RepeatIcon />
+              Repeat
+            </button>
+            <button type="button" className="btn btn--primary" disabled={card.checking} onClick={() => api.guideAction("next")}>
+              Next
+            </button>
+          </footer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Progress({ number, total }: { number: number; total: number }) {
+  return (
+    <span className="progress" aria-hidden="true">
+      {Array.from({ length: Math.min(total, 12) }, (_, i) => (
+        <span key={i} className="progress__seg" data-state={i + 1 < number ? "done" : i + 1 === number ? "now" : undefined} />
+      ))}
+    </span>
+  );
+}
+
+function Mark() {
+  return (
+    <svg className="card__mark" viewBox="0 0 64 64" width="18" height="18" aria-hidden="true">
+      <path d="M6 6 L26 13.5 A22 22 0 1 1 13.5 26 Z" fill="var(--accent)" />
+      <ellipse cx="29" cy="33" rx="3.2" ry="4.4" fill="#141821" />
+      <ellipse cx="41" cy="33" rx="3.2" ry="4.4" fill="#141821" />
+    </svg>
+  );
+}
+
+function SpeakerIcon({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+      <path d="M3.5 7.5h3l4-3.5v12l-4-3.5h-3z" />
+      {on ? <path d="M13.5 7a4 4 0 0 1 0 6M15.5 5a7 7 0 0 1 0 10" /> : <path d="m13.5 8 4 4m0-4-4 4" />}
+    </svg>
+  );
+}
+
+function RepeatIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+      <path d="M4 10a6 6 0 0 1 10.2-4.3L16 7.5M16 3.5v4h-4M16 10a6 6 0 0 1-10.2 4.3L4 12.5M4 16.5v-4h4" />
+    </svg>
+  );
+}

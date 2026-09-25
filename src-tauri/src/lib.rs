@@ -3,6 +3,7 @@ mod buddy;
 mod capture;
 mod cursor;
 mod fullscreen;
+mod guide;
 mod hotkeys;
 mod overlay;
 mod platform;
@@ -74,6 +75,7 @@ pub fn run() {
         .manage(overlay::Overlays::default())
         .manage(cursor::CursorShared::default())
         .manage(ai::ask::AskState::default())
+        .manage(guide::GuideState::default())
         .setup(|app| {
             // A tray app: no Dock icon on macOS.
             #[cfg(target_os = "macos")]
@@ -140,6 +142,8 @@ pub fn run() {
             ai::ask::ask_status,
             windows::ask_hide,
             windows::open_settings_section,
+            guide::guide_action,
+            guide::guide_card,
             voice::voice_input_devices,
             voice::voice_meter_start,
             voice::voice_meter_stop,

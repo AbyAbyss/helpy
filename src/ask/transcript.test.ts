@@ -10,6 +10,11 @@ describe("ask transcript", () => {
     expect(items).toEqual([{ kind: "user", text: "Where is spam?", voice: true }]);
   });
 
+  it("lists walkthrough steps", () => {
+    const items = run([{ type: "step", number: 2, total: 4, instruction: "Click Share." }]);
+    expect(items[1]).toEqual({ kind: "step", number: 2, total: 4, text: "Click Share." });
+  });
+
   it("streams text into one answer", () => {
     const items = run([{ type: "text", text: "Open " }, { type: "text", text: "Junk Email." }, { type: "checkpoint" }]);
     expect(items[1]).toEqual({ kind: "assistant", text: "Open Junk Email.", final: true });
