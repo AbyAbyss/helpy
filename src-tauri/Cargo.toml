@@ -46,7 +46,6 @@ tts = "0.26.3"
 flate2 = "1.1.10"
 tar = "0.4.46"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
-rdev = "0.5"
 tauri-plugin-clipboard-manager = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-plugin-notification = "2"
@@ -61,6 +60,10 @@ cron = "0.15"
 enigo = "0.6"
 notify = "8"
 chromiumoxide = { version = "0.9.1", features = ["fetcher", "rustls", "zip8"] }
+
+# Click detection for guides; macOS uses its own event tap (guide/mod.rs).
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+rdev = "0.5"
 
 [target.'cfg(windows)'.dependencies]
 uiautomation = "0.25"

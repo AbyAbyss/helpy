@@ -151,13 +151,7 @@ fn ensure_click_listener(app: &AppHandle) {
         .name("helpy-clicks".into())
         .spawn(move || {
             let app = handle.clone();
-            let result = rdev::listen(move |e| {
-                if !matches!(
-                    e.event_type,
-                    rdev::EventType::ButtonPress(rdev::Button::Left)
-                ) {
-                    return;
-                }
+            let result = listen_left_clicks(move || {
                 let state = app.state::<GuideState>();
                 let Some(tx) = state.waiter.lock().unwrap().clone() else {
                     return;
@@ -167,7 +161,7 @@ fn ensure_click_listener(app: &AppHandle) {
                 }
             });
             if let Err(e) = result {
-                log::warn!("click detection unavailable: {e:?}");
+                log::warn!("click detection unavailable: {e}");
                 let state = handle.state::<GuideState>();
                 *state.clicks.lock().unwrap() = Some(false);
                 // Tell a card that's already showing to ask for Next instead.
@@ -179,6 +173,49 @@ fn ensure_click_listener(app: &AppHandle) {
             }
         })
         .expect("spawn click listener");
+}
+
+/// Runs `on_click` on every left mouse press, blocking the calling thread.
+/// On macOS this is a listen-only event tap for mouse-downs alone: rdev also
+/// decodes every key press, asking for the keyboard layout off the main
+/// thread, which macOS kills the app for.
+#[cfg(target_os = "macos")]
+fn listen_left_clicks(on_click: impl Fn() + 'static) -> Result<(), String> {
+    use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
+    use core_graphics::event::{
+        CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
+    };
+    let tap = CGEventTap::new(
+        CGEventTapLocation::Session,
+        CGEventTapPlacement::HeadInsertEventTap,
+        CGEventTapOptions::ListenOnly,
+        vec![CGEventType::LeftMouseDown],
+        move |_, _, _| {
+            on_click();
+            None
+        },
+    )
+    .map_err(|_| "no Accessibility permission for an event tap".to_string())?;
+    let source = tap
+        .mach_port
+        .create_runloop_source(0)
+        .map_err(|_| "couldn't attach the event tap".to_string())?;
+    unsafe {
+        CFRunLoop::get_current().add_source(&source, kCFRunLoopCommonModes);
+    }
+    tap.enable();
+    CFRunLoop::run_current();
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn listen_left_clicks(on_click: impl Fn() + 'static) -> Result<(), String> {
+    rdev::listen(move |e| {
+        if matches!(e.event_type, rdev::EventType::ButtonPress(rdev::Button::Left)) {
+            on_click();
+        }
+    })
+    .map_err(|e| format!("{e:?}"))
 }
 
 fn click_advances(app: &AppHandle, s: &Settings) -> bool {

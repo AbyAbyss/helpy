@@ -12,7 +12,7 @@ use accessibility_sys::{
     kAXSizeAttribute, kAXSubroleAttribute, kAXTitleAttribute, kAXURLAttribute, kAXValueAttribute,
     kAXValueTypeCGPoint, kAXValueTypeCGSize, AXIsProcessTrusted, AXUIElementCopyAttributeValue,
     AXUIElementCopyElementAtPosition, AXUIElementCreateApplication, AXUIElementCreateSystemWide,
-    AXUIElementRef, AXUIElementSetMessagingTimeout, AXValueGetValue, AXValueRef,
+    AXUIElementGetPid, AXUIElementRef, AXUIElementSetMessagingTimeout, AXValueGetValue, AXValueRef,
 };
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, CFTypeRef, TCFType};
@@ -41,6 +41,14 @@ impl Ax {
 
     fn raw(&self) -> AXUIElementRef {
         self.0.as_CFTypeRef() as AXUIElementRef
+    }
+
+    /// Whether the element is one of Helpy's own. Reading those from a
+    /// background thread calls WebKit off the main thread, which aborts.
+    fn is_own(&self) -> bool {
+        let mut pid = 0;
+        let err = unsafe { AXUIElementGetPid(self.raw(), &mut pid) };
+        err == kAXErrorSuccess && pid as u32 == std::process::id()
     }
 
     fn attr(&self, name: &str) -> Option<CFType> {
@@ -171,6 +179,9 @@ pub async fn element_at(x: f64, y: f64, scale: f64) -> Option<Element> {
             return None;
         }
         let e = Ax::from_create(hit)?;
+        if e.is_own() {
+            return None;
+        }
         Some(Element {
             rect: physical(e.rect()?, scale),
             role: e.string(kAXRoleAttribute).unwrap_or_default(),
@@ -187,6 +198,9 @@ pub async fn element_at(x: f64, y: f64, scale: f64) -> Option<Element> {
 pub async fn password_fields(scale: f64) -> Vec<Rect> {
     blocking(move || {
         let app = system()?.element(kAXFocusedApplicationAttribute)?;
+        if app.is_own() {
+            return None;
+        }
         let window = app.element(kAXFocusedWindowAttribute)?;
         Some(search(
             window,
