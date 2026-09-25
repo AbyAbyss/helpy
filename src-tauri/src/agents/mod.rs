@@ -983,6 +983,127 @@ pub fn take_voice_follow_up(app: &AppHandle, text: &str) -> bool {
     true
 }
 
+/// What spoken words mean for the actions waiting for the user's OK.
+#[derive(Debug, PartialEq)]
+enum Spoken {
+    /// Not about approvals.
+    Other,
+    /// Answer these agents.
+    Answer {
+        ids: Vec<String>,
+        approve: bool,
+    },
+    /// Can't tell which of several is meant.
+    Unclear(usize),
+    NothingWaiting,
+}
+
+/// "approve", "reject", "approve all from Gmail". One waiting action can be
+/// answered with a single word; several need "all" and, if they come from
+/// different places, where from.
+fn spoken_approval(text: &str, waiting: &[(String, String)]) -> Spoken {
+    let t = text.to_lowercase();
+    let words: Vec<&str> = t
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let Some(first) = words.first() else {
+        return Spoken::Other;
+    };
+    let approve = matches!(*first, "approve" | "approved" | "allow");
+    if words.len() > 8 || !(approve || matches!(*first, "reject" | "deny" | "decline")) {
+        return Spoken::Other;
+    }
+    if waiting.is_empty() {
+        return Spoken::NothingWaiting;
+    }
+    const FILLER: &[&str] = &[
+        "all",
+        "from",
+        "the",
+        "of",
+        "for",
+        "it",
+        "that",
+        "this",
+        "them",
+        "everything",
+        "please",
+        "my",
+    ];
+    let place: Vec<&str> = words[1..]
+        .iter()
+        .copied()
+        .filter(|w| !FILLER.contains(w))
+        .collect();
+    let matching: Vec<&(String, String)> = waiting
+        .iter()
+        .filter(|(_, source)| {
+            let source = source.to_lowercase();
+            place.iter().all(|w| source.contains(w))
+        })
+        .collect();
+    let all = words.contains(&"all") || words.contains(&"everything");
+    let one_place = matching.windows(2).all(|w| w[0].1 == w[1].1);
+    match matching.len() {
+        0 => Spoken::Unclear(waiting.len()),
+        1 => Spoken::Answer {
+            ids: vec![matching[0].0.clone()],
+            approve,
+        },
+        _ if all && (one_place || !place.is_empty()) => Spoken::Answer {
+            ids: matching.iter().map(|(id, _)| id.clone()).collect(),
+            approve,
+        },
+        n => Spoken::Unclear(n),
+    }
+}
+
+/// Answers waiting approvals by voice. None when the words aren't about
+/// approvals; otherwise what to tell the user.
+pub fn voice_approval(app: &AppHandle, text: &str) -> Option<String> {
+    let waiting: Vec<(String, String)> = app
+        .state::<AgentsState>()
+        .agents
+        .lock()
+        .unwrap()
+        .values()
+        .filter_map(|a| match &a.pending {
+            Some(Pending::Approval { source, .. }) => Some((a.id.clone(), source.clone())),
+            _ => None,
+        })
+        .collect();
+    match spoken_approval(text, &waiting) {
+        Spoken::Other => None,
+        Spoken::NothingWaiting => Some("Nothing is waiting for your OK.".into()),
+        Spoken::Unclear(n) => {
+            crate::windows::show_agents(app, Some(crate::windows::INBOX.into()));
+            Some(format!("{n} actions are waiting. Say \"approve all from\" and where, or pick in the inbox."))
+        }
+        Spoken::Answer { ids, approve } => {
+            let n = ids.len();
+            for id in ids {
+                let answer = if approve {
+                    Answer::Approve
+                } else {
+                    Answer::Reject { note: None }
+                };
+                let _ = agents_answer(app.clone(), id, answer);
+            }
+            let what = if n == 1 {
+                "it".to_string()
+            } else {
+                format!("all {n}")
+            };
+            Some(if approve {
+                format!("Approved {what}.")
+            } else {
+                format!("Rejected {what}.")
+            })
+        }
+    }
+}
+
 /// What an agent did and found, as Markdown.
 pub fn markdown(a: &Agent) -> String {
     let mut out = format!("# {}\n\n**Task:** {}\n\n", a.name, a.goal);
@@ -1038,6 +1159,49 @@ pub fn agents_has_brave_key() -> Result<bool, String> {
 mod tests {
     use super::*;
     use crate::settings::schema::{ModelConfig, ProviderConfig};
+
+    #[test]
+    fn spoken_approvals_only_answer_what_is_clear() {
+        let w = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+            list.iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect()
+        };
+        let one = w(&[("a1", "Gmail")]);
+        let answer = |ids: &[&str], approve| Spoken::Answer {
+            ids: ids.iter().map(|s| s.to_string()).collect(),
+            approve,
+        };
+        assert_eq!(spoken_approval("Approve.", &one), answer(&["a1"], true));
+        assert_eq!(spoken_approval("reject it", &one), answer(&["a1"], false));
+        assert_eq!(spoken_approval("what's the weather", &one), Spoken::Other);
+        assert_eq!(spoken_approval("approve", &[]), Spoken::NothingWaiting);
+
+        let many = w(&[("a1", "Gmail"), ("a2", "Gmail"), ("a3", "Slack")]);
+        assert_eq!(spoken_approval("approve", &many), Spoken::Unclear(3));
+        assert_eq!(spoken_approval("approve all", &many), Spoken::Unclear(3));
+        assert_eq!(
+            spoken_approval("approve all from Gmail", &many),
+            answer(&["a1", "a2"], true)
+        );
+        assert_eq!(
+            spoken_approval("approve slack", &many),
+            answer(&["a3"], true)
+        );
+        assert_eq!(
+            spoken_approval("reject everything from gmail", &many),
+            answer(&["a1", "a2"], false)
+        );
+        assert_eq!(
+            spoken_approval("approve all from notion", &many),
+            Spoken::Unclear(3)
+        );
+        let same = w(&[("a1", "Files"), ("a2", "Files")]);
+        assert_eq!(
+            spoken_approval("approve all", &same),
+            answer(&["a1", "a2"], true)
+        );
+    }
 
     #[test]
     fn agents_need_a_model_that_uses_tools() {

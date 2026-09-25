@@ -248,7 +248,7 @@ function Card(props: {
             <button type="button" className="btn" onClick={() => api.agentAnswer(a.id, { type: "reject", note: null })}>
               Reject
             </button>
-            <button type="button" className="btn btn--quiet" onClick={() => api.openAgentPanel(a.id)}>
+            <button type="button" className="btn btn--quiet" onClick={() => api.openAgentPanel("inbox")}>
               Review
             </button>
           </div>

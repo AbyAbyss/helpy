@@ -8,6 +8,7 @@ import type { LogKind } from "../bindings/LogKind";
 import { useAgents } from "../dock/Dock";
 import { duration, STATUS_LABEL, tokens, tone } from "../dock/dockState";
 import { api, EVENTS } from "../lib/ipc";
+import { ApprovalBox, Inbox } from "./Approvals";
 import { useSettings, useTheme } from "../lib/useSettings";
 
 type Filter = "active" | "finished" | "all";
@@ -21,10 +22,14 @@ export function Panel() {
   const { agents, batches, live } = useAgents();
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<string | null>(null);
+  const [inbox, setInbox] = useState(false);
 
   useEffect(() => {
     const off = listen<string>(EVENTS.agentsFocus, (e) => {
-      setSelected(e.payload);
+      // "inbox" opens the approval inbox instead of an agent.
+      const isInbox = e.payload === "inbox";
+      setInbox(isInbox);
+      setSelected(isInbox ? null : e.payload);
       setFilter("all");
     });
     return () => void off.then((f) => f());
@@ -42,6 +47,7 @@ export function Panel() {
   }, [agents, batches, filter]);
 
   const current = selected ? agents.get(selected) : undefined;
+  const waiting = [...agents.values()].filter((a) => a.pending?.type === "approval").length;
   useEffect(() => {
     if (current?.unseen) api.agentSeen(current.id);
   }, [current]);
@@ -60,6 +66,13 @@ export function Panel() {
           </div>
         </header>
         <NewTask />
+        <button type="button" className={`row inboxrow${inbox ? " is-on" : ""}`} onClick={() => setInbox(true)}>
+          <span className={`dot dot--${waiting ? "alert" : "idle"}`} aria-hidden="true" />
+          <span className="row__main">
+            <span className="row__name">Approval inbox</span>
+          </span>
+          <span className="row__status">{waiting ? `${waiting} waiting` : "Empty"}</span>
+        </button>
         <div className="ap__groups">
           {groups.length === 0 && <p className="ap__empty">{filter === "active" ? "No agents at work." : "No agents yet."}</p>}
           {groups.map((g) => (
@@ -72,8 +85,11 @@ export function Panel() {
                 <button
                   key={a.id}
                   type="button"
-                  className={`row${selected === a.id ? " is-on" : ""}`}
-                  onClick={() => setSelected(a.id)}
+                  className={`row${!inbox && selected === a.id ? " is-on" : ""}`}
+                  onClick={() => {
+                    setSelected(a.id);
+                    setInbox(false);
+                  }}
                 >
                   <span className={`dot dot--${tone(a.status)}`} aria-hidden="true" />
                   <span className="row__main">
@@ -91,7 +107,9 @@ export function Panel() {
         </div>
       </aside>
       <main className="ap__detail">
-        {current ? (
+        {inbox ? (
+          <Inbox agents={[...agents.values()]} />
+        ) : current ? (
           <Detail key={current.id} agent={current} batch={batches.get(current.batch)} line={live.get(current.id)} />
         ) : (
           <div className="ap__placeholder">
@@ -151,7 +169,6 @@ function NewTask() {
 }
 
 function Detail({ agent: a, batch, line }: { agent: AgentView; batch: Batch | undefined; line: string | undefined }) {
-  const [note, setNote] = useState("");
   const [answer, setAnswer] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -238,27 +255,7 @@ function Detail({ agent: a, batch, line }: { agent: AgentView; batch: Batch | un
         </p>
       )}
 
-      {a.pending?.type === "approval" && (
-        <section className="box box--alert">
-          <h2>Needs your OK</h2>
-          <p className="box__summary">{a.pending.summary}</p>
-          {a.pending.detail &&
-            (a.pending.kind === "shell" || a.pending.kind === "fileChange" ? (
-              <pre className="box__detail">{a.pending.detail}</pre>
-            ) : (
-              <p className="muted small">{a.pending.detail}</p>
-            ))}
-          <input className="field" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why not? (optional, if you reject)" />
-          <div className="box__buttons">
-            <button type="button" className="btn btn--primary" onClick={() => run(() => api.agentAnswer(a.id, { type: "approve" }))}>
-              Approve
-            </button>
-            <button type="button" className="btn" onClick={() => run(() => api.agentAnswer(a.id, { type: "reject", note: note || null }))}>
-              Reject
-            </button>
-          </div>
-        </section>
-      )}
+      {a.pending?.type === "approval" && <ApprovalBox key={a.pending.id} agent={a} pending={a.pending} />}
 
       {a.pending?.type === "question" && (
         <section className="box box--question">

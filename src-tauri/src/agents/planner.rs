@@ -94,7 +94,14 @@ pub fn planning_models(ai: &Ai) -> Result<Vec<ModelRef>, String> {
 pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
     let list: String = groups
         .iter()
-        .map(|g| format!("- \"{}\": {}\n", g.id, g.about))
+        .map(|g| {
+            let note = if g.connected {
+                ""
+            } else {
+                " (not connected yet; still pick it if the task needs it)"
+            };
+            format!("- \"{}\": {}{note}\n", g.id, g.about)
+        })
         .collect();
     let mode = match s.agents.default_mode {
         DefaultRunMode::Auto => "Pick the mode that fits",
@@ -270,7 +277,8 @@ pub async fn plan(app: &AppHandle, request: &str, image: Option<String>) -> Resu
     };
     let quiet = s.agents.confirm_plans == ConfirmPlans::SideEffectsOnly
         && !has_side_effects(&plan.agents)
-        && plan.new_folders.is_empty();
+        && plan.new_folders.is_empty()
+        && plan.groups.iter().all(|g| g.connected);
     let mut plan = plan;
     plan.started = quiet;
     *app.state::<AgentsState>().plan.lock().unwrap() = Some((plan.clone(), image));

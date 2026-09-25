@@ -239,6 +239,24 @@ body,
   background: #8fb6ff;
 }
 
+.dot--connect {
+  background: #c9a3ff;
+}
+
+.linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.linkbtn:hover {
+  text-decoration: underline;
+}
+
 .pcard__err {
   margin: 0;
   padding: 8px 10px;

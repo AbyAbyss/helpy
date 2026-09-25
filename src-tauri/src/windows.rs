@@ -16,6 +16,8 @@ pub const DOCK: &str = "dock";
 /// The agent panel.
 pub const AGENTS: &str = "agents";
 pub const AGENTS_FOCUS_EVENT: &str = "agents://focus";
+/// Focusing this instead of an agent id opens the approval inbox.
+pub const INBOX: &str = "inbox";
 /// Space between the dock and the screen edge, logical pixels.
 const DOCK_MARGIN: f64 = 10.0;
 /// Plan card size in logical pixels (matches tauri.conf.json).

@@ -63,6 +63,7 @@ export function PlanCard() {
 
   const label = (id: string) => plan?.groups.find((g) => g.id === id)?.label ?? id;
   const many = (plan?.agents.length ?? 0) > 1;
+  const unconnected = plan?.groups.filter((g) => !g.connected) ?? [];
 
   return (
     <div ref={root} className="plan">
@@ -118,8 +119,19 @@ export function PlanCard() {
             ))}
           </ol>
 
-          {(plan.asks.length > 0 || plan.newFolders.length > 0 || plan.hasImage) && (
+          {(plan.asks.length > 0 || plan.newFolders.length > 0 || plan.hasImage || unconnected.length > 0) && (
             <ul className="pnotes">
+              {unconnected.map((g) => (
+                <li key={g.id}>
+                  <Dot tone="connect" />
+                  <span>
+                    <b>{g.label}</b> isn't connected yet; agents wait at that step until it is.{" "}
+                    <button type="button" className="linkbtn" onClick={() => api.openSettingsSection("connectors")}>
+                      Connect
+                    </button>
+                  </span>
+                </li>
+              ))}
               {plan.asks.length > 0 && (
                 <li>
                   <Dot tone="ask" />
@@ -164,7 +176,7 @@ export function PlanCard() {
   );
 }
 
-function Dot({ tone }: { tone: "ask" | "folder" | "image" }) {
+function Dot({ tone }: { tone: "ask" | "folder" | "image" | "connect" }) {
   return <span className={`dot dot--${tone}`} aria-hidden="true" />;
 }
 

@@ -555,6 +555,108 @@ impl External for ExternalTools {
     }
 }
 
+// ---------- Voice ----------
+
+/// Which service "connect my Gmail" names: a built-in connector's id, or
+/// an MCP server's id.
+fn spoken_service<'a>(
+    text: &str,
+    mcp: impl Iterator<Item = (&'a str, &'a str)>,
+) -> Option<(bool, String)> {
+    let t = text.to_lowercase();
+    let words: Vec<&str> = t
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    if words.first() != Some(&"connect") || words.len() > 6 {
+        return None;
+    }
+    let said = words[1..]
+        .iter()
+        .filter(|w| !["my", "to", "the", "helpy", "with", "up", "account"].contains(w))
+        .copied()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if said.is_empty() {
+        return None;
+    }
+    let names = |name: &str, id: &str| {
+        let name = name.to_lowercase();
+        name == said
+            || id == said
+            || name
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|w| w == said)
+    };
+    // Only a service the words name clearly ("google" alone could be three).
+    let mut found: Vec<(bool, String)> = registry()
+        .iter()
+        .filter(|c| names(c.name(), c.id()))
+        .map(|c| (true, c.id().to_string()))
+        .collect();
+    found.extend(
+        mcp.filter(|(id, name)| names(name, id))
+            .map(|(id, _)| (false, id.to_string())),
+    );
+    (found.len() == 1).then(|| found.remove(0))
+}
+
+/// "Connect my Gmail": starts the sign-in, or opens settings when it
+/// needs something first. None when the words aren't that.
+pub fn voice_connect(app: &AppHandle, text: &str) -> Option<String> {
+    let s = app.state::<SettingsStore>().get();
+    let (builtin, id) = spoken_service(
+        text,
+        s.connectors
+            .mcp
+            .iter()
+            .map(|m| (m.id.as_str(), m.name.as_str())),
+    )?;
+    let settings = |why: String| {
+        crate::windows::show_settings(app);
+        let _ = app.emit_to(
+            crate::windows::SETTINGS,
+            crate::windows::OPEN_SECTION_EVENT,
+            "connectors",
+        );
+        why
+    };
+    if builtin {
+        let c = find(&id)?;
+        let ready = c
+            .oauth()
+            .is_some_and(|spec| oauth_request(&spec, &s, Permission::ReadOnly).is_ok());
+        if !ready {
+            return Some(settings(format!(
+                "{} needs setting up first. I've opened Settings → Connectors.",
+                c.name()
+            )));
+        }
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = connectors_connect(app.clone(), id).await {
+                log::warn!("voice connect: {e}");
+            }
+        });
+        return Some(format!("Opening the {} sign-in in your browser.", c.name()));
+    }
+    let m = s.connectors.mcp.iter().find(|m| m.id == id)?;
+    if !m.oauth {
+        return Some(settings(format!(
+            "{} connects with keys; I've opened Settings → Connectors.",
+            m.name
+        )));
+    }
+    let name = m.name.clone();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = crate::mcp::mcp_sign_in(app, id).await {
+            log::warn!("voice connect: {e}");
+        }
+    });
+    Some(format!("Opening the {name} sign-in in your browser."))
+}
+
 // ---------- Provider guides ----------
 
 pub fn provider_name(p: &str) -> &'static str {
@@ -782,5 +884,39 @@ mod tests {
             Some(("gmail", "search".into()))
         );
         assert!(split_tool("web_search").is_none());
+    }
+
+    #[test]
+    fn hears_which_service_to_connect() {
+        let mcp = || {
+            [
+                ("jira", "Atlassian (Jira, Confluence)"),
+                ("linear", "Linear"),
+            ]
+            .into_iter()
+        };
+        assert_eq!(
+            spoken_service("Connect my Gmail.", mcp()),
+            Some((true, "gmail".into()))
+        );
+        assert_eq!(
+            spoken_service("connect to google calendar", mcp()),
+            Some((true, "calendar".into()))
+        );
+        assert_eq!(
+            spoken_service("connect outlook", mcp()),
+            Some((true, "outlook".into()))
+        );
+        assert_eq!(
+            spoken_service("connect linear", mcp()),
+            Some((false, "linear".into()))
+        );
+        assert_eq!(
+            spoken_service("connect my jira", mcp()),
+            Some((false, "jira".into()))
+        );
+        assert_eq!(spoken_service("connect", mcp()), None);
+        assert_eq!(spoken_service("connect google", mcp()), None);
+        assert_eq!(spoken_service("how do I connect my printer", mcp()), None);
     }
 }

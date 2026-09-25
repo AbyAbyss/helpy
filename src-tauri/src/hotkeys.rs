@@ -304,6 +304,7 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
         "circleToExplain" => crate::circle::toggle(app),
         "pauseAllAgents" => crate::agents::pause_all(app),
         "openAgentPanel" => crate::windows::show_agents(app, None),
+        "openApprovalInbox" => crate::windows::show_agents(app, Some(crate::windows::INBOX.into())),
         "pauseCapture" => {
             let s = app.state::<SettingsStore>().get();
             let _ = settings::settings_set(

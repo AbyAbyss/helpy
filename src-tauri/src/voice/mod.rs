@@ -328,6 +328,16 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
         crate::windows::fly_pill_to_dock(app);
         return emit_phase(app, VoicePhase::Idle { message: None });
     }
+    if let Some(message) = crate::agents::voice_approval(app, &text)
+        .or_else(|| crate::connectors::voice_connect(app, &text))
+    {
+        return emit_phase(
+            app,
+            VoicePhase::Idle {
+                message: Some(message),
+            },
+        );
+    }
     if let Some(started) = crate::agents::planner::voice_reply(app, &text) {
         if started {
             crate::windows::fly_pill_to_dock(app);
