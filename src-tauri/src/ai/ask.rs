@@ -594,10 +594,24 @@ impl Turn<'_> {
             total: step.total.map(|t| t.max(*steps)),
             instruction: step.instruction.clone(),
         });
-        if !guide::show(self.app, &self.settings, *steps, &step, meta, &self.cancel).await {
-            return Err(ProviderError::new(ErrorKind::Cancelled, "Stopped"));
-        }
-        let done = format!("The user did step {steps}");
+        let done = match guide::show(self.app, &self.settings, *steps, &step, meta, &self.cancel)
+            .await
+        {
+            guide::StepEnd::Stopped => {
+                return Err(ProviderError::new(ErrorKind::Cancelled, "Stopped"))
+            }
+            guide::StepEnd::Done => format!("The user did step {steps}"),
+            guide::StepEnd::Stray => format!(
+                "The user clicked somewhere other than the highlight of step {steps}. If they're \
+                 still working toward the goal, show the step that fits their screen now (the \
+                 same one again if needed). If they reached the goal another way or have moved \
+                 on to something else, show no more steps and finish with one short sentence"
+            ),
+            guide::StepEnd::Said(text) => format!(
+                "During step {steps} the user said: \"{text}\". Answer that: show a step if they \
+                 still want help, or finish with a short answer if they don't"
+            ),
+        };
         Ok(match self.screen(false).await {
             Ok(shot) => (
                 Self::screenshot_parts(&format!("{done}. Here is their screen now"), shot),

@@ -1,6 +1,8 @@
 //! Visual guidance: draws a step's marks on the overlay, shows the step card
 //! (the only part the user can click) and waits until the user has done the
-//! step, either by clicking near the target or by pressing Next.
+//! step, either by clicking near the target or by pressing Next. A click
+//! elsewhere or a spoken reply also ends the wait, so the model can re-point
+//! or wrap up.
 
 pub mod snap;
 pub mod step;
@@ -31,6 +33,9 @@ const CARD_SIZE: (f64, f64) = (360.0, 170.0);
 const HIT_MARGIN: f64 = 12.0;
 /// Time for the app to react to the click before the next screenshot.
 const SETTLE: Duration = Duration::from_millis(700);
+/// Clicks away from the target this soon after a step appears don't count;
+/// the user may still be reading it.
+const STRAY_GRACE: Duration = Duration::from_secs(2);
 
 /// The marks one overlay should draw. Every overlay gets the event and keeps
 /// only what is addressed to it.
@@ -63,6 +68,7 @@ pub struct CardView {
 
 enum Command {
     Next,
+    Said(String),
     Repeat,
     Click(f64, f64),
     DoIt,
@@ -317,8 +323,20 @@ fn say(app: &AppHandle, s: &Settings, text: &str) {
     }
 }
 
-/// Shows one step and waits until the user has done it. Returns false when
-/// the question was cancelled (Stop, Escape) first.
+/// How a step's wait ended.
+pub enum StepEnd {
+    /// The user did the step (clicked the target, Next, or Do it).
+    Done,
+    /// The user clicked somewhere other than the target.
+    Stray,
+    /// The user said something about the walkthrough.
+    Said(String),
+    /// Stop, Escape or a spoken "stop".
+    Stopped,
+}
+
+/// Shows one step and waits until the user has done it, clicked elsewhere,
+/// replied by voice, or stopped the walkthrough.
 pub async fn show(
     app: &AppHandle,
     s: &Settings,
@@ -326,7 +344,7 @@ pub async fn show(
     step: &Step,
     meta: CaptureMeta,
     cancel: &CancellationToken,
-) -> bool {
+) -> StepEnd {
     begin(app);
     let state = app.state::<GuideState>();
     let (tx, mut rx) = mpsc::unbounded_channel();
@@ -378,16 +396,18 @@ pub async fn show(
     let fade_after = tokio::time::sleep(Duration::from_secs(fade.max(1) as u64));
     tokio::pin!(fade_after);
     let mut faded = fade == 0;
+    let shown_at = tokio::time::Instant::now();
 
-    let done = loop {
+    let end = loop {
         tokio::select! {
-            _ = cancel.cancelled() => break false,
+            _ = cancel.cancelled() => break StepEnd::Stopped,
             _ = &mut fade_after, if !faded => {
                 faded = true;
                 emit_marks(app, &label, Vec::new());
             }
             cmd = rx.recv() => match cmd {
-                None | Some(Command::Next) => break true,
+                None | Some(Command::Next) => break StepEnd::Done,
+                Some(Command::Said(text)) => break StepEnd::Said(text),
                 Some(Command::Repeat) => {
                     draw();
                     say(app, s, &step::speech(step));
@@ -416,7 +436,7 @@ pub async fn show(
                 Some(Command::Confirm) if s.guidance.do_it_for_me => {
                     let Some((x, y)) = click_at else { continue };
                     match click(x, y, meta.scale_factor).await {
-                        Ok(()) => break true,
+                        Ok(()) => break StepEnd::Done,
                         Err(e) => update_card(&|c| {
                             c.confirming = false;
                             c.problem = Some(e.clone());
@@ -425,11 +445,15 @@ pub async fn show(
                 }
                 Some(Command::DoIt | Command::Confirm) => {}
                 Some(Command::Click(x, y)) => {
-                    if click_advances(app, s)
-                        && !on_card(app, x, y)
-                        && step::hit(&targets, x, y, margin)
-                    {
-                        break true;
+                    if on_card(app, x, y) {
+                        continue;
+                    }
+                    if step::hit(&targets, x, y, margin) {
+                        if click_advances(app, s) {
+                            break StepEnd::Done;
+                        }
+                    } else if shown_at.elapsed() >= STRAY_GRACE {
+                        break StepEnd::Stray;
                     }
                 }
             }
@@ -437,7 +461,7 @@ pub async fn show(
     };
     state.waiter.lock().unwrap().take();
     emit_marks(app, &label, Vec::new());
-    if done {
+    if !matches!(end, StepEnd::Stopped) {
         // Clone first: show_card_view takes the same lock.
         let card = state.card.lock().unwrap().clone();
         if let Some(mut card) = card {
@@ -445,11 +469,41 @@ pub async fn show(
             show_card_view(app, card);
         }
         tokio::select! {
-            _ = cancel.cancelled() => return false,
+            _ = cancel.cancelled() => return StepEnd::Stopped,
             _ = tokio::time::sleep(SETTLE) => {}
         }
     }
-    done
+    end
+}
+
+/// A voice reply while a walkthrough runs. "Stop"-like replies end it; while
+/// a step waits, anything else goes to the model as the user's reply. False
+/// when there's no walkthrough to take it.
+pub fn take_voice_reply(app: &AppHandle, text: &str) -> bool {
+    if !active(app) {
+        return false;
+    }
+    if is_stop(text) {
+        crate::ai::ask::cancel(app);
+        return true;
+    }
+    let tx = app.state::<GuideState>().waiter.lock().unwrap().clone();
+    tx.is_some_and(|tx| tx.send(Command::Said(text.into())).is_ok())
+}
+
+/// A short reply asking to end the walkthrough ("stop", "I got it"). Longer
+/// sentences are questions, even with "stop" in them.
+fn is_stop(text: &str) -> bool {
+    const PHRASES: [&str; 12] = [
+        "stop", "got it", "enough", "never mind", "nevermind", "cancel", "i'm done",
+        "im done", "no thanks", "quit", "that's all", "thats all",
+    ];
+    let t: String = text
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '\'')
+        .collect();
+    t.split_whitespace().count() <= 8 && PHRASES.iter().any(|p| t.contains(p))
 }
 
 /// Clicks at a point in global physical pixels for the user, then puts the
@@ -536,6 +590,16 @@ mod tests {
         height: 2160,
         scale: 2.0,
     };
+
+    #[test]
+    fn short_stop_replies_end_the_walkthrough() {
+        for t in ["Stop.", "No, you can stop, I got it", "OK I got it!", "never mind", "That's enough"] {
+            assert!(is_stop(t), "{t}");
+        }
+        for t in ["Where is the button?", "I can't find it", "how do I stop my screensaver from starting so often"] {
+            assert!(!is_stop(t), "{t}");
+        }
+    }
 
     #[test]
     fn card_sits_beside_the_target_or_at_the_chosen_edge() {

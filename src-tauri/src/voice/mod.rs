@@ -78,6 +78,9 @@ pub struct VoiceState {
     wake: Mutex<Option<Arc<AtomicBool>>>,
     catalogue: tokio::sync::Mutex<Option<Value>>,
     next_id: AtomicU64,
+    /// The microphone is open. A session outlives its recording: a voice
+    /// question's session also runs the answer.
+    recording: AtomicBool,
 }
 
 impl VoiceState {
@@ -90,6 +93,7 @@ impl VoiceState {
             wake: Mutex::new(None),
             catalogue: tokio::sync::Mutex::new(None),
             next_id: AtomicU64::new(1),
+            recording: AtomicBool::new(false),
         }
     }
 
@@ -131,10 +135,10 @@ pub fn update_escape(app: &AppHandle) {
 
 pub fn hotkey_pressed(app: &AppHandle) {
     let mode = app.state::<SettingsStore>().get().hotkeys.voice_mode;
-    let listening = app.state::<VoiceState>().listening();
+    let recording = app.state::<VoiceState>().recording.load(Ordering::Relaxed);
     match mode {
         VoiceHotkeyMode::PushToTalk => start(app, Trigger::PushToTalk),
-        VoiceHotkeyMode::Toggle if listening => stop_listening(app),
+        VoiceHotkeyMode::Toggle if recording => stop_listening(app),
         VoiceHotkeyMode::Toggle => start(app, Trigger::Toggle),
     }
 }
@@ -164,7 +168,10 @@ pub fn cancel(app: &AppHandle) {
 pub fn start(app: &AppHandle, trigger: Trigger) {
     let v = app.state::<VoiceState>();
     let mut slot = v.session.lock().unwrap();
-    if slot.is_some() {
+    // A walkthrough started by voice runs inside that question's session;
+    // once its recording is done, a reply to a step gets a session of its own.
+    let reply = crate::guide::active(app) && !v.recording.load(Ordering::Relaxed);
+    if slot.is_some() && !reply {
         return;
     }
     // A new question interrupts whatever Helpy was saying.
@@ -206,9 +213,27 @@ pub fn stop_listening(app: &AppHandle) {
     }
 }
 
+/// Marks the microphone open until dropped, on every way out of recording.
+struct Recording<'a>(&'a AtomicBool);
+
+impl<'a> Recording<'a> {
+    fn start(app: &'a AppHandle) -> Self {
+        let flag = &app.state::<VoiceState>().inner().recording;
+        flag.store(true, Ordering::Relaxed);
+        Recording(flag)
+    }
+}
+
+impl Drop for Recording<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
+}
+
 fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &AtomicBool) {
     let s = app.state::<SettingsStore>().get();
     let vi = &s.voice_input;
+    let mic_open = Recording::start(app);
     let mic = match audio::start(vi.microphone.clone(), vi.noise_suppression) {
         Ok(m) => m,
         Err(message) => return emit_phase(app, VoicePhase::Error { message }),
@@ -294,6 +319,7 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
         }
     }
     drop(mic);
+    drop(mic_open);
 
     if cancel.load(Ordering::Relaxed) {
         return;
@@ -321,6 +347,11 @@ fn run_session(app: &AppHandle, trigger: Trigger, stop: &AtomicBool, cancel: &At
                 message: Some("I didn't catch that. Try again?".into()),
             },
         );
+    }
+    // A reply during a walkthrough ("I got it", "where is that?") goes to it.
+    if crate::guide::take_voice_reply(app, &text) {
+        crate::windows::hide_pill(app);
+        return emit_phase(app, VoicePhase::Idle { message: None });
     }
     // A follow-up for an agent, or "yes, go" / "cancel" for an open plan
     // card, isn't a question.
