@@ -1,7 +1,8 @@
 //! Native translucency for settings, the agent panel and the dock card: vibrancy on
 //! macOS, Mica or Acrylic on Windows 11. Each page asks which look it got
 //! and draws translucent surfaces only then; on Linux and older Windows the
-//! windows stay opaque (the dock card falls back to CSS glass).
+//! windows stay opaque (the dock card falls back to CSS glass). On macOS the
+//! dock card always uses CSS glass, for the split view.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -54,20 +55,18 @@ pub fn window_glass(window: WebviewWindow, state: tauri::State<Glass>) -> Option
 #[cfg(target_os = "macos")]
 fn apply(w: &WebviewWindow) -> Option<&'static str> {
     use tauri::window::{Effect, EffectState, EffectsBuilder};
-    let effects = if w.label() != DOCK_CARD {
-        // The sidebar material, as in Finder and Notes; the content side
-        // gets a light wash in CSS.
-        EffectsBuilder::new()
-            .effect(Effect::Sidebar)
-            .state(EffectState::FollowsWindowActiveState)
-            .build()
-    } else {
-        EffectsBuilder::new()
-            .effect(Effect::Popover)
-            .state(EffectState::Active)
-            .radius(20.0)
-            .build()
-    };
+    // The dock card keeps its CSS glass so the card and its follow-up bar
+    // can float apart (the split view); one native material fills only one
+    // shape.
+    if w.label() == DOCK_CARD {
+        return None;
+    }
+    // The sidebar material, as in Finder and Notes; the content side gets a
+    // light wash in CSS.
+    let effects = EffectsBuilder::new()
+        .effect(Effect::Sidebar)
+        .state(EffectState::FollowsWindowActiveState)
+        .build();
     w.set_effects(effects).ok()?;
     let _ = w.set_shadow(true);
     Some("macos")
