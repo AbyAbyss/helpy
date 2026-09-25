@@ -108,6 +108,7 @@ pub fn run() {
             let store = SettingsStore::load(app.path().app_config_dir()?.join("settings.json"));
             let s = store.get();
             app.manage(store);
+            ai::secrets::init(app.path().app_data_dir()?);
             app.manage(ai::ask::AiState {
                 http: ai::provider::http_client(),
                 ledger: ai::ledger::Ledger::load(app.path().app_data_dir()?.join("usage.json")),
