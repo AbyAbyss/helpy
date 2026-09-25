@@ -6,6 +6,7 @@ import type { PlatformInfo } from "../bindings/PlatformInfo";
 import type { Settings } from "../bindings/Settings";
 import { api } from "../lib/ipc";
 import { ProvidersEditor } from "./ai/Providers";
+import { Keycaps } from "./controls";
 
 type Props = {
   settings: Settings;
@@ -148,19 +149,19 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
             <p className="welcome__lead">These work from any app. Change them under Hotkeys.</p>
             <dl className="welcome__keys">
               <dt>
-                <kbd>{settings.hotkeys.voiceAsk}</kbd>
+                <Keycaps accel={settings.hotkeys.voiceAsk} />
               </dt>
               <dd>Ask out loud</dd>
               <dt>
-                <kbd>{settings.hotkeys.textAsk}</kbd>
+                <Keycaps accel={settings.hotkeys.textAsk} />
               </dt>
               <dd>Type a question</dd>
               <dt>
-                <kbd>{settings.hotkeys.circleToExplain}</kbd>
+                <Keycaps accel={settings.hotkeys.circleToExplain} />
               </dt>
               <dd>Circle something on screen</dd>
               <dt>
-                <kbd>{settings.hotkeys.openAgentPanel}</kbd>
+                <Keycaps accel={settings.hotkeys.openAgentPanel} />
               </dt>
               <dd>Agents</dd>
             </dl>
