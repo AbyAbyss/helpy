@@ -1,3 +1,4 @@
+import profileKeys from "../bindings/profileKeys.json";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -11,7 +12,7 @@ import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } 
 import { useSettings, useTheme } from "../lib/useSettings";
 import { BuddyStage, BuddyStylePicker, useCustomBuddy } from "./BuddyPreview";
 import { GuidanceStage } from "./GuidancePreview";
-import { ApprovalRules, BuilderPicker, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
+import { ApprovalRules, Blocklist, BuilderPicker, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
 import { ConnectorList, McpServers, OAuthApps } from "./ConnectorControls";
 import { TemplateEditor } from "./TemplateControls";
 import { TriggerEditor } from "./TriggerControls";
@@ -336,12 +337,14 @@ function SearchResults({ query, results, ctx, onOpen }: { query: string; results
   );
 }
 
+const PER_PROFILE = new Set<string>(profileKeys);
+
 function Row({ field, ctx }: { field: Field; ctx: RowContext }) {
   const id = `setting-${field.path.replace(".", "-")}`;
   const error = ctx.errors[field.path];
   const status = field.control.kind === "hotkey" ? ctx.hotkeys.find((h) => h.action === field.path.split(".")[1]) : undefined;
   const warning = !error ? status?.warning ?? (status?.state === "failed" ? status.error : null) : null;
-  const wide = ["buddyStyle", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice", "approvalRules", "toolToggles", "folderList", "stringList", "searchEngine", "connectors", "oauthApps", "mcpServers", "templates", "triggers"].includes(field.control.kind);
+  const wide = ["buddyStyle", "blocklist", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice", "approvalRules", "toolToggles", "folderList", "stringList", "searchEngine", "connectors", "oauthApps", "mcpServers", "templates", "triggers"].includes(field.control.kind);
 
   return (
     <div className={`row${wide ? " row--wide" : ""}${error ? " has-error" : ""}`}>
@@ -349,6 +352,11 @@ function Row({ field, ctx }: { field: Field; ctx: RowContext }) {
         <label className="row__label" htmlFor={id}>
           {field.label}
           {status && <HotkeyPill status={status} />}
+          {PER_PROFILE.has(field.path) && (
+            <span className="pill pill--idle" title={`Kept separately for each behavior profile (now ${ctx.settings.profiles.active})`}>
+              Per profile
+            </span>
+          )}
         </label>
         {field.help && <p className="row__help">{field.help}</p>}
         {error && (
@@ -415,6 +423,8 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
       return <MoneyField id={id} value={saved as number | null} emptyLabel={c.emptyLabel} unit={c.unit} invalid={!!ctx.errors[path]} onChange={set} />;
     case "approvalRules":
       return <ApprovalRules value={saved as Approvals} onChange={set} />;
+    case "blocklist":
+      return <Blocklist value={saved as string[]} onChange={set} />;
     case "builder":
       return <BuilderPicker value={saved as Builder} onChange={set} />;
     case "toolToggles":
@@ -600,6 +610,7 @@ function SectionIcon({ id }: { id: SectionId }) {
       </>
     ),
     voiceOutput: <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />,
+    privacy: <path d="M12 3.5 5 6v5.5c0 4.3 3 7.6 7 9 4-1.4 7-4.7 7-9V6zM9.5 12l2 2 3.5-4" />,
   };
   return (
     <svg className="nav__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">

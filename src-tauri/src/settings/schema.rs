@@ -336,12 +336,43 @@ impl Default for VoiceOutput {
     }
 }
 
-/// Only the capture pause switch exists before Phase 9.
-#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq, Default)]
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 #[ts(export)]
 pub struct Privacy {
     pub capture_paused: bool,
+    /// Apps (or words in window titles) Helpy never captures: it won't look
+    /// while one is in front, and blanks it out when it's behind.
+    pub blocked_apps: Vec<String>,
+    /// Blank out password fields in screenshots, where the OS says where
+    /// they are.
+    pub blur_passwords: bool,
+    /// Only models and speech on this computer or its local network.
+    pub offline: bool,
+}
+
+impl Default for Privacy {
+    fn default() -> Self {
+        Self {
+            capture_paused: false,
+            blocked_apps: [
+                "1Password",
+                "Bitwarden",
+                "KeePass",
+                "Keychain Access",
+                "Dashlane",
+                "LastPass",
+                "Enpass",
+                "Proton Pass",
+                "NordPass",
+                "RoboForm",
+            ]
+            .map(String::from)
+            .to_vec(),
+            blur_passwords: true,
+            offline: false,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Eq, Hash)]

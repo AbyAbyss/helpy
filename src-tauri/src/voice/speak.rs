@@ -153,6 +153,11 @@ impl Worker {
                     piper::synthesize(&self.app, &vo.piper_voice, text, vo.speed)?;
                 self.play(samples, rate, vo.volume, gen)
             }
+            // Offline mode keeps speech on this computer: the system voice
+            // stands in for a cloud one.
+            TtsEngine::OpenAi if s.privacy.offline && !local_voice(s) => {
+                self.speak_system(s, gen, text)
+            }
             TtsEngine::OpenAi => {
                 let (samples, rate) =
                     tauri::async_runtime::block_on(openai_speech(&self.app, s, text))?;
@@ -226,6 +231,15 @@ impl Worker {
 }
 
 /// OpenAI text to speech: raw 24 kHz 16-bit mono PCM.
+fn local_voice(s: &Settings) -> bool {
+    let p = s
+        .voice_output
+        .openai_provider_id
+        .as_deref()
+        .and_then(|id| s.ai.provider(id));
+    p.is_some_and(crate::privacy::is_local)
+}
+
 async fn openai_speech(
     app: &AppHandle,
     s: &Settings,

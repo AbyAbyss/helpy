@@ -99,6 +99,22 @@ function BrowserStatus() {
   );
 }
 
+/** The privacy blocklist, with a note when this desktop can't list windows. */
+export function Blocklist({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [ok, setOk] = useState(true);
+  useEffect(() => void api.canSeeWindows().then(setOk, () => setOk(false)), []);
+  return (
+    <>
+      <StringList value={value} placeholder="Add an app or a title word, e.g. bank" onChange={onChange} />
+      {!ok && (
+        <div className="engine__msg err-text">
+          This desktop doesn't tell Helpy which windows are open (as on Wayland), so the list can't be checked here. Pause screen capture before opening something private.
+        </div>
+      )}
+    </>
+  );
+}
+
 const BUILDERS: { value: Builder; label: string; tool?: Coder }[] = [
   { value: "auto", label: "Automatic" },
   { value: "claudeCode", label: "Claude Code", tool: "claudeCode" },

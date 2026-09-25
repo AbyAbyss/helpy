@@ -5,10 +5,10 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "agents" | "connectors" | "voiceInput" | "voiceOutput";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "answerStyle" | "guidance" | "circle" | "agents" | "connectors" | "voiceInput" | "voiceOutput" | "privacy";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
-  { id: "general", title: "General", blurb: "Startup, appearance and language." },
+  { id: "general", title: "General", blurb: "Startup, profile, appearance and language." },
   { id: "buddy", title: "Cursor buddy", blurb: "The small character that rides along with your mouse." },
   { id: "hotkeys", title: "Hotkeys", blurb: "Shortcuts that work from any app. Click one to change it." },
   { id: "ai", title: "AI providers", blurb: "The models Helpy talks to, what each one is used for, and how much it may spend." },
@@ -19,6 +19,7 @@ export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "circle", title: "Circle to explain", blurb: "Draw around anything on screen to have it explained, labelled, copied or translated." },
   { id: "voiceInput", title: "Voice input", blurb: "How Helpy hears you: the microphone, the speech engine, and when it stops listening." },
   { id: "voiceOutput", title: "Voice output", blurb: "Whether Helpy reads answers aloud, and in which voice." },
+  { id: "privacy", title: "Privacy", blurb: "What Helpy may see on your screen, and whether anything goes to the cloud." },
 ];
 
 /** `requires` hides an option on computers that can't use it. */
@@ -37,6 +38,7 @@ export type Control =
   | { kind: "approvalRules" }
   | { kind: "toolToggles" }
   | { kind: "builder" }
+  | { kind: "blocklist" }
   | { kind: "folderList" }
   | { kind: "folder"; placeholder: string }
   | { kind: "stringList"; placeholder: string }
@@ -107,6 +109,41 @@ export const FIELDS: Field[] = [
   {
     path: "general.checkForUpdates", section: "general", group: "Startup", label: "Check for updates automatically",
     keywords: "update version", control: { kind: "toggle" },
+  },
+  {
+    path: "profiles.active", section: "general", group: "Profile", label: "Behavior profile",
+    help: "Settings marked \"Per profile\" keep their own value in each profile, so a change in one stays in that one. Also in the tray menu.",
+    keywords: "profile beginner expert quiet mode behavior talkative silent",
+    control: {
+      kind: "segmented",
+      options: [
+        { value: "beginner", label: "Beginner" },
+        { value: "expert", label: "Expert" },
+        { value: "quiet", label: "Quiet" },
+      ],
+    },
+  },
+  {
+    path: "privacy.capturePaused", section: "privacy", group: "Screen", label: "Pause screen capture",
+    help: "Helpy answers without looking until you turn this off. Also in the tray and on a hotkey.",
+    keywords: "pause capture screenshot privacy stop looking", control: { kind: "toggle" },
+  },
+  {
+    path: "privacy.blockedApps", section: "privacy", group: "Screen", label: "Never look at these apps",
+    help: "An app's name or a word in a window's title. While one is in front Helpy doesn't take a screenshot; when it's behind other windows, it's blanked out.",
+    keywords: "blocklist block apps password manager bank private exclude hide",
+    control: { kind: "blocklist" },
+  },
+  {
+    path: "privacy.blurPasswords", section: "privacy", group: "Screen", label: "Blank out password fields",
+    help: "In every screenshot, using what the system reports about the app in front.",
+    keywords: "password field blur hide mask", control: { kind: "toggle" },
+  },
+  {
+    path: "privacy.offline", section: "privacy", group: "Offline", label: "Offline mode",
+    help: "Only models on this computer or your network (Ollama, LM Studio, llama.cpp, local servers), and speech with Whisper and system or Piper voices. Agents' web tools and connectors still work.",
+    keywords: "offline local only no cloud ollama private internet",
+    control: { kind: "toggle" },
   },
   {
     path: "general.theme", section: "general", group: "Appearance", label: "Theme",

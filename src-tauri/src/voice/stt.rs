@@ -16,6 +16,7 @@ use crate::ai::{openai, secrets, sse};
 use crate::settings::schema::SttEngine;
 use crate::settings::Settings;
 
+const OFFLINE: &str = "Offline mode is on, so speech is recognized on this computer only. Choose Whisper in Settings → Voice input";
 const DEEPGRAM_URL: &str = "https://api.deepgram.com/v1/listen";
 
 pub async fn transcribe(
@@ -57,6 +58,9 @@ async fn cloud(app: &AppHandle, s: &Settings, samples: Vec<f32>) -> Result<Strin
             let p =
                 s.ai.provider(id)
                     .ok_or_else(|| setup("The speech provider isn't set up any more"))?;
+            if s.privacy.offline && !crate::privacy::is_local(p) {
+                return Err(setup(OFFLINE));
+            }
             let key = secrets::key_for(p)?;
             (
                 openai::url(&p.base_url, "audio/transcriptions"),
@@ -64,6 +68,7 @@ async fn cloud(app: &AppHandle, s: &Settings, samples: Vec<f32>) -> Result<Strin
                 true,
             )
         }
+        _ if s.privacy.offline => return Err(setup(OFFLINE)),
         _ => {
             let key = secrets::get_speech("deepgram")?
                 .ok_or_else(|| setup("Add a Deepgram key in Settings → Voice input"))?;

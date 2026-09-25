@@ -12,6 +12,7 @@ use ts_rs::TS;
 
 use crate::ai::error::{ErrorKind, ProviderError};
 use crate::overlay::{MonitorRect, Overlays};
+use crate::settings::schema::Privacy;
 use crate::settings::SettingsStore;
 
 /// Longest edge sent to a model. Larger screens are scaled down.
@@ -144,7 +145,8 @@ pub async fn capture_cursor_monitor(app: &AppHandle) -> Result<Shot, ProviderErr
 
 /// The cursor's monitor at full resolution, for cropping.
 pub async fn grab_cursor_monitor(app: &AppHandle) -> Result<Frame, ProviderError> {
-    if app.state::<SettingsStore>().get().privacy.capture_paused {
+    let privacy = app.state::<SettingsStore>().get().privacy;
+    if privacy.capture_paused {
         return Err(paused());
     }
     let pos = app.cursor_position().map_err(|e| {
@@ -161,7 +163,7 @@ pub async fn grab_cursor_monitor(app: &AppHandle) -> Result<Frame, ProviderError
     #[cfg(target_os = "linux")]
     let hidden = hide_own_windows(app).await;
 
-    let result = tokio::task::spawn_blocking(move || grab(&monitor)).await;
+    let result = tokio::task::spawn_blocking(move || grab(&monitor, &privacy)).await;
 
     #[cfg(target_os = "linux")]
     restore_own_windows(hidden);
@@ -176,7 +178,7 @@ pub async fn grab_cursor_monitor(app: &AppHandle) -> Result<Frame, ProviderError
 }
 
 /// Grabs the xcap monitor matching our monitor rect.
-fn grab(target: &MonitorRect) -> Result<(RgbaImage, String), ProviderError> {
+fn grab(target: &MonitorRect, privacy: &Privacy) -> Result<(RgbaImage, String), ProviderError> {
     let fail = |e: &dyn std::fmt::Display| {
         ProviderError::new(
             ErrorKind::Setup,
@@ -210,7 +212,18 @@ fn grab(target: &MonitorRect) -> Result<(RgbaImage, String), ProviderError> {
         .min_by(|a, b| distance(a).total_cmp(&distance(b)))
         .ok_or_else(|| fail(&"no monitors"))?;
     let name = monitor.name().unwrap_or_else(|_| "Display".into());
-    let image = monitor.capture_image().map_err(|e| fail(&e))?;
+    let mut image = monitor.capture_image().map_err(|e| fail(&e))?;
+    let (Ok(x), Ok(y), Ok(w), Ok(h)) =
+        (monitor.x(), monitor.y(), monitor.width(), monitor.height())
+    else {
+        return Err(fail(&"the monitor's position is unknown"));
+    };
+    crate::privacy::guard(
+        &mut image,
+        (x as f64, y as f64, w as f64, h as f64),
+        privacy,
+    )
+    .map_err(|why| ProviderError::new(ErrorKind::Setup, why))?;
     Ok((image, name))
 }
 

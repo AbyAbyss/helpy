@@ -63,7 +63,21 @@
     "announceAgents": true
   },
   "privacy": {
-    "capturePaused": false
+    "capturePaused": false,
+    "blockedApps": [
+      "1Password",
+      "Bitwarden",
+      "KeePass",
+      "Keychain Access",
+      "Dashlane",
+      "LastPass",
+      "Enpass",
+      "Proton Pass",
+      "NordPass",
+      "RoboForm"
+    ],
+    "blurPasswords": true,
+    "offline": false
   },
   "ai": {
     "providers": [],

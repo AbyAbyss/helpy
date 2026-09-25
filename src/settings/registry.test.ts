@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import defaults from "../bindings/defaults.json";
+import profileKeys from "../bindings/profileKeys.json";
 import { FIELDS, SECTIONS, searchFields } from "./registry";
 
 describe("settings registry", () => {
@@ -10,6 +11,10 @@ describe("settings registry", () => {
       const actual = FIELDS.filter((f) => f.path.startsWith(`${group}.`)).map((f) => f.path).sort();
       expect(actual).toEqual(expected);
     }
+  });
+
+  it("has a row for every per-profile setting", () => {
+    for (const k of profileKeys) expect(FIELDS.map((f) => f.path)).toContain(k);
   });
 
   it("puts every row in a section that exists", () => {
@@ -26,7 +31,7 @@ describe("settings registry", () => {
     expect(searchFields("push to talk").map((f) => f.path)).toContain("hotkeys.voiceMode");
     expect(searchFields("buddy size").map((f) => f.path)).toEqual(["buddy.size"]);
     expect(searchFields("  ")).toEqual([]);
-    expect(searchFields("ollama").map((f) => f.path)).toEqual(["ai.providers"]);
+    expect(searchFields("ollama").map((f) => f.path)).toEqual(["privacy.offline", "ai.providers"]);
     expect(searchFields("screenshot").map((f) => f.path)).toContain("answerStyle.screenAccess");
     expect(searchFields("brave").map((f) => f.path)).toEqual(["agents.searchEngine"]);
     expect(searchFields("desktop access").map((f) => f.path)).toEqual(["agents.approvedFolders"]);

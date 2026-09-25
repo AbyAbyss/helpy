@@ -56,6 +56,7 @@ pub async fn stream(
     cancel: &CancellationToken,
     on: &(dyn Fn(Progress) + Sync),
 ) -> Result<Completion, ProviderError> {
+    let models = &crate::privacy::allowed_models(settings, models)?;
     let ai_state: &AiState = app.state::<AiState>().inner();
     let ai = &settings.ai;
     let estimate = base.estimated_tokens();

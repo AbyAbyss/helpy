@@ -1,5 +1,6 @@
 //! Settings persistence, validation and the commands the settings page calls.
 
+pub mod profiles;
 pub mod schema;
 mod validate;
 
@@ -39,6 +40,7 @@ impl FieldError {
 pub struct SettingsStore {
     path: PathBuf,
     current: Mutex<Settings>,
+    profiles: profiles::Store,
 }
 
 impl SettingsStore {
@@ -59,6 +61,7 @@ impl SettingsStore {
             Err(_) => Settings::default(),
         };
         Self {
+            profiles: profiles::Store::load(&path),
             path,
             current: Mutex::new(current),
         }
@@ -109,18 +112,22 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// Validates, saves and broadcasts a new settings value, then lets the rest of
 /// the app react (hotkeys, tray, autostart).
 pub fn commit(app: &AppHandle, next: Settings) -> Result<Settings, Vec<FieldError>> {
+    let store = app.state::<SettingsStore>();
+    let prev = store.get();
+    let mut saved = store.profiles.saved.lock().unwrap().clone();
+    let next = profiles::apply(&prev, next, &mut saved);
     let errors = validate(&next);
     if !errors.is_empty() {
         return Err(errors);
     }
-    let store = app.state::<SettingsStore>();
-    let prev = store.get();
     if prev == next {
         return Ok(next);
     }
     store
         .save(&next)
         .map_err(|e| vec![FieldError::new("", format!("Couldn't save settings: {e}"))])?;
+    *store.profiles.saved.lock().unwrap() = saved;
+    store.profiles.save();
     *store.current.lock().unwrap() = next.clone();
     let _ = app.emit(CHANGED_EVENT, &next);
     crate::on_settings_changed(app, &prev, &next);
@@ -220,6 +227,8 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let json = serde_json::to_string_pretty(&Settings::default()).unwrap();
         fs::write(Path::new(&dir).join("defaults.json"), json + "\n").unwrap();
+        let keys = serde_json::to_string_pretty(&profiles::KEYS).unwrap();
+        fs::write(Path::new(&dir).join("profileKeys.json"), keys + "\n").unwrap();
     }
 
     #[test]

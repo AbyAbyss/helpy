@@ -11,6 +11,7 @@ mod hotkeys;
 mod mcp;
 mod overlay;
 mod platform;
+mod privacy;
 mod settings;
 mod tray;
 mod voice;
@@ -207,6 +208,7 @@ pub fn run() {
             agents::agents_steer,
             agents::agents_browser_info,
             agents::agents_builders,
+            privacy::privacy_can_see_windows,
             agents::agents_browser_download,
             agents::agents_csv_preview,
             agents::agents_open_file,

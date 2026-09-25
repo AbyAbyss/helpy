@@ -165,6 +165,7 @@ export const api = {
   agentUndo: (id: string) => invoke<string[]>("agents_undo", { id }),
   browserInfo: () => invoke<BrowserInfo>("agents_browser_info"),
   builders: () => invoke<CoderInfo[]>("agents_builders"),
+  canSeeWindows: () => invoke<boolean>("privacy_can_see_windows"),
   /** Downloads Chromium for agents (about 150 MB); resolves to its path. */
   browserDownload: () => invoke<string>("agents_browser_download"),
   /** The first rows of a CSV the agent saved. */
