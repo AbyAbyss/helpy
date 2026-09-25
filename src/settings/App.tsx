@@ -23,7 +23,7 @@ import type { Builder } from "../bindings/Builder";
 import type { Approvals } from "../bindings/Approvals";
 import type { SearchEngine } from "../bindings/SearchEngine";
 import { ProvidersEditor } from "./ai/Providers";
-import { FallbackEditor, RoutingEditor } from "./ai/Routing";
+import { FallbackEditor, RoutingEditor } from "./ai/RoutingEditor";
 import { allModels, refKey } from "./ai/routing";
 import { ColorField, HotkeyField, MoneyField, NumberField, Segmented, Select, Slider, TextArea, Toggle } from "./controls";
 import { FIELDS, SECTIONS, searchFields, type Field, type SectionId } from "./registry";
