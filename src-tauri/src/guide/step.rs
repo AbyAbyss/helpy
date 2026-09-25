@@ -120,7 +120,7 @@ pub fn tool() -> ToolDef {
             exact place to click or look, with a short instruction. Coordinates are pixels in the most recent \
             screenshot. The tool returns once the user has done the step, with a new screenshot, so you can \
             check the result and show the next step. Use it when the user asks where something is or how to \
-            do something in the app in front of them."
+            do something themselves in the app in front of them, not when they ask you to do it for them."
             .into(),
         schema: schema(),
     }
@@ -161,8 +161,8 @@ fn schema() -> Value {
 /// How models without tool calling give a step: a reply that is only this
 /// JSON object.
 pub fn json_instructions() -> String {
-    "When the user asks where something is or how to do something in the app on screen, and you have \
-     seen the screen, reply with only a JSON object and no other text: \
+    "When the user asks where something is or how to do something themselves in the app on screen (not \
+     when they ask you to do it for them), and you have seen the screen, reply with only a JSON object and no other text: \
      {\"step\": {\"instruction\": \"...\", \"step\": 1, \"total\": 3, \"actions\": [...]}}. \
      Actions: {\"type\": \"highlight\", \"x\", \"y\", \"width\", \"height\", \"label\"} (x, y = top-left corner), \
      {\"type\": \"point\", \"x\", \"y\", \"label\"}, {\"type\": \"arrow\", \"fromX\", \"fromY\", \"toX\", \"toY\", \"label\"}, \
