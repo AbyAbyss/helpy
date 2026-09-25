@@ -722,6 +722,13 @@ pub struct Approvals {
     pub file_deletes: Rule,
     /// Reminders and calendar events. (Shell commands follow the shell policy.)
     pub reminders: Rule,
+    /// Typing into websites and sending their forms in the agents' browser.
+    #[serde(default = "ask")]
+    pub browser_forms: Rule,
+}
+
+fn ask() -> Rule {
+    Rule::Ask
 }
 
 impl Default for Approvals {
@@ -730,6 +737,7 @@ impl Default for Approvals {
             file_changes: Rule::Allow,
             file_deletes: Rule::Ask,
             reminders: Rule::Ask,
+            browser_forms: Rule::Ask,
         }
     }
 }
@@ -768,6 +776,13 @@ pub struct AgentTools {
     pub files: bool,
     pub shell: bool,
     pub reminders: bool,
+    /// A headless browser for pages that need JavaScript, clicks or forms.
+    #[serde(default = "yes")]
+    pub browser: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Default for AgentTools {
@@ -778,6 +793,7 @@ impl Default for AgentTools {
             files: true,
             shell: true,
             reminders: true,
+            browser: true,
         }
     }
 }

@@ -37,9 +37,14 @@ pub fn is_private(ip: IpAddr) -> bool {
 }
 
 /// Checks the address and every IP its host resolves to.
-async fn check(url: &Url) -> Result<(), String> {
+pub async fn check(url: &Url) -> Result<(), String> {
     if !matches!(url.scheme(), "http" | "https") {
         return Err("Only http and https addresses can be fetched.".into());
+    }
+    // Development builds can test against pages served on this computer.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("HELPY_ALLOW_LOCAL_PAGES").is_some() {
+        return Ok(());
     }
     let host = url.host_str().ok_or("That address has no host.")?;
     let port = url.port_or_known_default().unwrap_or(443);

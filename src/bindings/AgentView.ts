@@ -20,4 +20,8 @@ parent: string | null, status: Status, statusLine: string, stop: Stop | null, re
 /**
  * File changes that can be undone.
  */
-changes: number, };
+changes: number, 
+/**
+ * Files it made (a CSV, a report), newest last.
+ */
+files: Array<string>, };

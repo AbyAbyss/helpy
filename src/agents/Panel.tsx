@@ -6,6 +6,7 @@ import type { AgentView } from "../bindings/AgentView";
 import type { Batch } from "../bindings/Batch";
 import type { LogKind } from "../bindings/LogKind";
 import { useAgents } from "../dock/Dock";
+import { AgentFiles } from "../dock/Files";
 import { duration, STATUS_LABEL, tokens, tone } from "../dock/dockState";
 import { api, EVENTS } from "../lib/ipc";
 import { ApprovalBox, Inbox } from "./Approvals";
@@ -357,6 +358,7 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
               Export Markdown
             </button>
           </div>
+          <AgentFiles agent={a.id} files={a.files} />
           <div className="result__body">
             <Markdown components={{ a: ({ children, href }) => <span title={href}>{children}</span>, img: () => null }}>{a.result}</Markdown>
           </div>

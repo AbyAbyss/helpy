@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AgentTools } from "../bindings/AgentTools";
+import type { BrowserInfo } from "../bindings/BrowserInfo";
 import type { Approvals } from "../bindings/Approvals";
 import type { Rule } from "../bindings/Rule";
 import type { SearchEngine } from "../bindings/SearchEngine";
@@ -19,6 +20,7 @@ export function ApprovalRules({ value, onChange }: { value: Approvals; onChange:
     { key: "fileChanges", label: "Changing files", help: "Writing, moving and renaming. Backed up and undoable." },
     { key: "fileDeletes", label: "Deleting files", help: "A backup is kept either way." },
     { key: "reminders", label: "Reminders and events", help: "Adding them to your reminders or calendar." },
+    { key: "browserForms", label: "Typing into websites", help: "Filling in and sending forms in the agents' own browser." },
   ];
   return (
     <div className="rules">
@@ -42,6 +44,7 @@ export function ToolToggles({ value, onChange }: { value: AgentTools; onChange: 
     { key: "files", label: "Files in approved folders" },
     { key: "shell", label: "Shell commands" },
     { key: "reminders", label: "Reminders and calendar" },
+    { key: "browser", label: "Web browser (for pages that need JavaScript, and scraping)" },
   ];
   return (
     <div className="toggles">
@@ -51,6 +54,42 @@ export function ToolToggles({ value, onChange }: { value: AgentTools; onChange: 
           <Toggle id={`tool-${r.key}`} checked={value[r.key]} onChange={(v) => onChange({ ...value, [r.key]: v })} />
         </label>
       ))}
+      {value.browser && <BrowserStatus />}
+    </div>
+  );
+}
+
+/** Which browser agents use, with a download when there's none. */
+function BrowserStatus() {
+  const [info, setInfo] = useState<BrowserInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => void api.browserInfo().then(setInfo, () => {}), []);
+  if (!info) return null;
+  const download = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.browserDownload();
+      setInfo(await api.browserInfo());
+    } catch (e) {
+      setError(String(e));
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="engine__msg">
+      {info.path ? (
+        <>Agents use the browser at <code>{info.path}</code>, with Helpy's own profile (your logins and history aren't touched).</>
+      ) : (
+        <>
+          No Chrome, Edge, Chromium or Brave found.{" "}
+          <button type="button" className="link-btn" onClick={download} disabled={busy}>
+            {busy ? "Downloading…" : "Download Chromium for agents (about 150 MB)"}
+          </button>
+        </>
+      )}
+      {error && <span className="err-text"> {error}</span>}
     </div>
   );
 }

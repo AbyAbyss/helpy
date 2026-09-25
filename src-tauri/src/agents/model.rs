@@ -87,6 +87,8 @@ pub enum ActionKind {
     Reminder,
     /// Something a connector or MCP server does (send, post, create, delete).
     Connector,
+    /// Typing into a website or sending its form.
+    Browser,
 }
 
 /// Something the agent is waiting on the user for.
@@ -405,6 +407,8 @@ pub struct AgentView {
     pub log: Vec<LogEntry>,
     /// File changes that can be undone.
     pub changes: u32,
+    /// Files it made (a CSV, a report), newest last.
+    pub files: Vec<String>,
 }
 
 impl Agent {
@@ -435,6 +439,18 @@ impl Agent {
             max_steps,
             log: self.log.clone(),
             changes: self.journal.len() as u32,
+            files: self
+                .journal
+                .iter()
+                .filter_map(|op| match op {
+                    FileOp::Created { path }
+                        if std::path::Path::new(path).extension().is_some() =>
+                    {
+                        Some(path.clone())
+                    }
+                    _ => None,
+                })
+                .collect(),
         }
     }
 }

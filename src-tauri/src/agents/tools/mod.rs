@@ -3,6 +3,7 @@
 //! work here are never offered (R1's capability registry), and each action is
 //! classed for the approval rules before it runs.
 
+pub mod browser;
 pub mod files;
 pub mod reminders;
 pub mod search;
@@ -126,6 +127,14 @@ pub fn groups(a: &Agents) -> Vec<ToolGroup> {
         )],
     );
     add(
+        a.tools.browser,
+        "browser",
+        "Web browser",
+        "open web pages in a real (headless) browser for sites that need JavaScript, click, fill in forms, read tables, \
+         and save data as CSV files (for scraping, use this)",
+        vec![rule_asks(a.approvals.browser_forms, "typing into websites")],
+    );
+    add(
         true,
         "team",
         "Helpers",
@@ -168,6 +177,38 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
                 "tools": { "type": "array", "items": { "type": "string" }, "description": "Tool groups, e.g. search, web, files" }
             }, "required": ["name", "goal"] } } }),
             &["tasks"],
+        ));
+    }
+    if has("browser") {
+        out.push(def(
+            "browser_open",
+            "Open a web page in the browser. Returns its title, text and links.",
+            json!({ "url": { "type": "string" } }),
+            &["url"],
+        ));
+        out.push(def(
+            "browser_click",
+            "Click a link or button on the open page, by its visible text or a CSS selector. Returns the page after.",
+            json!({ "target": { "type": "string" } }),
+            &["target"],
+        ));
+        out.push(def(
+            "browser_type",
+            "Type into a field on the open page (found by its label, placeholder, name or a CSS selector), and optionally send the form.",
+            json!({ "field": { "type": "string" }, "text": { "type": "string" }, "submit": { "type": "boolean" } }),
+            &["field", "text"],
+        ));
+        out.push(def(
+            "browser_tables",
+            "Read the tables on the open page as rows of cells (JSON).",
+            json!({}),
+            &[],
+        ));
+        out.push(def(
+            "save_csv",
+            "Save rows of data as a CSV file in the user's projects folder (Data). Use it for anything the user wants as a table or spreadsheet.",
+            json!({ "name": { "type": "string", "description": "File name, e.g. desk prices" }, "columns": { "type": "array", "items": { "type": "string" } }, "rows": { "type": "array", "items": { "type": "array" } } }),
+            &["name", "columns", "rows"],
         ));
     }
     if has("search") {
@@ -250,6 +291,9 @@ fn group_of(tool: &str) -> Option<&'static str> {
         | "delete_file" => "files",
         "run_command" => "shell",
         "create_reminder" | "create_event" => "reminders",
+        "browser_open" | "browser_click" | "browser_type" | "browser_tables" | "save_csv" => {
+            "browser"
+        }
         _ => return None,
     })
 }
@@ -275,6 +319,8 @@ pub struct Toolbox {
     pub projects: PathBuf,
     /// Connectors and MCP servers.
     pub external: Option<std::sync::Arc<dyn External>>,
+    /// The agents' shared headless browser.
+    pub browser: Option<std::sync::Arc<browser::BrowserPool>>,
 }
 
 impl Toolbox {
@@ -306,6 +352,7 @@ impl Toolbox {
             Rule::Ask => Gate::Ask {
                 source: match kind {
                     ActionKind::Reminder => "Reminders".into(),
+                    ActionKind::Browser => "Web browser".into(),
                     _ => "Files".into(),
                 },
                 editable: match (kind, tool) {
@@ -313,6 +360,7 @@ impl Toolbox {
                         .map(String::from)
                         .to_vec(),
                     (_, "write_file") => vec!["content".into()],
+                    (ActionKind::Browser, _) => vec!["text".into()],
                     _ => Vec::new(),
                 },
                 kind,
@@ -383,6 +431,16 @@ impl Toolbox {
                     s(args, "notes").to_string(),
                 )
             }
+            "browser_type" => rule(
+                a.browser_forms,
+                ActionKind::Browser,
+                if args["submit"] == json!(true) {
+                    format!("Type into \"{}\" and send the form", s(args, "field"))
+                } else {
+                    format!("Type into \"{}\"", s(args, "field"))
+                },
+                s(args, "text").to_string(),
+            ),
             _ => Gate::Allow,
         }
     }
@@ -428,6 +486,37 @@ impl Toolbox {
             "make_folder" => file_result(self.files.make_folder(s(args, "path"))),
             "move_file" => file_result(self.files.move_to(s(args, "from"), s(args, "to"))),
             "delete_file" => file_result(self.files.delete(agent, s(args, "path"))),
+            "browser_open" | "browser_click" | "browser_type" | "browser_tables"
+                if self.browser.is_none() =>
+            {
+                ToolOutcome::Permanent("The browser isn't available here.".into())
+            }
+            "browser_open" => {
+                self.browser
+                    .as_ref()
+                    .unwrap()
+                    .open(agent, s(args, "url"))
+                    .await
+            }
+            "browser_click" => {
+                self.browser
+                    .as_ref()
+                    .unwrap()
+                    .click(agent, s(args, "target"))
+                    .await
+            }
+            "browser_type" => {
+                let b = self.browser.as_ref().unwrap();
+                b.fill(
+                    agent,
+                    s(args, "field"),
+                    s(args, "text"),
+                    args["submit"] == json!(true),
+                )
+                .await
+            }
+            "browser_tables" => self.browser.as_ref().unwrap().tables(agent).await,
+            "save_csv" => browser::save_csv(&self.projects, s(args, "name"), args),
             "run_command" => {
                 let _ = std::fs::create_dir_all(&self.projects);
                 shell::run(s(args, "command"), &self.projects).await
@@ -507,6 +596,7 @@ mod tests {
             search: search::pick(a.search_engine, None, ""),
             projects: PathBuf::from("/tmp"),
             external: None,
+            browser: None,
         }
     }
 
@@ -575,11 +665,19 @@ mod tests {
         let ids = |a: &Agents| groups(a).into_iter().map(|g| g.id).collect::<Vec<_>>();
         assert_eq!(
             ids(&a),
-            ["search", "web", "files", "shell", "reminders", "team"]
+            [
+                "search",
+                "web",
+                "files",
+                "shell",
+                "reminders",
+                "browser",
+                "team"
+            ]
         );
         a.tools.fetch = false;
         a.shell_policy = ShellPolicy::Never;
-        assert_eq!(ids(&a), ["search", "files", "reminders", "team"]);
+        assert_eq!(ids(&a), ["search", "files", "reminders", "browser", "team"]);
         let files = groups(&a).into_iter().find(|g| g.id == "files").unwrap();
         assert_eq!(files.asks, ["deleting files"]);
         // Calendar events are only offered where the OS has a calendar.

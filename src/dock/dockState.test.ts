@@ -12,6 +12,7 @@ const agent = (over: Partial<AgentView>): AgentView => ({
   keepOpen: false,
   after: [],
   parent: null,
+  files: [],
   status: "running",
   statusLine: "",
   stop: null,

@@ -82,6 +82,8 @@ pub struct AgentsState {
     delegating: Mutex<std::collections::HashSet<String>>,
     /// Woken on every saved change, for agents waiting on others.
     changed: tokio::sync::Notify,
+    /// The headless browser agents share.
+    pub browser: std::sync::Arc<tools::browser::BrowserPool>,
     backups: PathBuf,
     http: reqwest::Client,
 }
@@ -154,6 +156,7 @@ impl AgentsState {
             steer: Mutex::new(HashMap::new()),
             delegating: Mutex::new(std::collections::HashSet::new()),
             changed: tokio::sync::Notify::new(),
+            browser: tools::browser::BrowserPool::new(data_dir.clone()),
             backups: data_dir.join("backups"),
             http: tools::web::client(),
         }
@@ -389,6 +392,7 @@ fn toolbox(app: &AppHandle, s: &Settings) -> Toolbox {
         search: tools::search::pick(s.agents.search_engine, brave, &s.agents.searxng_url),
         projects,
         external: Some(crate::connectors::external(app, s)),
+        browser: Some(state.browser.clone()),
     }
 }
 
@@ -861,6 +865,9 @@ fn start(app: &AppHandle, id: &str) {
     let id = id.to_string();
     tauri::async_runtime::spawn(async move {
         runner::run(&mut agent, &env, &lim, &cancel).await;
+        if agent.status.is_finished() || agent.status == Status::Ready {
+            app.state::<AgentsState>().browser.close_tab(&id).await;
+        }
         let handle = app
             .state::<AgentsState>()
             .handles
@@ -1335,6 +1342,70 @@ pub fn agents_duplicate(app: AppHandle, id: String) -> Result<(), String> {
 pub fn agents_voice_follow_up(app: AppHandle, id: String) {
     *app.state::<AgentsState>().voice_target.lock().unwrap() = Some(id);
     crate::voice::start(&app, crate::voice::Trigger::Toggle);
+}
+
+/// The browser agents use, if there is one.
+#[derive(Serialize, TS, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BrowserInfo {
+    pub path: Option<String>,
+}
+
+#[tauri::command]
+pub fn agents_browser_info(app: AppHandle) -> BrowserInfo {
+    let b = &app.state::<AgentsState>().browser;
+    BrowserInfo {
+        path: tools::browser::find_browser(b.data()).map(|p| p.display().to_string()),
+    }
+}
+
+/// Downloads Chromium for agents, for computers without a Chrome-type browser.
+#[tauri::command]
+pub async fn agents_browser_download(app: AppHandle) -> Result<String, String> {
+    let data = app.state::<AgentsState>().browser.data().to_path_buf();
+    tools::browser::download(&data)
+        .await
+        .map(|p| p.display().to_string())
+}
+
+/// A file an agent made, if it made it: the path is checked against its
+/// journal so the page can't read anything else.
+fn made_by(app: &AppHandle, id: &str, path: &str) -> Result<std::path::PathBuf, String> {
+    let a = app
+        .state::<AgentsState>()
+        .get(id)
+        .ok_or("That agent is gone")?;
+    if !a
+        .journal
+        .iter()
+        .any(|op| matches!(op, FileOp::Created { path: p } if p == path))
+    {
+        return Err("That file isn't one this agent made".into());
+    }
+    Ok(std::path::PathBuf::from(path))
+}
+
+/// The first rows of a CSV an agent saved, for the card.
+#[tauri::command]
+pub fn agents_csv_preview(
+    app: AppHandle,
+    id: String,
+    path: String,
+) -> Result<Vec<Vec<String>>, String> {
+    let p = made_by(&app, &id, &path)?;
+    let text = std::fs::read_to_string(&p).map_err(|e| format!("Couldn't read it: {e}"))?;
+    Ok(tools::browser::preview_csv(&text, 7))
+}
+
+/// Opens a file an agent made in the app that handles it.
+#[tauri::command]
+pub fn agents_open_file(app: AppHandle, id: String, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let p = made_by(&app, &id, &path)?;
+    app.opener()
+        .open_path(p.display().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// Tells an agent something while it works (steering). A running agent

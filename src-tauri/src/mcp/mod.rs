@@ -304,7 +304,7 @@ async fn bearer(m: &McpServer) -> Result<Option<String>, String> {
 
 /// The PATH a login shell would have. Apps started from the Dock or Finder
 /// get a bare PATH, where `npx` and `uvx` aren't found.
-fn shell_path() -> Option<String> {
+pub(crate) fn shell_path() -> Option<String> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
     PATH.get_or_init(|| {
         if cfg!(windows) {

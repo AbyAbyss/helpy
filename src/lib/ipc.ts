@@ -23,6 +23,7 @@ import type { Template } from "../bindings/Template";
 import type { TemplateInfo } from "../bindings/TemplateInfo";
 import type { ToolGroup } from "../bindings/ToolGroup";
 import type { TriggerStatus } from "../bindings/TriggerStatus";
+import type { BrowserInfo } from "../bindings/BrowserInfo";
 import type { Connection } from "../bindings/Connection";
 import type { ConnectorInfo } from "../bindings/ConnectorInfo";
 import type { ImportReport } from "../bindings/ImportReport";
@@ -161,6 +162,13 @@ export const api = {
   /** Tells a working agent something; a finished one takes it as a follow-up. */
   agentSteer: (id: string, text: string) => invoke<void>("agents_steer", { id, text }),
   agentUndo: (id: string) => invoke<string[]>("agents_undo", { id }),
+  browserInfo: () => invoke<BrowserInfo>("agents_browser_info"),
+  /** Downloads Chromium for agents (about 150 MB); resolves to its path. */
+  browserDownload: () => invoke<string>("agents_browser_download"),
+  /** The first rows of a CSV the agent saved. */
+  csvPreview: (id: string, path: string) => invoke<string[][]>("agents_csv_preview", { id, path }),
+  /** Opens a file the agent made in the app that handles it. */
+  openAgentFile: (id: string, path: string) => invoke<void>("agents_open_file", { id, path }),
   agentRename: (id: string, name: string) => invoke<void>("agents_rename", { id, name }),
   agentDismiss: (id: string) => invoke<void>("agents_dismiss", { id }),
   agentSeen: (id: string) => invoke<void>("agents_seen", { id }),

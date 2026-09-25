@@ -1136,3 +1136,19 @@ body {
 .tform .approval__field > span {
   text-transform: none;
 }
+
+/* Files an agent made, in the result card (shares the dock's markup). */
+.result .afiles {
+  --soft: var(--glass);
+  --soft-hover: var(--glass-strong);
+  --card-line: var(--glass-line);
+  --card-ink: var(--ink);
+  --card-ink-3: var(--ink-3);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --out: cubic-bezier(0.22, 1, 0.36, 1);
+  --link: var(--accent);
+}
+
+.result .afiles__table {
+  font-size: 13px;
+}

@@ -9,4 +9,8 @@ fileChanges: Rule, fileDeletes: Rule,
 /**
  * Reminders and calendar events. (Shell commands follow the shell policy.)
  */
-reminders: Rule, };
+reminders: Rule, 
+/**
+ * Typing into websites and sending their forms in the agents' browser.
+ */
+browserForms: Rule, };

@@ -96,6 +96,25 @@ pub fn builtins() -> Vec<Template> {
             folders: Vec::new(),
         },
         Template {
+            id: "page-to-csv".into(),
+            name: "Pull data into a CSV".into(),
+            description: "Collects a list from a web page (prices, products, listings) into a spreadsheet file.".into(),
+            params: vec![
+                param("url", "Web page", ParamKind::Text, "", true),
+                param("what", "What to collect", ParamKind::Text, "names and prices", true),
+                param("name", "File name", ParamKind::Text, "data", true),
+            ],
+            agents: vec![agent(
+                "Collector",
+                "Open {url} in the browser and collect {what} from it into a table with sensible columns. If the list \
+                 goes on over more pages (a \"Next\" link or button), follow it for up to 5 pages. Save the table with \
+                 save_csv as \"{name}\", then say how many rows you saved and where, and show the first few.",
+                &["browser"],
+                &[],
+            )],
+            folders: Vec::new(),
+        },
+        Template {
             id: "morning-briefing".into(),
             name: "Morning briefing".into(),
             description: "Today's calendar and the email that needs you, in one short summary.".into(),

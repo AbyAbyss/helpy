@@ -115,14 +115,16 @@
     "approvals": {
       "fileChanges": "allow",
       "fileDeletes": "ask",
-      "reminders": "ask"
+      "reminders": "ask",
+      "browserForms": "ask"
     },
     "tools": {
       "webSearch": true,
       "fetch": true,
       "files": true,
       "shell": true,
-      "reminders": true
+      "reminders": true,
+      "browser": true
     },
     "approvedFolders": [],
     "projectsFolder": "",

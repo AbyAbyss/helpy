@@ -6,6 +6,7 @@ import type { Batch } from "../bindings/Batch";
 import type { LiveLine } from "../bindings/LiveLine";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
+import { AgentFiles } from "./Files";
 import { duration, inDock, lastCommand, spend, STATUS_LABEL, tone } from "./dockState";
 
 const MAX_CHIPS = 8;
@@ -281,6 +282,7 @@ function Card(props: { agent: AgentView; line: string | undefined; onPin: (on: b
             <div className="card__result rise">
               <Markdown components={{ a: ({ children }) => <span>{children}</span>, img: () => null }}>{a.result}</Markdown>
             </div>
+            <AgentFiles agent={a.id} files={a.files} compact />
             {a.suggestions.length > 0 && (
               <div className="nexts">
                 {a.suggestions.map((s, i) => (
