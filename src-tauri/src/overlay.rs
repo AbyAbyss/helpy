@@ -122,7 +122,33 @@ fn build(app: &AppHandle, label: &str, m: &MonitorRect) -> tauri::Result<()> {
     // the event loop, and the page is fully transparent until then.
     window.show()?;
     window.set_ignore_cursor_events(true)?;
+    // On macOS the status level below replaces this; tao applies it later,
+    // on the main queue, and would put the window back at the floating level.
+    #[cfg(not(target_os = "macos"))]
     window.set_always_on_top(true)?;
+    above_menu_bar(&window)?;
+    // Showing can move the window (macOS keeps floating windows below the
+    // menu bar), so the frame is set again at the new level.
+    window.set_position(PhysicalPosition::new(m.x, m.y))?;
+    window.set_size(PhysicalSize::new(m.width, m.height))?;
+    Ok(())
+}
+
+/// macOS keeps windows at the floating level out of the menu bar, which
+/// shifted every mark down by its height. The status level sits above it.
+#[cfg(target_os = "macos")]
+fn above_menu_bar(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let ns = window.ns_window()? as usize;
+    window.run_on_main_thread(move || {
+        use objc2_app_kit::{NSStatusWindowLevel, NSWindow};
+        // SAFETY: the pointer is this window's NSWindow, used on the main thread.
+        let ns = unsafe { &*(ns as *const NSWindow) };
+        ns.setLevel(NSStatusWindowLevel);
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn above_menu_bar(_: &tauri::WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
