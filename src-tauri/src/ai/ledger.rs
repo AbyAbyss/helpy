@@ -43,6 +43,52 @@ pub struct UsageToday {
     pub cost: f64,
 }
 
+/// Spending over the last days, for the usage chart.
+#[derive(Serialize, TS, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UsageHistory {
+    /// One per day, oldest first, days without calls included.
+    pub days: Vec<DayTotal>,
+    /// Biggest first.
+    pub features: Vec<Total>,
+    pub models: Vec<Total>,
+}
+
+#[derive(Serialize, TS, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DayTotal {
+    pub date: String,
+    #[ts(type = "number")]
+    pub tokens: u64,
+    pub cost: f64,
+}
+
+#[derive(Serialize, TS, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Total {
+    pub name: String,
+    #[ts(type = "number")]
+    pub calls: u64,
+    #[ts(type = "number")]
+    pub tokens: u64,
+    pub cost: f64,
+}
+
+/// What a ledger key's feature is called in the chart. Agents are named by
+/// the agent, so they're counted together.
+fn feature_name(feature: &str) -> &'static str {
+    match feature {
+        "ask" => "Questions and guidance",
+        "circle" => "Circle to explain",
+        "agent planning" => "Planning agents",
+        f if f.starts_with("agent ") => "Agents",
+        _ => "Other",
+    }
+}
+
 pub struct Ledger {
     path: Option<PathBuf>,
     days: Mutex<BTreeMap<String, DayUsage>>,
@@ -95,6 +141,56 @@ impl Ledger {
             tokens: d.tokens,
             cost: d.cost,
         }
+    }
+
+    /// The last `n` days up to `last` (a YYYY-MM-DD date).
+    pub fn history(&self, last: chrono::NaiveDate, n: u32) -> UsageHistory {
+        let days = self.days.lock().unwrap();
+        let mut out = UsageHistory {
+            days: Vec::new(),
+            features: Vec::new(),
+            models: Vec::new(),
+        };
+        let mut add = |list: &mut Vec<Total>, name: String, e: &Entry| {
+            let t = match list.iter_mut().find(|t| t.name == name) {
+                Some(t) => t,
+                None => {
+                    list.push(Total {
+                        name,
+                        calls: 0,
+                        tokens: 0,
+                        cost: 0.0,
+                    });
+                    list.last_mut().unwrap()
+                }
+            };
+            t.calls += e.calls;
+            t.tokens += e.input_tokens + e.output_tokens;
+            t.cost += e.cost;
+        };
+        for i in (0..n.max(1)).rev() {
+            let date = (last - chrono::Days::new(i as u64))
+                .format("%Y-%m-%d")
+                .to_string();
+            let d = days.get(&date).cloned().unwrap_or_default();
+            for (key, e) in &d.breakdown {
+                let mut parts = key.split(" · ");
+                let feature = parts.next().unwrap_or_default();
+                let provider = parts.next().unwrap_or_default();
+                let model = parts.next().unwrap_or_default();
+                add(&mut out.features, feature_name(feature).to_string(), e);
+                add(&mut out.models, format!("{model} · {provider}"), e);
+            }
+            out.days.push(DayTotal {
+                date,
+                tokens: d.tokens,
+                cost: d.cost,
+            });
+        }
+        for list in [&mut out.features, &mut out.models] {
+            list.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+        }
+        out
     }
 
     pub fn record(&self, key: &str, usage: Usage, cost: Option<f64>) {
@@ -221,6 +317,50 @@ mod tests {
             daily_cost_budget: cost,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn history_fills_empty_days_and_groups_agents() {
+        let l = Ledger::in_memory();
+        let u = |i, o| Usage {
+            input_tokens: i,
+            output_tokens: o,
+        };
+        l.record_on(
+            "2026-09-20",
+            "ask · Anthropic · sonnet",
+            u(100, 50),
+            Some(0.01),
+        );
+        l.record_on(
+            "2026-09-22",
+            "agent Desks · Ollama · qwen",
+            u(300, 100),
+            None,
+        );
+        l.record_on(
+            "2026-09-22",
+            "agent Chairs · Ollama · qwen",
+            u(200, 0),
+            None,
+        );
+        let last = chrono::NaiveDate::from_ymd_opt(2026, 9, 22).unwrap();
+        let h = l.history(last, 3);
+        let days: Vec<_> = h.days.iter().map(|d| (d.date.as_str(), d.tokens)).collect();
+        assert_eq!(
+            days,
+            [("2026-09-20", 150), ("2026-09-21", 0), ("2026-09-22", 600)]
+        );
+        assert_eq!(
+            (
+                h.features[0].name.as_str(),
+                h.features[0].calls,
+                h.features[0].tokens
+            ),
+            ("Agents", 2, 600)
+        );
+        assert_eq!(h.models[1].name, "sonnet · Anthropic");
+        assert_eq!(l.history(last, 2).days.len(), 2);
     }
 
     #[test]

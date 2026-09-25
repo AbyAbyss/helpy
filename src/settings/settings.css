@@ -1588,6 +1588,161 @@ select {
   background: var(--err);
 }
 
+.usage__more {
+  margin-left: auto;
+}
+
+/* Usage history */
+.uhist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  animation: uhist-in 0.25s ease-out;
+}
+
+@keyframes uhist-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+.uhist__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.uhist__sum {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.uhist__sum strong {
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.uhist__metric {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--line);
+}
+
+.uhist__metric button {
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--ink-2);
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.uhist__metric button.is-on {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.uhist__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 96px;
+}
+
+.uhist__bar {
+  flex: 1;
+  height: var(--h);
+  min-height: 2px;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--accent);
+  opacity: 0.55;
+  transform-origin: bottom;
+  animation: uhist-grow 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation-delay: calc(var(--i) * 12ms);
+  transition: opacity 0.12s;
+}
+
+.uhist__bar.is-hover {
+  opacity: 1;
+}
+
+@keyframes uhist-grow {
+  from { transform: scaleY(0); }
+}
+
+.uhist__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.uhist__lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.uhist__title {
+  margin-bottom: 6px;
+  font: 600 11px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.uhist__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 8px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+}
+
+.uhist__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.uhist__val {
+  color: var(--ink-2);
+}
+
+.uhist__track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.uhist__track span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.uhist__calls {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uhist, .uhist__bar { animation: none; }
+}
+
 /* ---------- Voice ---------- */
 
 .text-input {

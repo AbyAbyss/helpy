@@ -209,6 +209,7 @@ pub fn run() {
             agents::agents_browser_info,
             agents::agents_builders,
             privacy::privacy_can_see_windows,
+            ai::ai_usage_history,
             agents::agents_browser_download,
             agents::agents_csv_preview,
             agents::agents_open_file,

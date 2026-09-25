@@ -25,6 +25,7 @@ import type { ToolGroup } from "../bindings/ToolGroup";
 import type { TriggerStatus } from "../bindings/TriggerStatus";
 import type { BrowserInfo } from "../bindings/BrowserInfo";
 import type { CoderInfo } from "../bindings/CoderInfo";
+import type { UsageHistory } from "../bindings/UsageHistory";
 import type { Connection } from "../bindings/Connection";
 import type { ConnectorInfo } from "../bindings/ConnectorInfo";
 import type { ImportReport } from "../bindings/ImportReport";
@@ -107,6 +108,7 @@ export const api = {
   testProvider: (provider: ProviderConfig) => invoke<string>("ai_test_provider", { provider }),
   detectLocal: () => invoke<LocalServer[]>("ai_detect_local"),
   usageToday: () => invoke<UsageToday>("ai_usage_today"),
+  usageHistory: (days: number) => invoke<UsageHistory>("ai_usage_history", { days }),
 
   // The ask panel. Progress arrives as EVENTS.ask events.
   ask: (text: string) => invoke<void>("ask_send", { text }),

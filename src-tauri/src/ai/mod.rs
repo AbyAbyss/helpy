@@ -73,6 +73,12 @@ pub async fn ai_detect_local(app: AppHandle) -> Vec<LocalServer> {
 }
 
 #[tauri::command]
+pub fn ai_usage_history(app: AppHandle, days: u32) -> ledger::UsageHistory {
+    let today = chrono::Local::now().date_naive();
+    app.state::<AiState>().ledger.history(today, days.min(90))
+}
+
+#[tauri::command]
 pub fn ai_usage_today(app: AppHandle) -> UsageToday {
     app.state::<AiState>().ledger.today()
 }
