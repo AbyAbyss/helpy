@@ -233,6 +233,24 @@ kbd {
   }
 }
 
+/* With OS glass the window is the card: the OS draws the blur, the rounded
+   corners and the shadow, so the page only adds a light tint. */
+.step[data-glass] {
+  padding: 0;
+}
+
+.step[data-glass] .card {
+  background: rgba(18, 21, 29, 0.42);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  animation: none;
+}
+
+/* Windows 11 rounds the window itself, at 8 px. */
+.step[data-glass="windows"] .card {
+  border-radius: 8px;
+}
+
 .step[data-still] .card {
   animation: none;
 }

@@ -13,9 +13,11 @@ import { useSettings } from "../lib/useSettings";
 export function StepCard() {
   const [card, setCard] = useState<CardView | null>(null);
   const [settings] = useSettings();
+  const [glass, setGlass] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    api.guideCardGlass().then(setGlass);
     api.guideCard().then((c) => c && setCard(c));
     const off = listen<CardView>(EVENTS.guideCard, (e) => setCard(e.payload));
     return () => void off.then((f) => f());
@@ -41,7 +43,7 @@ export function StepCard() {
   };
 
   return (
-    <div ref={root} className="step" data-still={settings?.guidance.reduceMotion || undefined}>
+    <div ref={root} className="step" data-glass={glass ?? undefined} data-still={settings?.guidance.reduceMotion || undefined}>
       {card && (
         <div className="card" key={card.number} role="dialog" aria-live="polite" aria-label={`Step ${card.number}`}>
           <header className="card__head">

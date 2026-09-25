@@ -79,3 +79,29 @@ pub fn platform_info() -> PlatformInfo {
         limitations,
     }
 }
+
+/// The Windows build number, e.g. 22631 for Windows 11 23H2.
+#[cfg(windows)]
+pub fn windows_build() -> Option<u32> {
+    use windows::core::w;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
+    let mut buf = [0u16; 16];
+    let mut len = std::mem::size_of_val(&buf) as u32;
+    // SAFETY: buf and len describe a valid, writable buffer.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            w!(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion"),
+            w!("CurrentBuildNumber"),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr().cast()),
+            Some(&mut len),
+        )
+    };
+    if status.is_err() {
+        return None;
+    }
+    let chars = (len as usize / 2).saturating_sub(1).min(buf.len());
+    String::from_utf16_lossy(&buf[..chars]).trim().parse().ok()
+}

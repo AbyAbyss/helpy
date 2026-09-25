@@ -96,6 +96,7 @@ pub fn run() {
             overlay::sync(&handle);
             cursor::spawn(handle.clone());
             voice::setup(&handle);
+            guide::setup(&handle);
             if handle.autolaunch().is_enabled().unwrap_or(false) != s.general.launch_at_login {
                 apply_autostart(&handle, s.general.launch_at_login);
             }
@@ -144,6 +145,7 @@ pub fn run() {
             windows::open_settings_section,
             guide::guide_action,
             guide::guide_card,
+            guide::guide_card_glass,
             voice::voice_input_devices,
             voice::voice_meter_start,
             voice::voice_meter_stop,

@@ -113,6 +113,8 @@ export const api = {
   // Visual guidance. Steps arrive as EVENTS.guideMarks and EVENTS.guideCard.
   guideAction: (action: "next" | "repeat" | "stop") => invoke<void>("guide_action", { action }),
   guideCard: () => invoke<CardView | null>("guide_card"),
+  /** The OS glass behind the step card: "macos", "windows", or null when opaque. */
+  guideCardGlass: () => invoke<"macos" | "windows" | null>("guide_card_glass"),
 };
 
 export function asFieldErrors(e: unknown): FieldError[] {

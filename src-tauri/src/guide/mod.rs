@@ -5,7 +5,7 @@
 pub mod step;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -69,6 +69,57 @@ pub struct GuideState {
     restore: Mutex<(bool, bool)>,
     /// None until the click listener starts, then whether it works.
     clicks: Mutex<Option<bool>>,
+    /// Which native frosted-glass look the step card has, if any.
+    glass: OnceLock<Option<&'static str>>,
+}
+
+/// Gives the step card a frosted, slightly see-through background where the
+/// OS draws one well: vibrancy on macOS, Acrylic on Windows 11 22H2 and later.
+/// Elsewhere (Linux, older Windows) the card stays opaque.
+pub fn setup(app: &AppHandle) {
+    let glass = app
+        .get_webview_window(windows::STEP)
+        .and_then(|w| apply_glass(&w));
+    let _ = app.state::<GuideState>().glass.set(glass);
+}
+
+#[cfg(target_os = "macos")]
+fn apply_glass(w: &tauri::WebviewWindow) -> Option<&'static str> {
+    use tauri::window::{Effect, EffectState, EffectsBuilder};
+    w.set_effects(
+        EffectsBuilder::new()
+            .effect(Effect::HudWindow)
+            .state(EffectState::Active)
+            .radius(14.0)
+            .build(),
+    )
+    .ok()?;
+    let _ = w.set_shadow(true);
+    Some("macos")
+}
+
+#[cfg(windows)]
+fn apply_glass(w: &tauri::WebviewWindow) -> Option<&'static str> {
+    use tauri::window::{Color, Effect, EffectsBuilder};
+    // Older builds only have an Acrylic that lags and can't round corners.
+    if crate::platform::windows_build()? < 22523 {
+        return None;
+    }
+    w.set_effects(
+        EffectsBuilder::new()
+            .effect(Effect::Acrylic)
+            .color(Color(18, 21, 29, 150))
+            .build(),
+    )
+    .ok()?;
+    // Gives the undecorated window Windows 11's rounded corners and shadow.
+    let _ = w.set_shadow(true);
+    Some("windows")
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+fn apply_glass(_: &tauri::WebviewWindow) -> Option<&'static str> {
+    None
 }
 
 pub fn active(app: &AppHandle) -> bool {
@@ -339,6 +390,12 @@ pub fn guide_action(app: AppHandle, action: String) {
         "stop" => crate::ai::ask::cancel(&app),
         _ => {}
     }
+}
+
+/// The step card's native glass ("macos", "windows"), or None when it's opaque.
+#[tauri::command]
+pub fn guide_card_glass(state: tauri::State<GuideState>) -> Option<&'static str> {
+    state.glass.get().copied().flatten()
 }
 
 /// The card currently shown, for a card window that loads late.
