@@ -234,6 +234,23 @@ fn has_side_effects(agents: &[PlanAgent]) -> bool {
 
 /// Plans a request with the planning model, then shows the plan card, or
 /// starts right away when settings allow it. Returns the plan.
+/// The address of the page the request is about, when it's about the page
+/// in the user's browser and Helpy may look.
+async fn open_page(s: &Settings, request: &str) -> Option<String> {
+    if !crate::a11y::refers_to_page(request) || s.privacy.capture_paused {
+        return None;
+    }
+    let url = crate::a11y::browser_url().await?;
+    let lower = url.to_lowercase();
+    let blocked = s
+        .privacy
+        .blocked_apps
+        .iter()
+        .map(|r| r.trim().to_lowercase())
+        .any(|r| !r.is_empty() && lower.contains(&r));
+    (!blocked).then_some(url)
+}
+
 pub async fn plan(app: &AppHandle, request: &str, image: Option<String>) -> Result<Plan, String> {
     let s = app.state::<SettingsStore>().get();
     let mut groups = tools::groups(&s.agents);
@@ -249,6 +266,10 @@ pub async fn plan(app: &AppHandle, request: &str, image: Option<String>) -> Resu
         });
     }
     let mut text = request.to_string();
+    if let Some(url) = open_page(&s, request).await {
+        text +=
+            &format!("\n\n(The page open in the user's browser is {url}. \"This page\" means it.)");
+    }
     if image.is_some() {
         text +=
             "\n\n(The agents will get a picture of what the user had on screen with their task.)";

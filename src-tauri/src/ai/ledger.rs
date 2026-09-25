@@ -151,7 +151,7 @@ impl Ledger {
             features: Vec::new(),
             models: Vec::new(),
         };
-        let mut add = |list: &mut Vec<Total>, name: String, e: &Entry| {
+        let add = |list: &mut Vec<Total>, name: String, e: &Entry| {
             let t = match list.iter_mut().find(|t| t.name == name) {
                 Some(t) => t,
                 None => {

@@ -2,6 +2,7 @@
 //! (the only part the user can click) and waits until the user has done the
 //! step, either by clicking near the target or by pressing Next.
 
+pub mod snap;
 pub mod step;
 
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -548,6 +548,12 @@ FIELDS.push(
     control: { kind: "number", min: 1, max: 30, unit: "steps" },
   },
   {
+    path: "guidance.snapToControls", section: "guidance", group: "Accuracy", label: "Snap to controls",
+    help: "Moves highlights and pointers onto the real button or field under them, using what the system reports about the app. On macOS this needs Accessibility permission.",
+    keywords: "snap accessibility precise accurate exact control button target",
+    control: { kind: "toggle" },
+  },
+  {
     path: "guidance.showCoordinates", section: "guidance", group: "Troubleshooting", label: "Show raw coordinates",
     help: "Prints the model's numbers next to each mark, to check where it thinks things are.",
     keywords: "debug coordinates pixels position", control: { kind: "toggle" },

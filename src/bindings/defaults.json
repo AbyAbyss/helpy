@@ -114,7 +114,8 @@
     "animationSpeed": 1.0,
     "reduceMotion": false,
     "maxSteps": 12,
-    "showCoordinates": false
+    "showCoordinates": false,
+    "snapToControls": true
   },
   "circle": {
     "defaultShape": "rectangle",

@@ -1,3 +1,4 @@
+mod a11y;
 mod agents;
 mod ai;
 mod buddy;

@@ -36,4 +36,9 @@ maxSteps: number,
 /**
  * Shows the model's raw coordinates next to each mark.
  */
-showCoordinates: boolean, };
+showCoordinates: boolean, 
+/**
+ * Move highlights and pointers onto the real control under them, as
+ * the system's accessibility layer reports it.
+ */
+snapToControls: boolean, };

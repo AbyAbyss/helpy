@@ -581,10 +581,13 @@ impl Turn<'_> {
         let Some(meta) = *self.app.state::<AskState>().screen.lock().unwrap() else {
             return error("Look at the screen before showing a step.".into());
         };
-        let step = match step::validate(input, meta.image_width, meta.image_height) {
+        let mut step = match step::validate(input, meta.image_width, meta.image_height) {
             Ok(s) => s,
             Err(m) => return error(m),
         };
+        if self.settings.guidance.snap_to_controls {
+            step = guide::snap::snap(step, meta).await;
+        }
         *steps += 1;
         self.send(AskEvent::Step {
             number: *steps,

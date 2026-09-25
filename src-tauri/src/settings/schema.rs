@@ -634,6 +634,10 @@ pub struct Guidance {
     pub max_steps: u32,
     /// Shows the model's raw coordinates next to each mark.
     pub show_coordinates: bool,
+    /// Move highlights and pointers onto the real control under them, as
+    /// the system's accessibility layer reports it.
+    #[serde(default = "yes")]
+    pub snap_to_controls: bool,
 }
 
 impl Default for Guidance {
@@ -652,6 +656,7 @@ impl Default for Guidance {
             reduce_motion: false,
             max_steps: 12,
             show_coordinates: false,
+            snap_to_controls: true,
         }
     }
 }

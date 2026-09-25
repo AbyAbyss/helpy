@@ -56,6 +56,14 @@ impl CaptureMeta {
         )
     }
 
+    /// The reverse of `to_global_physical`.
+    pub fn from_global_physical(self, x: f64, y: f64) -> (f64, f64) {
+        (
+            (x - self.monitor_x as f64) * self.image_width as f64 / self.monitor_width as f64,
+            (y - self.monitor_y as f64) * self.image_height as f64 / self.monitor_height as f64,
+        )
+    }
+
     /// A point in model-image pixels → the overlay's CSS pixels on that monitor.
     pub fn to_overlay(self, x: f64, y: f64) -> (f64, f64) {
         let (gx, gy) = self.to_global_physical(x, y);
@@ -163,13 +171,26 @@ pub async fn grab_cursor_monitor(app: &AppHandle) -> Result<Frame, ProviderError
     #[cfg(target_os = "linux")]
     let hidden = hide_own_windows(app).await;
 
+    let blur_passwords = privacy.blur_passwords;
     let result = tokio::task::spawn_blocking(move || grab(&monitor, &privacy)).await;
 
     #[cfg(target_os = "linux")]
     restore_own_windows(hidden);
 
-    let (image, name) =
+    let (mut image, name) =
         result.map_err(|e| ProviderError::new(ErrorKind::Setup, e.to_string()))??;
+    if blur_passwords {
+        let k = image.width() as f64 / monitor.width as f64;
+        let rects: Vec<_> = crate::a11y::password_fields(monitor.scale)
+            .await
+            .into_iter()
+            .map(|r| {
+                let (x, y) = (r.x - monitor.x as f64, r.y - monitor.y as f64);
+                (x * k - 2.0, y * k - 2.0, r.w * k + 4.0, r.h * k + 4.0)
+            })
+            .collect();
+        crate::privacy::blank(&mut image, &rects);
+    }
     Ok(Frame {
         image,
         monitor,

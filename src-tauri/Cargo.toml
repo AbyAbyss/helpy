@@ -62,14 +62,17 @@ notify = "8"
 chromiumoxide = { version = "0.9.1", features = ["fetcher", "rustls", "zip8"] }
 
 [target.'cfg(windows)'.dependencies]
+uiautomation = "0.25"
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_Registry"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
 core-graphics = "0.24"
+accessibility-sys = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = "0.13"
+atspi = { version = "0.30", default-features = false, features = ["connection", "proxies", "tokio", "zbus"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
