@@ -193,6 +193,12 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
         json!({ "text": { "type": "string" } }),
         &["text"],
     ));
+    out.push(def(
+        OPEN_LINK,
+        "Open a web link in the user's default browser, e.g. a page you made or updated, when the user asks to see it.",
+        json!({ "url": { "type": "string", "description": "An http or https link" } }),
+        &["url"],
+    ));
     if has("team") {
         out.push(def(
             DELEGATE,
@@ -331,6 +337,9 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
     out
 }
 
+/// Opens a link in the user's browser. Every agent has it.
+pub const OPEN_LINK: &str = "open_link";
+
 /// The build tools. With a coding tool installed the agent hands it the
 /// coding; without one it writes the files itself.
 pub fn build_defs(coder: Option<build::Coder>) -> Vec<ToolDef> {
@@ -425,6 +434,17 @@ fn range(args: &Value) -> Option<(usize, usize)> {
     })
 }
 
+/// Only web links, so an agent can't open files or apps with it.
+fn open_link(url: &str) -> Result<String, String> {
+    let u = reqwest::Url::parse(url.trim()).map_err(|_| format!("\"{url}\" isn't a link."))?;
+    if !matches!(u.scheme(), "http" | "https") {
+        return Err("open_link opens only http and https links.".into());
+    }
+    tauri_plugin_opener::open_url(u.as_str(), None::<&str>)
+        .map_err(|e| format!("Couldn't open {u}: {e}"))?;
+    Ok(format!("Opened {u} in the user's browser."))
+}
+
 /// Most items in an agent's plan.
 pub const MAX_PLAN: usize = 20;
 
@@ -479,6 +499,9 @@ impl Toolbox {
             .and_then(|x| x.gate(groups, tool, args))
         {
             return gate;
+        }
+        if tool == OPEN_LINK {
+            return Gate::Allow;
         }
         let Some(group) = group_of(tool) else {
             return Gate::Never(format!("there's no tool called {tool}."));
@@ -659,6 +682,7 @@ impl Toolbox {
         match tool {
             "web_search" => search::run(&self.search, &self.http, s(args, "query")).await,
             "fetch_page" => web::fetch(&self.http, s(args, "url")).await,
+            OPEN_LINK => text_result(open_link(s(args, "url"))),
             "list_folder" => text_result(self.files.list(s(args, "path"))),
             "read_file" => text_result(self.files.read(s(args, "path")).map(|t| {
                 let t = match range(args) {
@@ -881,6 +905,7 @@ mod tests {
             Gate::Ask { .. }
         ));
         assert!(matches!(t.gate(&g, "web_search", &json!({})), Gate::Allow));
+        assert!(matches!(t.gate(&[], OPEN_LINK, &json!({})), Gate::Allow));
         assert!(matches!(t.gate(&g, "grep_files", &json!({})), Gate::Allow));
         // Edits are changes: the same rule as writes, and the replacement can be edited.
         assert!(matches!(
@@ -987,10 +1012,17 @@ mod tests {
         );
         assert!(names.contains(&ASK_USER.to_string()));
         assert!(names.contains(&PLAN.to_string()) && names.contains(&NOTE.to_string()));
+        assert!(names.contains(&OPEN_LINK.to_string()));
         let files: Vec<_> = defs(&["files".into()]).into_iter().map(|d| d.name).collect();
         for t in ["edit_file", "grep_files", "find_files"] {
             assert!(files.contains(&t.to_string()), "{t}");
         }
+    }
+
+    #[test]
+    fn open_link_refuses_what_isnt_a_web_link() {
+        assert!(open_link("file:///etc/passwd").is_err());
+        assert!(open_link("not a link").is_err());
     }
 
     #[test]

@@ -381,12 +381,7 @@ fn run_session(
         .or_else(|| crate::agents::voice_steer(app, &text))
         .or_else(|| crate::connectors::voice_connect(app, &text))
     {
-        return emit_phase(
-            app,
-            VoicePhase::Idle {
-                message: Some(message),
-            },
-        );
+        return reply(app, message);
     }
     if let Some(started) = crate::agents::planner::voice_reply(app, &text) {
         if started {
@@ -409,12 +404,7 @@ fn run_session(
                 if plan.started {
                     crate::windows::fly_pill_to_dock(app);
                 }
-                emit_phase(
-                    app,
-                    VoicePhase::Idle {
-                        message: Some(plan.reply),
-                    },
-                )
+                reply(app, plan.reply)
             }
             Err(message) => emit_phase(app, VoicePhase::Error { message }),
         };
@@ -429,6 +419,21 @@ fn run_session(
     if let Err(message) = tauri::async_runtime::block_on(ask::ask(app, text, ask::Origin::Voice, Vec::new())) {
         emit_phase(app, VoicePhase::Error { message });
     }
+}
+
+/// A short reply to something said aloud (e.g. "Told Research."): shown in
+/// the pill, and spoken like an answer to a spoken question.
+fn reply(app: &AppHandle, message: String) {
+    let vo = app.state::<SettingsStore>().get().voice_output;
+    if vo.voice_guidance || vo.answer_spoken_aloud {
+        app.state::<VoiceState>().speaker.say(message.clone());
+    }
+    emit_phase(
+        app,
+        VoicePhase::Idle {
+            message: Some(message),
+        },
+    );
 }
 
 // ---------- Reading answers aloud ----------

@@ -1,8 +1,7 @@
 //! Native translucency for settings, the agent panel and the dock card: vibrancy on
 //! macOS, Mica or Acrylic on Windows 11. Each page asks which look it got
 //! and draws translucent surfaces only then; on Linux and older Windows the
-//! windows stay opaque (the dock card falls back to CSS glass). On macOS the
-//! dock card always uses CSS glass, for the split view.
+//! windows stay opaque (the dock card falls back to CSS glass).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -55,18 +54,25 @@ pub fn window_glass(window: WebviewWindow, state: tauri::State<Glass>) -> Option
 #[cfg(target_os = "macos")]
 fn apply(w: &WebviewWindow) -> Option<&'static str> {
     use tauri::window::{Effect, EffectState, EffectsBuilder};
-    // The dock card keeps its CSS glass so the card and its follow-up bar
-    // can float apart (the split view); one native material fills only one
-    // shape.
-    if w.label() == DOCK_CARD {
-        return None;
-    }
-    // The sidebar material, as in Finder and Notes; the content side gets a
-    // light wash in CSS.
-    let effects = EffectsBuilder::new()
-        .effect(Effect::Sidebar)
-        .state(EffectState::FollowsWindowActiveState)
-        .build();
+    // Always active: these windows are often looked at while another app has
+    // focus (the dock card never takes it), and an inactive material shows
+    // the desktop unblurred.
+    let effects = if w.label() == DOCK_CARD {
+        // One rounded material, the card's shape; its follow-up bar sits
+        // inside it.
+        EffectsBuilder::new()
+            .effect(Effect::Popover)
+            .state(EffectState::Active)
+            .radius(20.0)
+            .build()
+    } else {
+        // The sidebar material, as in Finder and Notes; the content side
+        // gets a light wash in CSS.
+        EffectsBuilder::new()
+            .effect(Effect::Sidebar)
+            .state(EffectState::Active)
+            .build()
+    };
     w.set_effects(effects).ok()?;
     let _ = w.set_shadow(true);
     Some("macos")

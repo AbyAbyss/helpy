@@ -324,6 +324,11 @@ impl Run<'_> {
             .fetch_add(self.env.now_ms() - from, Ordering::SeqCst);
         agent.pending = None;
         agent.status = Status::Running;
+        // Show the answer was taken now, not after the action it allowed.
+        if !matches!(answer, None | Some(Answer::Cancel)) {
+            agent.status_line = "Carrying on.".into();
+            self.save(agent);
+        }
         answer
     }
 
@@ -1036,6 +1041,10 @@ mod tests {
         tool_runs: Mutex<Vec<String>>,
         tool_args: Mutex<Vec<Value>>,
         saves: AtomicI64,
+        /// Whether the last save still showed something waiting on the user.
+        saved_pending: Mutex<bool>,
+        /// That, as each tool started.
+        pending_at_run: Mutex<Vec<bool>>,
         /// Handed to the agent at its next step.
         steer: Mutex<Vec<String>>,
         /// Delegate calls seen: (call id, tasks).
@@ -1112,6 +1121,8 @@ mod tests {
         ) -> BoxFuture<'a, ToolOutcome> {
             Box::pin(async move {
                 self.tool_runs.lock().unwrap().push(tool.to_string());
+                let shown = *self.saved_pending.lock().unwrap();
+                self.pending_at_run.lock().unwrap().push(shown);
                 self.tool_args.lock().unwrap().push(args.clone());
                 self.tools
                     .lock()
@@ -1145,8 +1156,9 @@ mod tests {
         fn tools(&self, _: &Agent) -> Vec<ToolDef> {
             Vec::new()
         }
-        fn save(&self, _: &Agent) {
+        fn save(&self, a: &Agent) {
             self.saves.fetch_add(1, Ordering::SeqCst);
+            *self.saved_pending.lock().unwrap() = a.pending.is_some();
         }
         fn live(&self, _: &Agent, _: &str) {}
         fn now_ms(&self) -> i64 {
@@ -1575,6 +1587,8 @@ mod tests {
         assert_eq!(a.status, Status::Done);
         // Only the approved command ran.
         assert_eq!(*f.tool_runs.lock().unwrap(), ["shell"]);
+        // The approval card was gone before the action ran, not after.
+        assert_eq!(*f.pending_at_run.lock().unwrap(), [false]);
         // It ran with the user's edit, and only editable fields changed.
         assert_eq!(f.tool_args.lock().unwrap()[0], json!({"c": "edited"}));
         let said: String = a
