@@ -27,10 +27,14 @@ pub fn permissions_request() -> Permissions {
     permissions_status()
 }
 
-/// Opens the system settings page for "screen" or "accessibility".
+/// Opens the system settings page for "microphone", "screen" or
+/// "accessibility".
 #[tauri::command]
 pub fn permissions_open(which: String) -> Result<(), String> {
     let url = match (std::env::consts::OS, which.as_str()) {
+        ("macos", "microphone") => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        }
         ("macos", "screen") => {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         }

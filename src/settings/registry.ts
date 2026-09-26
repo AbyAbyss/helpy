@@ -696,8 +696,8 @@ FIELDS.push(
   },
   {
     path: "agents.searchEngine", section: "agents", group: "Web search", label: "Search with",
-    help: "Automatic uses Brave when its key is saved, SearXNG when its address is set, and DuckDuckGo otherwise.",
-    keywords: "search engine duckduckgo brave searxng api key",
+    help: "Automatic uses Brave when its key is saved, SearXNG when its address is set, and otherwise DuckDuckGo, with Bing when DuckDuckGo is rate limiting. DuckDuckGo and Bing need no account.",
+    keywords: "search engine duckduckgo bing brave searxng api key",
     control: { kind: "searchEngine" },
   },
   {

@@ -8,7 +8,11 @@ export type Routing = {
 /**
  * Voice and text questions.
  */
-ask: ModelRef | null, visualGuidance: ModelRef | null, circleToExplain: ModelRef | null, agentPlanning: ModelRef | null, agentOrchestrator: ModelRef | null, agentWorker: ModelRef | null, 
+ask: ModelRef | null, visualGuidance: ModelRef | null, circleToExplain: ModelRef | null, agentPlanning: ModelRef | null, 
+/**
+ * Agents that split their task among helpers. None uses the worker model.
+ */
+agentOrchestrator: ModelRef | null, agentWorker: ModelRef | null, 
 /**
  * Used for a request that needs the screen when its model can't read images.
  */

@@ -474,6 +474,7 @@ pub struct Routing {
     pub visual_guidance: Option<ModelRef>,
     pub circle_to_explain: Option<ModelRef>,
     pub agent_planning: Option<ModelRef>,
+    /// Agents that split their task among helpers. None uses the worker model.
     pub agent_orchestrator: Option<ModelRef>,
     pub agent_worker: Option<ModelRef>,
     /// Used for a request that needs the screen when its model can't read images.
@@ -823,10 +824,11 @@ pub enum ShellPolicy {
 #[ts(export)]
 pub enum SearchEngine {
     /// Brave when its key is set, otherwise SearXNG when its address is set,
-    /// otherwise DuckDuckGo.
+    /// otherwise DuckDuckGo, then Bing when DuckDuckGo is rate limiting.
     #[default]
     Auto,
     DuckDuckGo,
+    Bing,
     Brave,
     Searxng,
 }
@@ -987,8 +989,8 @@ impl Default for Agents {
             batch_token_budget: 1_000_000,
             batch_cost_budget: None,
             on_failure: OnFailure::Stop,
-            max_steps: 25,
-            max_tool_calls: 50,
+            max_steps: 60,
+            max_tool_calls: 120,
             repeat_threshold: 3,
             no_progress_steps: 8,
             context_tokens: 60_000,

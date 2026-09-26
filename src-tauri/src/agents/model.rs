@@ -176,6 +176,26 @@ pub enum FileOp {
     },
 }
 
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PlanStatus {
+    #[default]
+    Todo,
+    Doing,
+    Done,
+}
+
+/// One step of the checklist an agent keeps with its plan tool.
+#[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PlanItem {
+    pub text: String,
+    #[serde(default)]
+    pub status: PlanStatus,
+}
+
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -247,6 +267,12 @@ pub struct Agent {
     /// The parent's tool call that started this helper.
     #[serde(default)]
     pub delegation: Option<String>,
+    /// Its checklist, kept with the plan tool; shown to it every step.
+    #[serde(default)]
+    pub plan: Vec<PlanItem>,
+    /// Things it wrote down with the note tool; shown to it every step.
+    #[serde(default)]
+    pub notes: Vec<String>,
 
     pub status: Status,
     pub status_line: String,
@@ -303,6 +329,8 @@ impl Agent {
             handoff: None,
             parent: None,
             delegation: None,
+            plan: Vec::new(),
+            notes: Vec::new(),
             status: Status::Queued,
             status_line: String::new(),
             status_at: 0,
@@ -328,6 +356,25 @@ impl Agent {
             messages: Vec::new(),
             journal: Vec::new(),
         }
+    }
+
+    /// The plan as a checklist, for the agent and its tool result.
+    pub fn plan_text(&self) -> String {
+        let done = self
+            .plan
+            .iter()
+            .filter(|i| i.status == PlanStatus::Done)
+            .count();
+        let mut out = format!("Plan: {done} of {} done.", self.plan.len());
+        for i in &self.plan {
+            let mark = match i.status {
+                PlanStatus::Todo => " ",
+                PlanStatus::Doing => ">",
+                PlanStatus::Done => "x",
+            };
+            out += &format!("\n[{mark}] {}", i.text);
+        }
+        out
     }
 
     pub fn log(&mut self, at: i64, kind: LogKind, text: impl Into<String>) {
@@ -391,6 +438,7 @@ pub struct AgentView {
     pub parent: Option<String>,
     pub status: Status,
     pub status_line: String,
+    pub plan: Vec<PlanItem>,
     pub stop: Option<Stop>,
     pub result: Option<String>,
     pub suggestions: Vec<String>,
@@ -427,6 +475,7 @@ impl Agent {
             parent: self.parent.clone(),
             status: self.status,
             status_line: self.status_line.clone(),
+            plan: self.plan.clone(),
             stop: self.stop.clone(),
             result: self.result.clone(),
             suggestions: self.suggestions.clone(),

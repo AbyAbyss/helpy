@@ -14,6 +14,7 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use ts_rs::TS;
 
+use super::text;
 use crate::agents::runner::ToolOutcome;
 use crate::settings::schema::Builder;
 
@@ -469,12 +470,47 @@ pub fn write(dir: &Path, rel: &str, content: &str) -> ToolOutcome {
     }
 }
 
-pub fn read(dir: &Path, rel: &str) -> ToolOutcome {
+/// A file, or lines `range` of it (1-based, inclusive).
+pub fn read(dir: &Path, rel: &str, range: Option<(usize, usize)>) -> ToolOutcome {
     match inside(dir, rel)
         .and_then(|p| std::fs::read_to_string(p).map_err(|e| format!("Couldn't read {rel}: {e}")))
     {
         Ok(t) => ToolOutcome::Ok {
-            text: format!("{rel}:\n{}", tail(&t, 20_000)),
+            text: match range {
+                Some((from, to)) => format!("{rel}, {}", text::lines(&t, from, to)),
+                None => format!("{rel}:\n{}", tail(&t, 20_000)),
+            },
+            ops: Vec::new(),
+        },
+        Err(e) => ToolOutcome::Permanent(e),
+    }
+}
+
+/// Replaces `find` with `with` in a project file: once, or everywhere with `all`.
+pub fn edit(dir: &Path, rel: &str, find: &str, with: &str, all: bool) -> ToolOutcome {
+    let result = inside(dir, rel).and_then(|p| {
+        let t = std::fs::read_to_string(&p).map_err(|e| format!("Couldn't read {rel}: {e}"))?;
+        let (new, n) = text::replace(&t, find, with, all)?;
+        std::fs::write(&p, new).map_err(|e| format!("Couldn't write {rel}: {e}"))?;
+        Ok(n)
+    });
+    match result {
+        Ok(n) => ToolOutcome::Ok {
+            text: format!(
+                "Replaced {n} occurrence{} in {rel}.",
+                if n == 1 { "" } else { "s" }
+            ),
+            ops: Vec::new(),
+        },
+        Err(e) => ToolOutcome::Permanent(e),
+    }
+}
+
+/// Lines matching a pattern in the project's files.
+pub fn grep(dir: &Path, pattern: &str, glob: Option<&str>) -> ToolOutcome {
+    match text::grep(dir, pattern, glob, false) {
+        Ok(text) => ToolOutcome::Ok {
+            text,
             ops: Vec::new(),
         },
         Err(e) => ToolOutcome::Permanent(e),
@@ -686,10 +722,25 @@ mod tests {
             write(dir.path(), "/tmp/x.js", "no"),
             ToolOutcome::Permanent(_)
         ));
-        let ToolOutcome::Ok { text, .. } = read(dir.path(), "src/app.js") else {
+        let ToolOutcome::Ok { text, .. } = read(dir.path(), "src/app.js", None) else {
             panic!()
         };
         assert!(text.contains("let a = 1;"));
+        std::fs::write(dir.path().join("src/app.js"), "let a = 1;\nlet b = 2;\n").unwrap();
+        let ToolOutcome::Ok { text, .. } = read(dir.path(), "src/app.js", Some((2, 2))) else {
+            panic!()
+        };
+        assert_eq!(text, "src/app.js, Lines 2-2 of 2:\nlet b = 2;");
+        let ToolOutcome::Ok { text, .. } = edit(dir.path(), "src/app.js", "let b = 2", "let b = 3", false) else {
+            panic!()
+        };
+        assert_eq!(text, "Replaced 1 occurrence in src/app.js.");
+        assert!(matches!(edit(dir.path(), "src/app.js", "nope", "x", false), ToolOutcome::Permanent(_)));
+        assert!(matches!(edit(dir.path(), "../x.js", "a", "b", false), ToolOutcome::Permanent(_)));
+        let ToolOutcome::Ok { text, .. } = grep(dir.path(), "let b", None) else {
+            panic!()
+        };
+        assert!(text.contains("src/app.js:2: let b = 3;"), "{text}");
         std::fs::create_dir_all(dir.path().join("node_modules/x")).unwrap();
         std::fs::write(dir.path().join("node_modules/x/i.js"), "").unwrap();
         let ToolOutcome::Ok { text, .. } = list(dir.path()) else {

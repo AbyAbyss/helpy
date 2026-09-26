@@ -180,7 +180,7 @@ export const api = {
   canSeeWindows: () => invoke<boolean>("privacy_can_see_windows"),
   permissions: () => invoke<Permissions>("permissions_status"),
   permissionsRequest: () => invoke<Permissions>("permissions_request"),
-  permissionsOpen: (which: "screen" | "accessibility") => invoke<void>("permissions_open", { which }),
+  permissionsOpen: (which: "microphone" | "screen" | "accessibility") => invoke<void>("permissions_open", { which }),
   /** Downloads Chromium for agents (about 150 MB); resolves to its path. */
   browserDownload: () => invoke<string>("agents_browser_download"),
   /** The first rows of a CSV the agent saved. */

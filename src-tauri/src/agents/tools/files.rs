@@ -5,6 +5,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use super::text;
 use crate::agents::model::FileOp;
 
 /// Read at most this much of a file.
@@ -226,6 +227,38 @@ impl Files {
             ),
             ops,
         ))
+    }
+
+    /// Replaces `find` with `with` in a text file: once, or everywhere with
+    /// `all`. Backed up like a write.
+    pub fn edit(
+        &self,
+        agent: &str,
+        p: &str,
+        find: &str,
+        with: &str,
+        all: bool,
+    ) -> Result<(String, Vec<FileOp>), String> {
+        let path = self.resolve(p)?;
+        let text = fs::read_to_string(&path)
+            .map_err(|e| format!("Can't read {}: {e}", path.display()))?;
+        let (new, n) = text::replace(&text, find, with, all)?;
+        let (_, ops) = self.write(agent, p, &new)?;
+        let s = if n == 1 { "" } else { "s" };
+        Ok((
+            format!("Replaced {n} occurrence{s} in {}.", path.display()),
+            ops,
+        ))
+    }
+
+    /// Lines matching a pattern in the text files under `p`, or in the file `p`.
+    pub fn grep(&self, p: &str, pattern: &str, glob: Option<&str>) -> Result<String, String> {
+        text::grep(&self.resolve(p)?, pattern, glob, true)
+    }
+
+    /// Files under `p` whose path matches a glob.
+    pub fn find(&self, p: &str, glob: &str) -> Result<String, String> {
+        text::find(&self.resolve(p)?, glob, true)
     }
 
     pub fn make_folder(&self, p: &str) -> Result<(String, Vec<FileOp>), String> {
@@ -457,6 +490,25 @@ mod tests {
         assert_eq!(fs::read_to_string(d("a.pdf")).unwrap(), "pdf");
         assert_eq!(fs::read_to_string(d("b.png")).unwrap(), "png");
         assert!(!Path::new(&d("Documents")).exists() && !Path::new(&d("Images")).exists());
+    }
+
+    #[test]
+    fn edits_search_and_find_stay_inside_and_are_backed_up() {
+        let (tmp, f) = setup();
+        let d = |p: &str| tmp.path().join("Desktop").join(p).display().to_string();
+        fs::write(tmp.path().join("Desktop/notes.txt"), "milk\neggs\nmilk\n").unwrap();
+        let (text, ops) = f.edit("a1", &d("notes.txt"), "eggs", "bread", false).unwrap();
+        assert!(text.starts_with("Replaced 1 occurrence in"));
+        assert!(matches!(ops[0], FileOp::Replaced { .. }));
+        assert!(f.edit("a1", &d("notes.txt"), "milk", "x", false).unwrap_err().contains("2 times"));
+        assert!(f.edit("a1", &d("notes.txt"), "milk", "oat", true).unwrap().0.starts_with("Replaced 2"));
+        assert_eq!(fs::read_to_string(d("notes.txt")).unwrap(), "oat\nbread\noat\n");
+        assert!(f.edit("a1", &tmp.path().join("Secret/key.txt").display().to_string(), "shh", "x", false).is_err());
+
+        assert!(f.grep(&d(""), "bread", None).unwrap().contains(&format!("{}:2: bread", d("notes.txt"))));
+        assert!(f.grep(&tmp.path().join("Secret").display().to_string(), "shh", None).is_err());
+        let found = f.find(&d(""), "*.png").unwrap();
+        assert!(found.starts_with("1 files match *.png:\n") && found.ends_with("Desktop/b.png"), "{found}");
     }
 
     #[test]

@@ -308,6 +308,19 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
         </p>
       )}
 
+      {a.plan.length > 0 && (
+        <ul className="plan" aria-label="Plan">
+          {a.plan.map((p, i) => (
+            <li key={i} className={`plan__item plan__item--${p.status}`}>
+              <span className="plan__mark" aria-hidden="true">
+                {p.status === "done" ? "✓" : p.status === "doing" ? "›" : ""}
+              </span>
+              {p.text}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {a.pending?.type === "approval" && <ApprovalBox key={a.pending.id} agent={a} pending={a.pending} />}
 
       {a.pending?.type === "question" && (

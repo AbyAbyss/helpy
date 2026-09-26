@@ -280,15 +280,22 @@ fn announce(app: &AppHandle, a: &Agent, s: &Settings) {
 // ---------- Models, prompts, limits ----------
 
 /// Models an agent may use: the agent-worker model, else the questions
-/// model, then the fallback chain. All must call tools, and read images
-/// when the agent was given one.
-pub fn agent_models(ai: &Ai, needs_vision: bool) -> Result<Vec<ModelRef>, String> {
+/// model, then the fallback chain. An orchestrator (an agent that splits its
+/// task among helpers) takes the orchestrator model first, when one is set.
+/// All must call tools, and read images when the agent was given one.
+pub fn agent_models(
+    ai: &Ai,
+    needs_vision: bool,
+    orchestrator: bool,
+) -> Result<Vec<ModelRef>, String> {
     let ok = |r: &ModelRef| {
         ai.model(r)
             .is_some_and(|(_, m)| m.tools && (m.vision || !needs_vision))
     };
-    let primary = [&ai.routing.agent_worker, &ai.routing.ask]
+    let first = orchestrator.then_some(&ai.routing.agent_orchestrator);
+    let primary = [first, Some(&ai.routing.agent_worker), Some(&ai.routing.ask)]
         .into_iter()
+        .flatten()
         .flatten()
         .find(|r| ok(r))
         .cloned()
@@ -329,6 +336,10 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
          - You can't control the user's mouse, keyboard or main browser.\n\
          - If an action is rejected or not allowed, don't try to get around it; carry on without it or finish.\n\
          - Use ask_user only when you truly can't decide sensibly yourself.\n\
+         - For a task with more than a few steps, keep a checklist with the plan tool and update it as you go. \
+         Write down things you'll need later with note. Both stay with you when your earlier work is summarized.\n\
+         - Before you say you're done, check the result yourself (open the file, run the test, look at the page) \
+         rather than assuming it worked.\n\
          - Only say you did something when a tool call did it and said so. If none of your tools can do part of \
          the task, say so plainly in your answer instead of describing it as done.\n",
         name = a.name,
@@ -338,7 +349,9 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
     if a.tools.iter().any(|t| t == "files") {
         let list: Vec<_> = roots.iter().map(|r| r.display().to_string()).collect();
         p += &format!(
-            "- You may only use these folders: {}. Every change you make is backed up and can be undone.\n",
+            "- You may only use these folders: {}. Every change you make is backed up and can be undone.\n\
+             - To change part of an existing file use edit_file, not write_file. Find text with grep_files and \
+             files with find_files; read long files in parts with from_line and to_line.\n",
             if list.is_empty() { "none yet".into() } else { list.join(", ") }
         );
     }
@@ -360,6 +373,15 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
     let custom = s.ai.custom_instructions.trim();
     if !custom.is_empty() {
         p += &format!("\n\nThe user has told you this about themselves and their setup:\n{custom}");
+    }
+    if !a.plan.is_empty() {
+        p += &format!("\n\nYour {}", a.plan_text());
+    }
+    if !a.notes.is_empty() {
+        p += "\n\nYour notes:";
+        for n in &a.notes {
+            p += &format!("\n- {n}");
+        }
     }
     p
 }
@@ -838,7 +860,8 @@ fn start(app: &AppHandle, id: &str) {
     if agent.messages.is_empty() && agent.handoff.is_none() {
         agent.handoff = handoff(&agent, &state.agents.lock().unwrap());
     }
-    let models = match agent_models(&s.ai, agent.image.is_some()) {
+    let orchestrator = agent.parent.is_none() && agent.tools.iter().any(|t| t == "team");
+    let models = match agent_models(&s.ai, agent.image.is_some(), orchestrator) {
         Ok(m) => m,
         Err(message) => {
             agent.status = Status::Failed;
@@ -1948,14 +1971,19 @@ mod tests {
             ..Default::default()
         };
         ai.routing.ask = Some(r("chat"));
-        assert!(agent_models(&ai, false).is_err());
+        assert!(agent_models(&ai, false, false).is_err());
         ai.routing.agent_worker = Some(r("worker"));
         ai.fallback_chain = vec![r("chat"), r("eyes")];
-        assert_eq!(agent_models(&ai, false).unwrap(), [r("worker"), r("eyes")]);
+        assert_eq!(agent_models(&ai, false, false).unwrap(), [r("worker"), r("eyes")]);
         // With a picture to look at, only the vision model qualifies.
-        assert!(agent_models(&ai, true).is_err());
+        assert!(agent_models(&ai, true, false).is_err());
         ai.routing.ask = Some(r("eyes"));
-        assert_eq!(agent_models(&ai, true).unwrap(), [r("eyes")]);
+        assert_eq!(agent_models(&ai, true, false).unwrap(), [r("eyes")]);
+        // An orchestrator takes its own model first, and the workers' one otherwise.
+        assert_eq!(agent_models(&ai, false, true).unwrap()[0], r("worker"));
+        ai.routing.agent_orchestrator = Some(r("eyes"));
+        assert_eq!(agent_models(&ai, false, true).unwrap(), [r("eyes")]);
+        assert_eq!(agent_models(&ai, false, false).unwrap()[0], r("worker"));
     }
 
     #[test]

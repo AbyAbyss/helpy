@@ -264,6 +264,7 @@ export function SearchEnginePicker({ value, onChange }: { value: SearchEngine; o
         options={[
           { value: "auto", label: "Automatic" },
           { value: "duckDuckGo", label: "DuckDuckGo" },
+          { value: "bing", label: "Bing" },
           { value: "brave", label: "Brave" },
           { value: "searxng", label: "SearXNG" },
         ]}

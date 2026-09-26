@@ -101,10 +101,19 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
 
         {step === 3 && (
           <section>
-            <h1>{mac ? "Two permissions" : "What works here"}</h1>
+            <h1>{mac ? "Three permissions" : "What works here"}</h1>
             {mac ? (
               <>
                 <p className="welcome__lead">macOS asks you to allow these once. Nothing is shared until you ask me something.</p>
+                <div className="welcome__perm">
+                  <div>
+                    <strong>Microphone</strong>
+                    <span>So you can talk to me with the voice shortcut. macOS asks the first time you hold it.</span>
+                  </div>
+                  <button type="button" className="btn btn--sm" onClick={() => api.permissionsOpen("microphone")}>
+                    Open settings
+                  </button>
+                </div>
                 <div className="welcome__perm">
                   <div>
                     <strong>Screen Recording</strong>

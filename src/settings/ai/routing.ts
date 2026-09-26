@@ -19,7 +19,12 @@ export const ROUTES: { key: keyof Routing; label: string; built: boolean; help?:
     help: "Needs a model that can read images. Empty uses the questions model.",
   },
   { key: "agentPlanning", label: "Agent planning", built: true, help: "Turns a request into agents. Empty uses the questions model." },
-  { key: "agentOrchestrator", label: "Agent orchestrators", built: false },
+  {
+    key: "agentOrchestrator",
+    label: "Agent orchestrators",
+    built: true,
+    help: "Agents that split a task among helpers. Needs a model that can use tools. Empty uses the workers model.",
+  },
   { key: "agentWorker", label: "Agent workers", built: true, help: "Does the agents' work. Needs a model that can use tools. Empty uses the questions model." },
 ];
 

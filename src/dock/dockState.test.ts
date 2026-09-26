@@ -15,6 +15,7 @@ const agent = (over: Partial<AgentView>): AgentView => ({
   files: [],
   status: "running",
   statusLine: "",
+  plan: [],
   stop: null,
   result: null,
   suggestions: [],

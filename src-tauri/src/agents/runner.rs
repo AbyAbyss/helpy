@@ -32,6 +32,12 @@ const KEEP_RESULTS: usize = 2;
 /// Tool results up to this many characters are always sent in full.
 const SMALL_RESULT: usize = 800;
 pub const ASK_USER: &str = "ask_user";
+/// The agent's checklist and scratchpad: handled here, since they change
+/// the agent itself.
+pub const PLAN: &str = "plan";
+pub const NOTE: &str = "note";
+/// Most text kept in an agent's notes; the oldest go first.
+const MAX_NOTES: usize = 8_000;
 /// Hands parts of the work to helper agents and waits for their results.
 pub const DELEGATE: &str = "delegate";
 
@@ -121,6 +127,24 @@ pub trait Env: Sync {
         call_id: &'a str,
         tasks: &'a Value,
     ) -> BoxFuture<'a, Result<String, String>>;
+}
+
+/// The plan tool's items, checked: text on each, at most MAX_PLAN of them.
+fn plan_items(items: &Value) -> Result<Vec<PlanItem>, String> {
+    let bad = || {
+        "Give the plan as a list of items, each with text and a status (todo, doing or done)."
+            .to_string()
+    };
+    let mut plan: Vec<PlanItem> = serde_json::from_value(items.clone()).map_err(|_| bad())?;
+    plan.retain_mut(|i| {
+        i.text = i.text.trim().to_string();
+        !i.text.is_empty()
+    });
+    if plan.is_empty() {
+        return Err(bad());
+    }
+    plan.truncate(super::tools::MAX_PLAN);
+    Ok(plan)
 }
 
 /// Adds text for the model as the user, joining the last message when it's
@@ -530,6 +554,28 @@ impl Run<'_> {
                 Ok(text) => (text, false),
                 Err(e) => (e, true),
             });
+        }
+        if name == PLAN {
+            return Ok(match plan_items(&args["items"]) {
+                Ok(items) => {
+                    agent.plan = items;
+                    (agent.plan_text(), false)
+                }
+                Err(e) => (e, true),
+            });
+        }
+        if name == NOTE {
+            let text = args["text"].as_str().unwrap_or("").trim();
+            if text.is_empty() {
+                return Ok(("Give the note some text.".into(), true));
+            }
+            agent.notes.push(text.to_string());
+            while agent.notes.len() > 1
+                && agent.notes.iter().map(String::len).sum::<usize>() > MAX_NOTES
+            {
+                agent.notes.remove(0);
+            }
+            return Ok((format!("Noted ({} notes kept).", agent.notes.len()), false));
         }
         if name == ASK_USER {
             let question = args["question"].as_str().unwrap_or("").to_string();
@@ -1205,6 +1251,52 @@ mod tests {
             .log
             .iter()
             .any(|l| l.text == "I'm searching for accountants now."));
+    }
+
+    #[tokio::test]
+    async fn a_plan_and_notes_stay_with_the_agent() {
+        let f = Fake::default();
+        script(
+            &f,
+            vec![
+                tool_call(
+                    "Planning.",
+                    PLAN,
+                    json!({"items": [{"text": "Find sources"}, {"text": " Write it up ", "status": "doing"}]}),
+                ),
+                tool_call("Noting.", NOTE, json!({"text": "Budget is £400"})),
+                tool_call("Bad plan.", PLAN, json!({"items": "later"})),
+                text("Done."),
+            ],
+        );
+        let mut a = agent();
+        go(&f, &mut a, &limits()).await;
+        assert_eq!(a.status, Status::Done);
+        assert_eq!(
+            a.plan,
+            vec![
+                PlanItem { text: "Find sources".into(), status: PlanStatus::Todo },
+                PlanItem { text: "Write it up".into(), status: PlanStatus::Doing },
+            ]
+        );
+        assert_eq!(a.plan_text(), "Plan: 0 of 2 done.\n[ ] Find sources\n[>] Write it up");
+        assert_eq!(a.notes, ["Budget is £400"]);
+        // The bad plan was refused and the old one kept; the results reached the model.
+        let results: Vec<String> = a
+            .messages
+            .iter()
+            .flat_map(|m| m.parts.iter())
+            .filter_map(|p| match p {
+                Part::ToolResult { parts, is_error, .. } => match &parts[0] {
+                    Part::Text(t) => Some(format!("{is_error} {t}")),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        assert_eq!(results[0], "false Plan: 0 of 2 done.\n[ ] Find sources\n[>] Write it up");
+        assert_eq!(results[1], "false Noted (1 notes kept).");
+        assert!(results[2].starts_with("true Give the plan as a list"));
     }
 
     #[tokio::test]

@@ -50,6 +50,8 @@ tauri-plugin-clipboard-manager = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-plugin-notification = "2"
 scraper = "0.20"
+regex = "1"
+walkdir = "2"
 html2text = "0.12"
 rmcp = { version = "3.4.1", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest"] }
 sha2 = "0.10"
