@@ -76,6 +76,9 @@ pub struct AgentsState {
     plan: Mutex<Option<(planner::Plan, Option<String>)>>,
     /// The agent the next voice question is a follow-up for.
     voice_target: Mutex<Option<String>>,
+    /// Agents the user last spoke to: their replies are read aloud until
+    /// they finish.
+    voice_asked: Mutex<std::collections::HashSet<String>>,
     /// What the user said to running agents, not yet taken (steering).
     steer: Mutex<HashMap<String, Vec<String>>>,
     /// Agents waiting for their helpers; they don't hold a running slot.
@@ -158,6 +161,7 @@ impl AgentsState {
             handles: Mutex::new(HashMap::new()),
             plan: Mutex::new(None),
             voice_target: Mutex::new(None),
+            voice_asked: Mutex::new(std::collections::HashSet::new()),
             steer: Mutex::new(HashMap::new()),
             delegating: Mutex::new(std::collections::HashSet::new()),
             changed: tokio::sync::Notify::new(),
@@ -236,6 +240,15 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
 /// Tells the user when an agent needs them or has finished.
 fn announce(app: &AppHandle, a: &Agent, s: &Settings) {
     let first = |t: &str| runner::status_from(t).unwrap_or_default();
+    let state = app.state::<AgentsState>();
+    let voice_asked = {
+        let mut asked = state.voice_asked.lock().unwrap();
+        if a.status.is_finished() || a.status == Status::Ready {
+            asked.remove(&a.id)
+        } else {
+            asked.contains(&a.id)
+        }
+    };
     let (title, body) = match a.status {
         Status::Approval | Status::Question => (
             format!("{} needs you", a.name),
@@ -270,11 +283,36 @@ fn announce(app: &AppHandle, a: &Agent, s: &Settings) {
     if s.agents.notifications {
         notify(app, &title, &body);
     }
-    if s.voice_output.announce_agents && matches!(a.status, Status::Done | Status::Ready) {
+    if voice_asked {
+        speak_reply(app, a, s, &body);
+    } else if s.voice_output.announce_agents && matches!(a.status, Status::Done | Status::Ready) {
         app.state::<crate::voice::VoiceState>()
             .speaker
             .say(format!("Your {} agent finished. {body}", a.name));
     }
+}
+
+/// Reads an agent's reply aloud, for the user who spoke to it: the whole
+/// result when it's done, else what it needs.
+fn speak_reply(app: &AppHandle, a: &Agent, s: &Settings, body: &str) {
+    let Some(feed) = crate::voice::Feed::for_spoken_question(app, s) else {
+        return;
+    };
+    let text = match (a.status, &a.result) {
+        (Status::Done | Status::Ready, Some(result)) => result.clone(),
+        _ => format!("{}: {body}", a.name),
+    };
+    feed.text(&text);
+    feed.finish();
+}
+
+/// The user spoke to this agent: read its replies aloud until it finishes.
+fn voice_asked(app: &AppHandle, id: &str) {
+    app.state::<AgentsState>()
+        .voice_asked
+        .lock()
+        .unwrap()
+        .insert(id.to_string());
 }
 
 // ---------- Models, prompts, limits ----------
@@ -1610,7 +1648,10 @@ pub fn voice_steer(app: &AppHandle, text: &str) -> Option<String> {
     let name = |id: &str| state.get(id).map(|a| a.name).unwrap_or_default();
     Some(match spoken_steer(text, &agents)? {
         Steer::Tell(id, what) => match agents_steer(app.clone(), id.clone(), what, None) {
-            Ok(()) => format!("Told {}.", name(&id)),
+            Ok(()) => {
+                voice_asked(app, &id);
+                format!("Told {}.", name(&id))
+            }
             Err(e) => e,
         },
         Steer::Pause(id) => agents_pause(app.clone(), id.clone())
@@ -1643,8 +1684,9 @@ pub fn take_voice_follow_up(app: &AppHandle, text: &str) -> bool {
         return false;
     };
     // A running agent is steered; a finished one takes a follow-up.
-    if let Err(e) = agents_steer(app.clone(), id, text.to_string(), None) {
-        log::warn!("voice follow-up: {e}");
+    match agents_steer(app.clone(), id.clone(), text.to_string(), None) {
+        Ok(()) => voice_asked(app, &id),
+        Err(e) => log::warn!("voice follow-up: {e}"),
     }
     true
 }
