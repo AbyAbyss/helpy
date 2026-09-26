@@ -28,6 +28,7 @@ import type { TriggerStatus } from "../bindings/TriggerStatus";
 import type { BrowserInfo } from "../bindings/BrowserInfo";
 import type { CoderInfo } from "../bindings/CoderInfo";
 import type { UsageHistory } from "../bindings/UsageHistory";
+import type { InstallInfo } from "../bindings/InstallInfo";
 import type { Permissions } from "../bindings/Permissions";
 import type { Connection } from "../bindings/Connection";
 import type { ConnectorInfo } from "../bindings/ConnectorInfo";
@@ -181,6 +182,8 @@ export const api = {
   permissions: () => invoke<Permissions>("permissions_status"),
   permissionsRequest: () => invoke<Permissions>("permissions_request"),
   permissionsOpen: (which: "microphone" | "screen" | "accessibility") => invoke<void>("permissions_open", { which }),
+  installInfo: () => invoke<InstallInfo>("install_info"),
+  installMove: () => invoke<void>("install_move"),
   /** Downloads Chromium for agents (about 150 MB); resolves to its path. */
   browserDownload: () => invoke<string>("agents_browser_download"),
   /** The first rows of a CSV the agent saved. */

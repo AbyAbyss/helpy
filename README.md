@@ -155,7 +155,7 @@ To ask questions, add a provider under **Settings → AI providers**. The quicke
 
 ## Connect your accounts
 
-Connectors sign in through an OAuth app that you register once with each service. Register it with the redirect address below, then paste its client ID (and secret, where needed) under **Settings → Connectors**. The card for each service shows the same steps.
+Connectors sign in through an OAuth app that you register once with each service. Register it with the redirect address below, then paste its client ID (and secret, where needed) into the service's card under **Settings → Connectors**, which walks you through the same steps.
 
 | Service | Register the app at | Redirect address | Secret |
 |---|---|---|---|

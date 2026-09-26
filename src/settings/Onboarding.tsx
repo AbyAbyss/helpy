@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Ai } from "../bindings/Ai";
 import type { BuiltinProfile } from "../bindings/BuiltinProfile";
+import type { InstallInfo } from "../bindings/InstallInfo";
 import type { Permissions } from "../bindings/Permissions";
 import type { PlatformInfo } from "../bindings/PlatformInfo";
 import type { Settings } from "../bindings/Settings";
@@ -28,25 +29,85 @@ const PROFILES: { id: BuiltinProfile; title: string; text: string }[] = [
 export function Onboarding({ settings, platform, commitAi, setProfile, onDone }: Props) {
   const [step, setStep] = useState(0);
   const [perms, setPerms] = useState<Permissions | null>(null);
+  const [install, setInstall] = useState<InstallInfo | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
   useEffect(() => void api.permissions().then(setPerms, () => {}), [step]);
+  useEffect(() => void api.installInfo().then(setInstall, () => {}), []);
 
   const hasModel = settings.ai.routing.ask !== null;
   const mac = platform?.os === "macos";
-  const last = step === STEPS.length - 1;
+  // Started from the disk image or Downloads: offer to move first.
+  const steps = install?.canMove ? ["Install", ...STEPS] : STEPS;
+  const at = steps[step];
+  const last = step === steps.length - 1;
   const next = () => (last ? onDone() : setStep(step + 1));
+  const move = async () => {
+    setMoving(true);
+    setMoveError(null);
+    try {
+      // Let the hop play, then copy over and relaunch from Applications.
+      await new Promise((r) => setTimeout(r, 1400));
+      await api.installMove();
+    } catch (e) {
+      setMoveError(String(e).replace(/^Error: /, ""));
+      setMoving(false);
+    }
+  };
+  const runningFrom = install && (install.from.startsWith("/Volumes/") || install.from.includes("/AppTranslocation/")) ? "the disk image" : install?.from;
 
   return (
     <div className="welcome">
       <div className="welcome__card" key={step}>
         <ol className="welcome__steps" aria-label="Steps">
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <li key={s} data-state={i < step ? "done" : i === step ? "now" : undefined}>
               {s}
             </li>
           ))}
         </ol>
 
-        {step === 0 && (
+        {at === "Install" && (
+          <section>
+            <h1>Let me move into Applications</h1>
+            <p className="welcome__lead">
+              I'm running from {runningFrom}. From the Applications folder I'll still be here after you eject the disk, and macOS will remember
+              what you've allowed me to do.
+            </p>
+            <div className={`mover${moving ? " is-moving" : ""}`} aria-hidden="true">
+              <div className="mover__app">
+                <svg viewBox="0 0 64 64">
+                  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1B2030" />
+                  <g transform="translate(5.5 5.5) scale(0.82)">
+                    <path d="M6 6 L26 13.5 A22 22 0 1 1 13.5 26 Z" fill="#F0544F" />
+                    <ellipse cx="30" cy="33" rx="3.2" ry="4.4" fill="#1B2030" />
+                    <ellipse cx="42" cy="33" rx="3.2" ry="4.4" fill="#1B2030" />
+                  </g>
+                </svg>
+              </div>
+              <div className="mover__trail">
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="mover__folder">
+                <svg viewBox="0 0 96 72">
+                  <path d="M4 14a6 6 0 0 1 6-6h24l8 8h44a6 6 0 0 1 6 6v40a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6z" fill="#4A8BE6" />
+                  <path className="mover__lid" d="M4 26h88v34a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6z" fill="#7DB2FF" />
+                </svg>
+                <span className="mover__label">Applications</span>
+              </div>
+            </div>
+            <button type="button" className="btn btn--primary" onClick={move} disabled={moving}>
+              {moving ? "Moving…" : "Move to Applications"}
+            </button>
+            {moveError && <p className="welcome__err">{moveError}</p>}
+            <p className="welcome__small">I'll reopen from there in a moment.</p>
+          </section>
+        )}
+
+        {at === "Hello" && (
           <section>
             <h1>Hi, I'm Helpy.</h1>
             <p className="welcome__lead">I sit next to your cursor and help with whatever's on your screen.</p>
@@ -65,7 +126,7 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
           </section>
         )}
 
-        {step === 1 && (
+        {at === "Model" && (
           <section>
             <h1>Choose the AI I use</h1>
             <p className="welcome__lead">
@@ -77,7 +138,7 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
           </section>
         )}
 
-        {step === 2 && (
+        {at === "Profile" && (
           <section>
             <h1>How should I behave?</h1>
             <p className="welcome__lead">Pick a starting point. Switch any time from the tray menu.</p>
@@ -99,7 +160,7 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
           </section>
         )}
 
-        {step === 3 && (
+        {at === "Permissions" && (
           <section>
             <h1>{mac ? "Three permissions" : "What works here"}</h1>
             {mac ? (
@@ -152,7 +213,7 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
           </section>
         )}
 
-        {step === 4 && (
+        {at === "Try it" && (
           <section>
             <h1>Try it</h1>
             <p className="welcome__lead">These work from any app. Change them under Hotkeys.</p>
@@ -189,13 +250,13 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
             </button>
           )}
           <span className="welcome__spacer" />
-          {step === 1 && !hasModel && (
+          {at === "Model" && !hasModel && (
             <button type="button" className="link-btn" onClick={next}>
               Later
             </button>
           )}
-          <button type="button" className="btn btn--primary" onClick={next} disabled={step === 1 && !hasModel}>
-            {step === 0 ? "Get started" : last ? "Start using Helpy" : "Continue"}
+          <button type="button" className={at === "Install" ? "btn btn--ghost" : "btn btn--primary"} onClick={next} disabled={(at === "Model" && !hasModel) || moving}>
+            {at === "Install" ? "Not now" : at === "Hello" ? "Get started" : last ? "Start using Helpy" : "Continue"}
           </button>
         </footer>
       </div>

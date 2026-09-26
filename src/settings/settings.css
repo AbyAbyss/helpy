@@ -2508,8 +2508,121 @@ select {
   flex: 1;
 }
 
+.welcome__err {
+  margin: 10px 0 0;
+  color: var(--alert);
+  font-size: 13px;
+}
+
+/* The move-to-Applications card: Helpy bobs beside a dotted trail, then
+   hops into the folder when the move starts. */
+.mover {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  justify-items: center;
+  margin: 4px 0 18px;
+  padding: 28px 24px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(260px 150px at 20% 55%, rgba(240, 84, 79, 0.22), transparent 70%),
+    radial-gradient(260px 150px at 80% 55%, rgba(91, 156, 245, 0.2), transparent 70%),
+    #1b2030;
+  overflow: hidden;
+}
+
+.mover__app {
+  width: 76px;
+  height: 76px;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35));
+  animation: mover-bob 2.2s ease-in-out infinite;
+}
+
+.mover__app svg,
+.mover__folder svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mover__trail {
+  display: flex;
+  gap: 10px;
+}
+
+.mover__trail span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #f0544f, #7db2ff);
+  animation: mover-dot 1.6s ease-in-out infinite;
+}
+
+.mover__trail span:nth-child(2) { animation-delay: 0.2s; }
+.mover__trail span:nth-child(3) { animation-delay: 0.4s; }
+.mover__trail span:nth-child(4) { animation-delay: 0.6s; }
+
+.mover__folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.mover__folder svg {
+  width: 96px;
+  height: 72px;
+  transform-origin: 50% 100%;
+}
+
+.mover__label {
+  font: 600 12px var(--font-ui);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mover.is-moving .mover__app {
+  animation: mover-hop 1.3s cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+
+.mover.is-moving .mover__trail span {
+  animation: mover-dot 0.5s ease-in-out infinite;
+}
+
+.mover.is-moving .mover__folder svg {
+  animation: mover-catch 1.4s ease-out forwards;
+}
+
+@keyframes mover-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-7px) rotate(2deg); }
+}
+
+@keyframes mover-dot {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes mover-hop {
+  0% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+  40% { transform: translate(110px, -80px) rotate(14deg) scale(1.06); opacity: 1; }
+  80% { transform: translate(250px, -6px) rotate(-4deg) scale(0.75); opacity: 1; }
+  100% { transform: translate(290px, 14px) rotate(0) scale(0.3); opacity: 0; }
+}
+
+@keyframes mover-catch {
+  0%, 70% { transform: scale(1); }
+  80% { transform: scale(1.12, 0.88); }
+  90% { transform: scale(0.96, 1.06); }
+  100% { transform: scale(1); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .welcome__card { animation: none; }
+  .mover__app,
+  .mover__trail span,
+  .mover.is-moving .mover__folder svg { animation: none; }
+  .mover.is-moving .mover__app { opacity: 0.35; }
 }
 
 /* ---------- The window's look ----------

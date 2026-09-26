@@ -12,7 +12,7 @@ import { useSettings, useTheme } from "../lib/useSettings";
 import { BuddyStage, BuddyStylePicker, useCustomBuddy } from "./BuddyPreview";
 import { GuidanceStage } from "./GuidancePreview";
 import { ApprovalRules, Blocklist, BuilderPicker, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
-import { ConnectorList, McpServers, OAuthApps } from "./ConnectorControls";
+import { ConnectorList, McpServers } from "./ConnectorControls";
 import { TemplateEditor } from "./TemplateControls";
 import { TriggerEditor } from "./TriggerControls";
 import { MemoryNotes, UsagePanel } from "./Usage";
@@ -356,7 +356,7 @@ function Row({ field, ctx }: { field: Field; ctx: RowContext }) {
   const error = ctx.errors[field.path];
   const status = field.control.kind === "hotkey" ? ctx.hotkeys.find((h) => h.action === field.path.split(".")[1]) : undefined;
   const warning = !error ? status?.warning ?? (status?.state === "failed" ? status.error : null) : null;
-  const wide = ["buddyStyle", "blocklist", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice", "approvalRules", "toolToggles", "folderList", "stringList", "searchEngine", "connectors", "oauthApps", "mcpServers", "templates", "triggers"].includes(field.control.kind);
+  const wide = ["buddyStyle", "blocklist", "providers", "routing", "fallbackChain", "textarea", "whisperModels", "piperVoice", "approvalRules", "toolToggles", "folderList", "stringList", "searchEngine", "connectors", "mcpServers", "templates", "triggers"].includes(field.control.kind);
 
   return (
     <div className={`row${wide ? " row--wide" : ""}${error ? " has-error" : ""}`}>
@@ -478,9 +478,7 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
     case "fallbackChain":
       return <FallbackEditor ai={ctx.settings.ai} onChange={(fallbackChain) => ctx.commitAi({ ...ctx.settings.ai, fallbackChain })} />;
     case "connectors":
-      return <ConnectorList value={ctx.settings.connectors.builtin} onChange={set} />;
-    case "oauthApps":
-      return <OAuthApps value={ctx.settings.connectors.apps} onChange={set} />;
+      return <ConnectorList value={ctx.settings.connectors.builtin} onChange={set} apps={ctx.settings.connectors.apps} onApps={(v) => ctx.update("connectors.apps", v)} />;
     case "mcpServers":
       return <McpServers value={ctx.settings.connectors.mcp} onChange={set} />;
     case "templates":

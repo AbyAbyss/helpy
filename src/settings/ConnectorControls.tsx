@@ -63,7 +63,11 @@ function Mark({ text }: { text: string }) {
 
 // ---------- Built-in services ----------
 
-export function ConnectorList({ value, onChange }: { value: Record<string, ConnectorConfig | undefined>; onChange: (v: Record<string, ConnectorConfig | undefined>) => void }) {
+type Apps = Record<string, OAuthApp | undefined>;
+
+/** Every service, each with its sign-in setup, connection and rules in one card. */
+export function ConnectorList(props: { value: Record<string, ConnectorConfig | undefined>; onChange: (v: Record<string, ConnectorConfig | undefined>) => void; apps: Apps; onApps: (v: Apps) => void }) {
+  const { value, onChange, apps, onApps } = props;
   const list = useConnectors();
   const [open, setOpen] = useState<string | null>(null);
   return (
@@ -72,7 +76,10 @@ export function ConnectorList({ value, onChange }: { value: Record<string, Conne
         <ConnectorCard
           key={c.id}
           info={c}
+          all={list}
           config={value[c.id] ?? { permission: "readOnly", rules: {} }}
+          app={c.provider ? apps[c.provider] : undefined}
+          onApp={(a) => c.provider && onApps({ ...apps, [c.provider]: a })}
           expanded={open === c.id}
           onToggle={() => setOpen(open === c.id ? null : c.id)}
           onChange={(cfg) => onChange({ ...value, [c.id]: cfg })}
@@ -82,11 +89,27 @@ export function ConnectorList({ value, onChange }: { value: Record<string, Conne
   );
 }
 
-function ConnectorCard(props: { info: ConnectorInfo; config: ConnectorConfig; expanded: boolean; onToggle: () => void; onChange: (c: ConnectorConfig) => void }) {
-  const { info: c, config, expanded, onToggle, onChange } = props;
+function ConnectorCard(props: {
+  info: ConnectorInfo;
+  all: ConnectorInfo[];
+  config: ConnectorConfig;
+  app: OAuthApp | undefined;
+  onApp: (a: OAuthApp) => void;
+  expanded: boolean;
+  onToggle: () => void;
+  onChange: (c: ConnectorConfig) => void;
+}) {
+  const { info: c, all, config, app, onApp, expanded, onToggle, onChange } = props;
   const [busy, setBusy] = useState<"connect" | "test" | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [editApp, setEditApp] = useState(false);
   const conn = c.connection;
+  // The OAuth app this service signs in through, shared by every service of its provider.
+  const guide = c.provider ? GUIDES[c.provider] : undefined;
+  const clientId = app?.clientId ?? "";
+  const ready = !!guide && !!clientId && (guide.secret !== "required" || c.hasSecret);
+  const siblings = all.filter((x) => x.provider === c.provider && x.id !== c.id).map((x) => x.name);
+  const scopes = [...new Set(all.filter((x) => x.provider === c.provider).flatMap((x) => x.scopes))];
 
   const run = async (kind: "connect" | "test", f: () => Promise<string>) => {
     setBusy(kind);
@@ -118,10 +141,14 @@ function ConnectorCard(props: { info: ConnectorInfo; config: ConnectorConfig; ex
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => run("test", () => api.connectorTest(c.id))} disabled={!!busy}>
             {busy === "test" ? "Testing…" : "Test"}
           </button>
+        ) : ready ? (
+          <button type="button" className="btn btn--primary btn--sm" onClick={connect} disabled={!!busy}>
+            {busy === "connect" ? "Waiting for the browser…" : "Connect"}
+          </button>
         ) : (
-          c.provider && (
-            <button type="button" className="btn btn--primary btn--sm" onClick={connect} disabled={!!busy}>
-              {busy === "connect" ? "Waiting for the browser…" : "Connect"}
+          !expanded && (
+            <button type="button" className="btn btn--primary btn--sm" onClick={onToggle}>
+              Set up
             </button>
           )
         )}
@@ -133,6 +160,39 @@ function ConnectorCard(props: { info: ConnectorInfo; config: ConnectorConfig; ex
       {message && <p className={`pcard__test ${message.ok ? "is-ok" : "is-err"}`}>{message.text}</p>}
       {expanded && (
         <div className="pform">
+          {!conn && guide && c.provider && (
+            <div className="signin">
+              {ready && !editApp ? (
+                <>
+                  <div className="rules__label">Sign in</div>
+                  <p className="rules__help">
+                    Your {guide.name} OAuth app is set up{siblings.length > 0 && ` (shared with ${siblings.join(" and ")})`}.{" "}
+                    <button type="button" className="link-btn" onClick={() => setEditApp(true)}>
+                      Change it
+                    </button>
+                  </p>
+                  <button type="button" className="btn btn--primary" onClick={connect} disabled={!!busy}>
+                    {busy === "connect" ? "Waiting for the browser…" : `Connect ${c.name}`}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="rules__label">One-time setup: your {guide.name} OAuth app</div>
+                  <p className="rules__help">
+                    Helpy signs you in through an app you register with {guide.name} yourself, so only you hold the keys to your account.
+                    {siblings.length > 0 && ` The same app serves ${siblings.join(" and ")}.`}
+                  </p>
+                  <AppForm provider={c.provider} guide={guide} clientId={clientId} hasSecret={c.hasSecret} redirect={c.redirect ?? ""} scopes={scopes} onClientId={(id) => onApp({ clientId: id })} />
+                  {ready && (
+                    <button type="button" className="btn btn--primary" onClick={connect} disabled={!!busy}>
+                      {busy === "connect" ? "Waiting for the browser…" : `Connect ${c.name}`}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {c.token && !conn && <TokenForm info={c} />}
           <div className="crow">
             <div>
               <div className="rules__label">Agents may</div>
@@ -163,22 +223,26 @@ function ConnectorCard(props: { info: ConnectorInfo; config: ConnectorConfig; ex
               );
             })}
           </div>
-          {c.token && !conn && <TokenForm info={c} />}
-          <div className="pform__foot">
-            {conn && (
-              <>
-                {(needsReconnect || conn.problem) && c.provider && (
-                  <button type="button" className="btn btn--primary" onClick={connect} disabled={!!busy}>
-                    {busy === "connect" ? "Waiting for the browser…" : "Reconnect"}
-                  </button>
-                )}
-                <button type="button" className="btn btn--danger" onClick={() => api.connectorDisconnect(c.id).catch(() => {})}>
-                  Disconnect
+          {conn && (
+            <div className="pform__foot">
+              {(needsReconnect || conn.problem) && c.provider && (
+                <button type="button" className="btn btn--primary" onClick={connect} disabled={!!busy}>
+                  {busy === "connect" ? "Waiting for the browser…" : "Reconnect"}
                 </button>
-              </>
-            )}
-            {!conn && c.provider && <span className="muted">Signing in uses your {c.provider[0].toUpperCase() + c.provider.slice(1)} OAuth app, set up below.</span>}
-          </div>
+              )}
+              <button type="button" className="btn btn--danger" onClick={() => api.connectorDisconnect(c.id).catch(() => {})}>
+                Disconnect
+              </button>
+              {guide && (
+                <button type="button" className="link-btn" onClick={() => setEditApp(!editApp)}>
+                  {editApp ? "Hide the OAuth app" : `${guide.name} OAuth app…`}
+                </button>
+              )}
+            </div>
+          )}
+          {conn && guide && c.provider && editApp && (
+            <AppForm provider={c.provider} guide={guide} clientId={clientId} hasSecret={c.hasSecret} redirect={c.redirect ?? ""} scopes={scopes} onClientId={(id) => onApp({ clientId: id })} />
+          )}
         </div>
       )}
     </div>
@@ -218,7 +282,7 @@ function TokenForm({ info: c }: { info: ConnectorInfo }) {
   );
 }
 
-// ---------- OAuth apps ----------
+// ---------- OAuth apps (the sign-in setup inside each service's card) ----------
 
 type Guide = { name: string; url: string; steps: (redirect: string, scopes: string[]) => string[]; secret: "required" | "optional" | "none" };
 
@@ -275,50 +339,6 @@ const GUIDES: Record<string, Guide> = {
     ],
   },
 };
-
-export function OAuthApps({ value, onChange }: { value: Record<string, OAuthApp | undefined>; onChange: (v: Record<string, OAuthApp | undefined>) => void }) {
-  const list = useConnectors();
-  const [open, setOpen] = useState<string | null>(null);
-  const providers = [...new Set(list.map((c) => c.provider).filter((p): p is string => !!p))];
-  return (
-    <div className="providers">
-      {providers.map((p) => {
-        const uses = list.filter((c) => c.provider === p);
-        const g = GUIDES[p];
-        if (!g) return null;
-        const clientId = value[p]?.clientId ?? "";
-        const hasSecret = uses.some((c) => c.hasSecret);
-        const ready = !!clientId && (g.secret !== "required" || hasSecret);
-        return (
-          <div key={p} className={`pcard${open === p ? " is-open" : ""}`}>
-            <div className="pcard__head">
-              <Mark text={g.name.slice(0, 2)} />
-              <div className="pcard__title">
-                <strong>{g.name}</strong>
-                <span className="muted">For {uses.map((c) => c.name).join(", ")}</span>
-              </div>
-              {ready ? <span className="pill pill--ok">Set up</span> : <span className="pill pill--idle">Not set up</span>}
-              <button type="button" className="btn btn--ghost btn--sm" aria-expanded={open === p} onClick={() => setOpen(open === p ? null : p)}>
-                {open === p ? "Done" : "Set up"}
-              </button>
-            </div>
-            {open === p && (
-              <AppForm
-                provider={p}
-                guide={g}
-                clientId={clientId}
-                hasSecret={hasSecret}
-                redirect={uses[0].redirect ?? ""}
-                scopes={[...new Set(uses.flatMap((c) => c.scopes))]}
-                onClientId={(id) => onChange({ ...value, [p]: { clientId: id } })}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function AppForm(props: { provider: string; guide: Guide; clientId: string; hasSecret: boolean; redirect: string; scopes: string[]; onClientId: (id: string) => void }) {
   const { provider, guide: g, hasSecret } = props;

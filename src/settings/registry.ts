@@ -59,7 +59,6 @@ export type Control =
   | { kind: "routing" }
   | { kind: "fallbackChain" }
   | { kind: "connectors" }
-  | { kind: "oauthApps" }
   | { kind: "mcpServers" }
   | { kind: "templates" }
   | { kind: "triggers" };
@@ -401,15 +400,15 @@ FIELDS.push(
   // Voice input
   {
     path: "connectors.builtin", section: "connectors", group: "Services", label: "Services",
-    help: "Connect a service, then choose what agents may do there. Sending and posting ask you first unless you change it.",
-    keywords: "gmail google calendar drive notion outlook microsoft slack github connect account sign in token oauth permission read only",
+    help: "Open a service to set up its sign-in (a short guide, done once per provider), connect it, and choose what agents may do there. Sending and posting ask you first unless you change it.",
+    keywords: "gmail google calendar drive notion outlook microsoft slack github connect account sign in token oauth app client id secret permission read only",
     control: { kind: "connectors" },
   },
   {
+    // Edited inside each service's card above, so it has no row of its own.
     path: "connectors.apps", section: "connectors", group: "Services", label: "Your OAuth apps",
-    help: "Signing in to Google, Microsoft, Notion, Slack or GitHub goes through an OAuth app you make once. Each has a short guide.",
-    keywords: "oauth app client id secret google cloud azure developer",
-    control: { kind: "oauthApps" },
+    help: "Set up from the service's card under Services.", keywords: "oauth app client id secret google cloud azure developer",
+    control: { kind: "connectors" }, when: () => false,
   },
   {
     path: "connectors.mcp", section: "connectors", group: "MCP servers", label: "MCP servers",
