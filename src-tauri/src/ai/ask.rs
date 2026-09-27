@@ -348,7 +348,8 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
              screen (\"how do I…\", \"where is…\", \"show me how…\"), look at the screen, then guide them with \
              show_step, one step at a time, instead of only describing the steps. Point at exactly what to click. \
              To explain something on screen (a diagram, a chart, a layout), draw lines and shapes over it with \
-             show_step, one idea per step. After the last step, check the new screenshot and reply with one short sentence. Don't guide them \
+             show_step, one idea per step, and send the whole explanation in one show_step call (the later steps in \
+             `then`) so it plays straight through. After the last step, check the new screenshot and reply with one short sentence. Don't guide them \
              when they ask you to do something for them."
                 .to_string()
         }
@@ -828,24 +829,49 @@ impl Turn<'_> {
         let Some(meta) = *self.app.state::<AskState>().screen.lock().unwrap() else {
             return error("Look at the screen before showing a step.".into());
         };
-        let mut step = match step::validate(input, meta.image_width, meta.image_height) {
+        let mut flow = match step::validate_all(input, meta.image_width, meta.image_height) {
             Ok(s) => s,
             Err(m) => return error(m),
         };
-        if self.settings.guidance.snap_to_controls {
-            step = guide::snap::snap(step, meta).await;
+        // Steps past the limit are dropped; the model hears it's reached.
+        flow.truncate((max - *steps) as usize);
+        let playing = flow.len() > 1;
+        let first = *steps + 1;
+        let last = *steps + flow.len() as u32;
+        let mut end = guide::StepEnd::Done;
+        for mut step in flow {
+            if self.settings.guidance.snap_to_controls {
+                step = guide::snap::snap(step, meta).await;
+            }
+            *steps += 1;
+            // A playing explanation knows exactly how many steps it has.
+            if playing {
+                step.total = Some(last);
+            }
+            self.send(AskEvent::Step {
+                number: *steps,
+                total: step.total.map(|t| t.max(*steps)),
+                instruction: step.instruction.clone(),
+            });
+            end = guide::show(self.app, &self.settings, *steps, &step, meta, playing, &self.cancel)
+                .await;
+            if !matches!(end, guide::StepEnd::Done) {
+                break;
+            }
         }
-        *steps += 1;
-        self.send(AskEvent::Step {
-            number: *steps,
-            total: step.total.map(|t| t.max(*steps)),
-            instruction: step.instruction.clone(),
-        });
-        let done = match guide::show(self.app, &self.settings, *steps, &step, meta, &self.cancel)
-            .await
-        {
+        let done = match end {
             guide::StepEnd::Stopped => {
                 return Err(ProviderError::new(ErrorKind::Cancelled, "Stopped"))
+            }
+            guide::StepEnd::Done if playing => {
+                // Nothing on screen changed, so there's no need to look again.
+                return Ok((
+                    vec![Part::Text(format!(
+                        "The user watched steps {first} to {last}. Finish with one short sentence, \
+                         or answer if they ask something"
+                    ))],
+                    false,
+                ));
             }
             guide::StepEnd::Done => format!("The user did step {steps}"),
             guide::StepEnd::Stray => format!(

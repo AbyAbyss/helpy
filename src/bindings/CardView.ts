@@ -20,4 +20,12 @@ confirming: boolean,
 /**
  * Why Helpy's own click didn't happen.
  */
-problem: string | null, };
+problem: string | null, 
+/**
+ * Part of an explanation: moves on by itself once it's been said.
+ */
+playing: boolean, 
+/**
+ * The user paused the explanation on this step.
+ */
+paused: boolean, };

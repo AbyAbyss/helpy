@@ -2,7 +2,8 @@
 //! (the only part the user can click) and waits until the user has done the
 //! step, either by clicking near the target or by pressing Next. A click
 //! elsewhere or a spoken reply also ends the wait, so the model can re-point
-//! or wrap up.
+//! or wrap up. Steps of an explanation play on their own instead: each ends
+//! once it has been said, unless the user pauses.
 
 pub mod snap;
 pub mod step;
@@ -36,6 +37,8 @@ const SETTLE: Duration = Duration::from_millis(700);
 /// Clicks away from the target this soon after a step appears don't count;
 /// the user may still be reading it.
 const STRAY_GRACE: Duration = Duration::from_secs(2);
+/// A playing step's gap after its speech ends, before the next one.
+const BEAT: Duration = Duration::from_millis(700);
 
 /// The marks one overlay should draw. Every overlay gets the event and keeps
 /// only what is addressed to it.
@@ -64,6 +67,10 @@ pub struct CardView {
     pub confirming: bool,
     /// Why Helpy's own click didn't happen.
     pub problem: Option<String>,
+    /// Part of an explanation: moves on by itself once it's been said.
+    pub playing: bool,
+    /// The user paused the explanation on this step.
+    pub paused: bool,
 }
 
 enum Command {
@@ -74,6 +81,7 @@ enum Command {
     DoIt,
     Confirm,
     Back,
+    Pause,
 }
 
 #[derive(Default)]
@@ -324,6 +332,13 @@ fn say(app: &AppHandle, s: &Settings, text: &str) {
     }
 }
 
+/// How long a playing step stays up when it isn't read aloud: time to read
+/// the instruction.
+fn reading_time(text: &str) -> Duration {
+    let words = text.split_whitespace().count() as u64;
+    Duration::from_millis((1500 + words * 300).min(8000))
+}
+
 /// How a step's wait ended.
 pub enum StepEnd {
     /// The user did the step (clicked the target, Next, or Do it).
@@ -337,13 +352,15 @@ pub enum StepEnd {
 }
 
 /// Shows one step and waits until the user has done it, clicked elsewhere,
-/// replied by voice, or stopped the walkthrough.
+/// replied by voice, or stopped the walkthrough. A `playing` step also ends
+/// on its own once it has been said (or read), unless paused.
 pub async fn show(
     app: &AppHandle,
     s: &Settings,
     number: u32,
     step: &Step,
     meta: CaptureMeta,
+    playing: bool,
     cancel: &CancellationToken,
 ) -> StepEnd {
     begin(app);
@@ -370,6 +387,8 @@ pub async fn show(
             can_do_it: s.guidance.do_it_for_me && click_at.is_some(),
             confirming: false,
             problem: None,
+            playing,
+            paused: false,
         },
     );
     let update_card = |f: &dyn Fn(&mut CardView)| {
@@ -402,6 +421,14 @@ pub async fn show(
     // After a click the app needs a moment before the next screenshot;
     // after Next or a spoken reply the screen has already settled.
     let mut settle = true;
+    let speaker = &app.state::<crate::voice::VoiceState>().speaker;
+    let voiced = s.voice_output.voice_guidance;
+    let mut paused = false;
+    // When a playing step can move on: after its reading time, or once its
+    // speech has been quiet for a beat.
+    let mut due = tokio::time::Instant::now() + reading_time(&step.instruction);
+    let mut quiet_since: Option<tokio::time::Instant> = None;
+    let mut tick = tokio::time::interval(Duration::from_millis(100));
 
     let end = loop {
         tokio::select! {
@@ -409,6 +436,21 @@ pub async fn show(
             _ = &mut fade_after, if !faded => {
                 faded = true;
                 emit_marks(app, &label, Vec::new());
+            }
+            _ = tick.tick(), if playing && !paused => {
+                let now = tokio::time::Instant::now();
+                let finished = if voiced {
+                    if speaker.is_speaking() {
+                        quiet_since = None;
+                    }
+                    now - *quiet_since.get_or_insert(now) >= BEAT
+                } else {
+                    now >= due
+                };
+                if finished {
+                    settle = false;
+                    break StepEnd::Done;
+                }
             }
             cmd = rx.recv() => match cmd {
                 None | Some(Command::Next) => {
@@ -422,7 +464,23 @@ pub async fn show(
                 Some(Command::Repeat) => {
                     draw();
                     say(app, s, &step::speech(step));
+                    due = tokio::time::Instant::now() + reading_time(&step.instruction);
+                    quiet_since = None;
                 }
+                Some(Command::Pause) if playing => {
+                    paused = !paused;
+                    if paused {
+                        speaker.stop();
+                    } else {
+                        // Carry on from the start of this step.
+                        draw();
+                        say(app, s, &step::speech(step));
+                        due = tokio::time::Instant::now() + reading_time(&step.instruction);
+                        quiet_since = None;
+                    }
+                    update_card(&|c| c.paused = paused);
+                }
+                Some(Command::Pause) => {}
                 Some(Command::DoIt) if s.guidance.do_it_for_me => {
                     let (Some((x, y)), Some((_, m))) = (click_at, &overlay) else { continue };
                     // Exactly where the click will land, on top of the step's marks.
@@ -456,7 +514,8 @@ pub async fn show(
                 }
                 Some(Command::DoIt | Command::Confirm) => {}
                 Some(Command::Click(x, y)) => {
-                    if on_card(app, x, y) {
+                    // An explanation has nothing to click; clicks don't end it.
+                    if playing || on_card(app, x, y) {
                         continue;
                     }
                     if step::hit(&targets, x, y, margin) {
@@ -478,7 +537,7 @@ pub async fn show(
         StepEnd::Said(_) => "voice reply",
         StepEnd::Stopped => "stopped",
     });
-    if !matches!(end, StepEnd::Stopped) {
+    if !matches!(end, StepEnd::Stopped) && !(playing && matches!(end, StepEnd::Done)) {
         // Clone first: show_card_view takes the same lock.
         let card = state.card.lock().unwrap().clone();
         if let Some(mut card) = card {
@@ -565,8 +624,8 @@ fn on_card(app: &AppHandle, x: f64, y: f64) -> bool {
         && y < p.y as f64 + size.height as f64
 }
 
-/// The step card's buttons: "next", "repeat", "stop", and for Do it
-/// "doIt", "confirm" and "back".
+/// The step card's buttons: "next", "repeat", "stop", "pause" while an
+/// explanation plays, and for Do it "doIt", "confirm" and "back".
 #[tauri::command]
 pub fn guide_action(app: AppHandle, action: String) {
     let state = app.state::<GuideState>();
@@ -581,6 +640,7 @@ pub fn guide_action(app: AppHandle, action: String) {
         "doIt" => send(Command::DoIt),
         "confirm" => send(Command::Confirm),
         "back" => send(Command::Back),
+        "pause" => send(Command::Pause),
         "stop" => crate::ai::ask::cancel(&app),
         _ => {}
     }

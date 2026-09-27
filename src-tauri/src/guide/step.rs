@@ -140,53 +140,72 @@ pub fn tool() -> ToolDef {
             exact place to click or look, or draw lines and shapes over what's on screen to explain it, with a \
             short instruction. Coordinates are pixels in the most recent \
             screenshot. The tool returns once the user has done the step, with a new screenshot, so you can \
-            check the result and show the next step. Use it when the user asks where something is or how to \
-            do something themselves in the app in front of them, not when they ask you to do it for them."
+            check the result and show the next step. When you're explaining something the user only watches \
+            (nothing for them to click), give every step at once: the first here and the rest in `then`; they \
+            play one after another without waiting for the user. Use it when the user asks where something is \
+            or how to do something themselves in the app in front of them, not when they ask you to do it for them."
             .into(),
         schema: schema(),
     }
 }
 
 fn schema() -> Value {
-    let label = json!({ "type": "string", "description": "A few words shown next to the mark." });
+    let instruction = json!({ "type": "string", "description": "One short sentence telling the user what to do." });
+    let actions = actions_schema();
     json!({
         "type": "object",
         "properties": {
-            "instruction": { "type": "string", "description": "One short sentence telling the user what to do." },
+            "instruction": instruction,
             "step": { "type": "integer", "description": "This step's number, starting at 1." },
             "total": { "type": "integer", "description": "Your best estimate of the number of steps." },
-            "actions": {
+            "actions": actions,
+            "then": {
                 "type": "array",
-                "maxItems": MAX_ACTIONS,
                 "items": {
                     "type": "object",
-                    "properties": {
-                        "type": { "type": "string", "enum": ["highlight", "point", "arrow", "line", "speak"] },
-                        "x": { "type": "number" }, "y": { "type": "number" },
-                        "width": { "type": "number" }, "height": { "type": "number" },
-                        "fromX": { "type": "number" }, "fromY": { "type": "number" },
-                        "toX": { "type": "number" }, "toY": { "type": "number" },
-                        "points": {
-                            "type": "array",
-                            "maxItems": MAX_POINTS,
-                            "items": { "type": "array", "items": { "type": "number" } },
-                            "description": "For line: [[x, y], ...], at least 2 points."
-                        },
-                        "closed": { "type": "boolean", "description": "For line: join the last point to the first, making a shape." },
-                        "curved": { "type": "boolean", "description": "For line: a smooth curve through the points." },
-                        "label": label,
-                        "text": { "type": "string", "description": "For speak: what to say aloud." }
-                    },
-                    "required": ["type"]
+                    "properties": { "instruction": instruction, "actions": actions },
+                    "required": ["instruction", "actions"]
                 },
-                "description": "highlight: a box (x, y = top-left corner, width, height) around a control. \
-                    point: a pointer at x, y. arrow: from fromX, fromY to toX, toY. line: a line through points, \
-                    closed for a triangle, square or other shape, curved for a curve; use lines to trace, \
-                    underline or build on what's on screen (e.g. the sides of a triangle, a square on one side). \
-                    Lines draw one after another in order. speak: say text aloud."
+                "description": "Only for an explanation the user watches without clicking: the steps after \
+                    this one, on the same screen. Each plays when the one before has been said; the tool \
+                    returns after the last. Leave it out when the user has to do something between steps."
             }
         },
         "required": ["instruction", "actions"]
+    })
+}
+
+fn actions_schema() -> Value {
+    let label = json!({ "type": "string", "description": "A few words shown next to the mark." });
+    json!({
+        "type": "array",
+        "maxItems": MAX_ACTIONS,
+        "items": {
+            "type": "object",
+            "properties": {
+                "type": { "type": "string", "enum": ["highlight", "point", "arrow", "line", "speak"] },
+                "x": { "type": "number" }, "y": { "type": "number" },
+                "width": { "type": "number" }, "height": { "type": "number" },
+                "fromX": { "type": "number" }, "fromY": { "type": "number" },
+                "toX": { "type": "number" }, "toY": { "type": "number" },
+                "points": {
+                    "type": "array",
+                    "maxItems": MAX_POINTS,
+                    "items": { "type": "array", "items": { "type": "number" } },
+                    "description": "For line: [[x, y], ...], at least 2 points."
+                },
+                "closed": { "type": "boolean", "description": "For line: join the last point to the first, making a shape." },
+                "curved": { "type": "boolean", "description": "For line: a smooth curve through the points." },
+                "label": label,
+                "text": { "type": "string", "description": "For speak: what to say aloud." }
+            },
+            "required": ["type"]
+        },
+        "description": "highlight: a box (x, y = top-left corner, width, height) around a control. \
+            point: a pointer at x, y. arrow: from fromX, fromY to toX, toY. line: a line through points, \
+            closed for a triangle, square or other shape, curved for a curve; use lines to trace, \
+            underline or build on what's on screen (e.g. the sides of a triangle, a square on one side). \
+            Lines draw one after another in order. speak: say text aloud."
     })
 }
 
@@ -200,7 +219,9 @@ pub fn json_instructions() -> String {
      {\"type\": \"point\", \"x\", \"y\", \"label\"}, {\"type\": \"arrow\", \"fromX\", \"fromY\", \"toX\", \"toY\", \"label\"}, \
      {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape; use lines to trace or build on what's on screen), \
      {\"type\": \"speak\", \"text\"}. Coordinates are pixels in the latest screenshot. After the user does the \
-     step you get a new screenshot; reply with the next step the same way, or with normal text when done."
+     step you get a new screenshot; reply with the next step the same way, or with normal text when done. \
+     To explain something the user only watches (nothing to click), give every step at once: add \
+     \"then\": [{\"instruction\", \"actions\"}, ...] to the step, and they play one after another."
         .into()
 }
 
@@ -335,6 +356,23 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
         total: s.total.filter(|t| (1..=100).contains(t)),
         actions,
     })
+}
+
+/// A step and the steps in its `then`, which play one after another without
+/// waiting for the user. An error in any of them rejects them all.
+pub fn validate_all(input: &Value, width: u32, height: u32) -> Result<Vec<Step>, String> {
+    let mut steps = vec![validate(input, width, height)?];
+    let then = match input.get("then") {
+        None | Some(Value::Null) => return Ok(steps),
+        Some(Value::Array(then)) => then,
+        Some(_) => return Err("`then` must be a list of steps.".into()),
+    };
+    for (i, next) in then.iter().enumerate() {
+        let step = validate(next, width, height)
+            .map_err(|e| format!("Step {} in `then`: {e}", i + 1))?;
+        steps.push(step);
+    }
+    Ok(steps)
 }
 
 fn raw(points: &[(f64, f64)]) -> String {
@@ -748,6 +786,34 @@ mod tests {
             { "type": "line", "points": [[1, 1], [5, 3000]] }
         ] }))
         .contains("1568x882"));
+    }
+
+    #[test]
+    fn an_explanation_arrives_as_one_step_with_the_rest_in_then() {
+        let steps = validate_all(
+            &json!({
+                "instruction": "This is side a.",
+                "actions": [{ "type": "line", "points": [[10, 10], [10, 100]] }],
+                "then": [
+                    { "instruction": "This is side b.", "actions": [] },
+                    { "instruction": "And c.", "actions": [{ "type": "point", "x": 50, "y": 50 }] }
+                ]
+            }),
+            1568,
+            882,
+        )
+        .unwrap();
+        let said: Vec<_> = steps.iter().map(|s| s.instruction.as_str()).collect();
+        assert_eq!(said, ["This is side a.", "This is side b.", "And c."]);
+
+        let alone = json!({ "instruction": "Click Save.", "actions": [] });
+        assert_eq!(validate_all(&alone, 1568, 882).unwrap().len(), 1);
+
+        let bad = json!({
+            "instruction": "a", "actions": [],
+            "then": [{ "instruction": "b", "actions": [{ "type": "point", "x": 9000, "y": 1 }] }]
+        });
+        assert!(validate_all(&bad, 1568, 882).unwrap_err().starts_with("Step 1 in `then`"));
     }
 
     #[test]

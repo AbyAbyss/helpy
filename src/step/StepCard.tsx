@@ -71,6 +71,8 @@ export function StepCard() {
               <span className="spinner" aria-hidden="true" />
               Checking your screen…
             </p>
+          ) : card.playing ? (
+            <p className="card__hint">{card.paused ? "Paused. Press Play to carry on." : "Plays on by itself. Pause to stay on this step."}</p>
           ) : card.confirming ? (
             <p className="card__hint card__hint--ask">Helpy will click the marked spot once. Is that the right place?</p>
           ) : (
@@ -108,6 +110,12 @@ export function StepCard() {
                 <RepeatIcon />
                 {!card.canDoIt && "Repeat"}
               </button>
+              {card.playing && (
+                <button type="button" className="btn" onClick={() => api.guideAction("pause")}>
+                  {card.paused ? <PlayIcon /> : <PauseIcon />}
+                  {card.paused ? "Play" : "Pause"}
+                </button>
+              )}
               {card.canDoIt && (
                 <button type="button" className="btn" disabled={card.checking} onClick={() => api.guideAction("doIt")}>
                   <ClickIcon />
@@ -158,6 +166,22 @@ function ClickIcon() {
   return (
     <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
       <path d="M8 3.5v2M3.5 8h2M4.8 4.8l1.4 1.4M9 9l7.5 3-3.2 1.3L12 16.5z" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+      <path d="M7 4.5v11M13 4.5v11" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+      <path d="M6.5 4.5v11l9-5.5z" />
     </svg>
   );
 }
