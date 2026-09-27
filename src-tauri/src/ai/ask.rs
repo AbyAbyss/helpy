@@ -347,7 +347,8 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
             "\n\nWhen the user asks where something is, or how to do something themselves in an app on their \
              screen (\"how do I…\", \"where is…\", \"show me how…\"), look at the screen, then guide them with \
              show_step, one step at a time, instead of only describing the steps. Point at exactly what to click. \
-             After the last step, check the new screenshot and reply with one short sentence. Don't guide them \
+             To explain something on screen (a diagram, a chart, a layout), draw lines and shapes over it with \
+             show_step, one idea per step. After the last step, check the new screenshot and reply with one short sentence. Don't guide them \
              when they ask you to do something for them."
                 .to_string()
         }
@@ -995,7 +996,7 @@ impl Turn<'_> {
                                 Ok(plan) => {
                                     started_agents = true;
                                     if plan.started && self.feed.is_some() {
-                                        crate::windows::fly_pill_to_dock(self.app);
+                                        crate::windows::pill_after_start(self.app);
                                     }
                                     (
                                     vec![Part::Text(format!(

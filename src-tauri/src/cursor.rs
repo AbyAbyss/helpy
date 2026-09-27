@@ -121,6 +121,11 @@ fn run(app: AppHandle) {
     }
 }
 
+/// Whether the buddy is showing next to the cursor right now.
+pub fn buddy_shown(app: &AppHandle) -> bool {
+    app.state::<CursorShared>().visible.load(Ordering::Relaxed)
+}
+
 /// Called by an overlay when it loads. Returns whether the buddy should be
 /// visible and schedules a fresh cursor frame.
 #[tauri::command]

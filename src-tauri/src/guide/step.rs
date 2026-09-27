@@ -12,6 +12,8 @@ pub const SHOW_STEP: &str = "show_step";
 const MAX_ACTIONS: usize = 6;
 const MAX_INSTRUCTION: usize = 300;
 const MAX_LABEL: usize = 60;
+/// Corners in one line or shape.
+const MAX_POINTS: usize = 24;
 /// How far outside the screenshot a coordinate may be before it's rejected
 /// instead of pulled back to the edge, as a share of the image size.
 const EDGE_SLACK: f64 = 0.03;
@@ -43,6 +45,17 @@ pub enum Action {
         from_y: f64,
         to_x: f64,
         to_y: f64,
+        #[serde(default)]
+        label: Option<String>,
+    },
+    /// A line through points: open, or closed into a shape, straight or
+    /// smoothed into a curve.
+    Line {
+        points: Vec<[f64; 2]>,
+        #[serde(default)]
+        closed: bool,
+        #[serde(default)]
+        curved: bool,
         #[serde(default)]
         label: Option<String>,
     },
@@ -104,6 +117,13 @@ pub enum Mark {
         label: Option<String>,
         raw: String,
     },
+    Line {
+        points: Vec<[f64; 2]>,
+        closed: bool,
+        curved: bool,
+        label: Option<String>,
+        raw: String,
+    },
 }
 
 /// A place the user is expected to click, in global physical pixels.
@@ -117,7 +137,8 @@ pub fn tool() -> ToolDef {
     ToolDef {
         name: SHOW_STEP.into(),
         description: "Show the user one step on their screen: highlight, point at or draw an arrow to the \
-            exact place to click or look, with a short instruction. Coordinates are pixels in the most recent \
+            exact place to click or look, or draw lines and shapes over what's on screen to explain it, with a \
+            short instruction. Coordinates are pixels in the most recent \
             screenshot. The tool returns once the user has done the step, with a new screenshot, so you can \
             check the result and show the next step. Use it when the user asks where something is or how to \
             do something themselves in the app in front of them, not when they ask you to do it for them."
@@ -140,18 +161,29 @@ fn schema() -> Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "type": { "type": "string", "enum": ["highlight", "point", "arrow", "speak"] },
+                        "type": { "type": "string", "enum": ["highlight", "point", "arrow", "line", "speak"] },
                         "x": { "type": "number" }, "y": { "type": "number" },
                         "width": { "type": "number" }, "height": { "type": "number" },
                         "fromX": { "type": "number" }, "fromY": { "type": "number" },
                         "toX": { "type": "number" }, "toY": { "type": "number" },
+                        "points": {
+                            "type": "array",
+                            "maxItems": MAX_POINTS,
+                            "items": { "type": "array", "items": { "type": "number" } },
+                            "description": "For line: [[x, y], ...], at least 2 points."
+                        },
+                        "closed": { "type": "boolean", "description": "For line: join the last point to the first, making a shape." },
+                        "curved": { "type": "boolean", "description": "For line: a smooth curve through the points." },
                         "label": label,
                         "text": { "type": "string", "description": "For speak: what to say aloud." }
                     },
                     "required": ["type"]
                 },
                 "description": "highlight: a box (x, y = top-left corner, width, height) around a control. \
-                    point: a pointer at x, y. arrow: from fromX, fromY to toX, toY. speak: say text aloud."
+                    point: a pointer at x, y. arrow: from fromX, fromY to toX, toY. line: a line through points, \
+                    closed for a triangle, square or other shape, curved for a curve; use lines to trace, \
+                    underline or build on what's on screen (e.g. the sides of a triangle, a square on one side). \
+                    Lines draw one after another in order. speak: say text aloud."
             }
         },
         "required": ["instruction", "actions"]
@@ -166,6 +198,7 @@ pub fn json_instructions() -> String {
      {\"step\": {\"instruction\": \"...\", \"step\": 1, \"total\": 3, \"actions\": [...]}}. \
      Actions: {\"type\": \"highlight\", \"x\", \"y\", \"width\", \"height\", \"label\"} (x, y = top-left corner), \
      {\"type\": \"point\", \"x\", \"y\", \"label\"}, {\"type\": \"arrow\", \"fromX\", \"fromY\", \"toX\", \"toY\", \"label\"}, \
+     {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape; use lines to trace or build on what's on screen), \
      {\"type\": \"speak\", \"text\"}. Coordinates are pixels in the latest screenshot. After the user does the \
      step you get a new screenshot; reply with the next step the same way, or with normal text when done."
         .into()
@@ -268,6 +301,30 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                 to_y: fit(to_y, h, "toY")?,
                 label: label(l),
             },
+            Action::Line {
+                points,
+                closed,
+                curved,
+                label: l,
+            } => {
+                let least = if closed { 3 } else { 2 };
+                if points.len() < least || points.len() > MAX_POINTS {
+                    return Err(format!(
+                        "A {} needs {least} to {MAX_POINTS} points.",
+                        if closed { "closed line" } else { "line" }
+                    ));
+                }
+                let points = points
+                    .into_iter()
+                    .map(|[x, y]| Ok([fit(x, w, "x")?, fit(y, h, "y")?]))
+                    .collect::<Result<Vec<_>, String>>()?;
+                Action::Line {
+                    points,
+                    closed,
+                    curved,
+                    label: label(l),
+                }
+            }
             Action::Speak { text } => Action::Speak {
                 text: clean(&text, MAX_INSTRUCTION),
             },
@@ -340,6 +397,27 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     raw: raw(&[(from_x, from_y), (to_x, to_y)]),
                 })
             }
+            Action::Line {
+                points,
+                closed,
+                curved,
+                label,
+            } => {
+                let pairs: Vec<(f64, f64)> = points.iter().map(|&[x, y]| (x, y)).collect();
+                Some(Mark::Line {
+                    points: pairs
+                        .iter()
+                        .map(|&(x, y)| {
+                            let (ox, oy) = meta.to_overlay(x, y);
+                            [ox, oy]
+                        })
+                        .collect(),
+                    closed,
+                    curved,
+                    label,
+                    raw: raw(&pairs),
+                })
+            }
             Action::Speak { .. } => None,
         })
         .collect()
@@ -392,7 +470,8 @@ pub fn targets(step: &Step, meta: CaptureMeta) -> Vec<Target> {
                 let (gx, gy) = meta.to_global_physical(to_x, to_y);
                 Some(Target::Spot { x: gx, y: gy })
             }
-            Action::Speak { .. } => None,
+            // Lines explain; they aren't places to click.
+            Action::Line { .. } | Action::Speak { .. } => None,
         })
         .collect()
 }
@@ -614,6 +693,61 @@ mod tests {
         assert!(may_be_json("  {\"st"));
         assert!(may_be_json("``"));
         assert!(!may_be_json("Open"));
+    }
+
+    #[test]
+    fn lines_map_to_overlay_pixels_and_are_not_click_targets() {
+        let s = validate(
+            &json!({ "instruction": "x", "actions": [
+                { "type": "line", "points": [[0, 0], [784, 441], [1568, 882]], "closed": true, "label": "Leg A" },
+                { "type": "line", "points": [[10, 10], [20, 20]], "curved": true }
+            ] }),
+            1568,
+            882,
+        )
+        .unwrap();
+        assert!(targets(&s, meta()).is_empty());
+        let m = marks(&s, meta());
+        let Mark::Line {
+            points,
+            closed,
+            curved,
+            label,
+            raw,
+        } = &m[0]
+        else {
+            panic!()
+        };
+        assert!(*closed && !*curved);
+        assert_eq!(label.as_deref(), Some("Leg A"));
+        assert!((points[1][0] - 960.0).abs() < 0.01 && (points[1][1] - 540.0).abs() < 0.01);
+        assert!((points[2][0] - 1920.0).abs() < 0.01);
+        assert_eq!(raw, "0,0 → 784,441 → 1568,882");
+        assert!(matches!(
+            &m[1],
+            Mark::Line {
+                curved: true,
+                closed: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_lines_with_too_few_points_or_off_screen_corners() {
+        let bad = |v: Value| validate(&v, 1568, 882).unwrap_err();
+        assert!(bad(json!({ "instruction": "x", "actions": [
+            { "type": "line", "points": [[1, 1]] }
+        ] }))
+        .contains("2 to"));
+        assert!(bad(json!({ "instruction": "x", "actions": [
+            { "type": "line", "points": [[1, 1], [5, 5]], "closed": true }
+        ] }))
+        .contains("3 to"));
+        assert!(bad(json!({ "instruction": "x", "actions": [
+            { "type": "line", "points": [[1, 1], [5, 3000]] }
+        ] }))
+        .contains("1568x882"));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Guidance } from "../bindings/Guidance";
 import type { Mark } from "../bindings/Mark";
-import { arrow, bubbleBelow, dimPath, HIGHLIGHT_PAD, inkFor, labelAbove } from "./geometry";
+import { arrow, bubbleBelow, dimPath, HIGHLIGHT_PAD, inkFor, labelAbove, lineLabelAt, linePath } from "./geometry";
 import "./annotations.css";
 
 type Props = {
@@ -10,13 +10,24 @@ type Props = {
   width: number;
   height: number;
   look: Guidance;
+  /**
+   * When each mark starts drawing and for how long, ms, so the drawing keeps
+   * pace with the buddy touring it. Without it every mark draws at once.
+   */
+  timing?: { draw: number; dur: number }[];
 };
+
+function timed(timing: Props["timing"], i: number): CSSProperties | undefined {
+  const t = timing?.[i];
+  // The same easing the buddy moves with, so its tip stays on the stroke.
+  return t && ({ "--d0": `${t.draw}ms`, "--dd": `${t.dur}ms`, "--ease": "cubic-bezier(0.42, 0, 0.58, 1)" } as CSSProperties);
+}
 
 /**
  * Highlights, pointers and arrows for one guidance step. Purely visual: it
  * never takes pointer events, so the app underneath stays usable.
  */
-export function Annotations({ marks, width, height, look }: Props) {
+export function Annotations({ marks, width, height, look, timing }: Props) {
   const color = look.highlightColor;
   const style = {
     "--mark": color,
@@ -41,7 +52,7 @@ export function Annotations({ marks, width, height, look }: Props) {
             const h = m.height + HIGHLIGHT_PAD * 2;
             const r = Math.min(10, w / 2, h / 2);
             return (
-              <g key={i} className="ann__stroke">
+              <g key={i} className="ann__stroke" style={timed(timing, i)}>
                 <rect className="ann__pulse" x={x} y={y} width={w} height={h} rx={r} />
                 <rect className="ann__box" x={x} y={y} width={w} height={h} rx={r} pathLength={1} />
               </g>
@@ -50,14 +61,26 @@ export function Annotations({ marks, width, height, look }: Props) {
           if (m.type === "arrow") {
             const a = arrow({ x: m.fromX, y: m.fromY }, { x: m.toX, y: m.toY }, look.arrowStyle === "curved", look.highlightThickness);
             return (
-              <g key={i} className="ann__stroke">
+              <g key={i} className="ann__stroke" style={timed(timing, i)}>
                 <path className="ann__shaft" d={a.shaft} pathLength={1} />
                 <polygon className="ann__head" points={a.head.map((p) => `${p.x},${p.y}`).join(" ")} />
               </g>
             );
           }
+          if (m.type === "line") {
+            const d = linePath(
+              m.points.map(([x, y]) => ({ x, y })),
+              m.closed,
+              m.curved,
+            );
+            return (
+              <g key={i} className="ann__stroke" style={timed(timing, i)}>
+                <path className="ann__line" d={d} pathLength={1} />
+              </g>
+            );
+          }
           return (
-            <g key={i}>
+            <g key={i} className="ann__appear" style={timed(timing, i)}>
               <circle className="ann__ring" cx={m.x} cy={m.y} r={14} />
               <circle className="ann__dot" cx={m.x} cy={m.y} r={4.5} />
             </g>
@@ -66,7 +89,9 @@ export function Annotations({ marks, width, height, look }: Props) {
       </svg>
 
       {marks.map((m, i) => (
-        <MarkLabels key={i} mark={m} debug={look.showCoordinates} />
+        <div key={i} style={timed(timing, i)}>
+          <MarkLabels mark={m} debug={look.showCoordinates} />
+        </div>
       ))}
     </div>
   );
@@ -89,6 +114,21 @@ function MarkLabels({ mark: m, debug }: { mark: Mark; debug: boolean }) {
     const left = m.toX >= m.fromX;
     return (
       <div className={`ann__tag ann__tag--mid ${left ? "ann__tag--end" : ""}`} style={{ left: m.fromX + (left ? -10 : 10), top: m.fromY }}>
+        {m.label && <span className="ann__label">{m.label}</span>}
+        {raw}
+      </div>
+    );
+  }
+  if (m.type === "line") {
+    if (!m.label && !raw) return null;
+    const at = lineLabelAt(
+      m.points.map(([x, y]) => ({ x, y })),
+      m.closed,
+      m.curved,
+    );
+    // Inside a shape; just above the middle of an open line.
+    return (
+      <div className={`ann__tag ${m.closed ? "ann__tag--centre" : "ann__tag--over"}`} style={{ left: at.x, top: at.y }}>
         {m.label && <span className="ann__label">{m.label}</span>}
         {raw}
       </div>

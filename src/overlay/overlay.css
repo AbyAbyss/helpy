@@ -18,3 +18,47 @@ body,
   will-change: transform;
   transition: opacity 180ms ease;
 }
+
+/* Stepping between its spot beside the cursor and a mark it's touring. */
+.overlay-buddy__offset {
+  transition: transform 280ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+/* A copy splits off: the buddy flashes the working colour for a moment. */
+.overlay-buddy__split {
+  animation: buddy-split 520ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+@keyframes buddy-split {
+  0% {
+    transform: scale(1);
+    filter: none;
+  }
+  30% {
+    transform: scale(1.22);
+    filter: drop-shadow(0 0 10px #5b93ff);
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
+
+/* The copy that flies to the dock: the dock's working colour, glowing. */
+.overlay-handoff {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform, opacity;
+  --buddy-body: #5b93ff;
+  filter: drop-shadow(0 0 8px #5b93ff) drop-shadow(0 0 18px rgba(91, 147, 255, 0.55));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-buddy__offset {
+    transition: none;
+  }
+  .overlay-buddy__split {
+    animation: none;
+  }
+}

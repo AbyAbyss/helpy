@@ -1,6 +1,8 @@
 //! Helpy's own app windows (not the overlays).
 
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize};
+use ts_rs::TS;
 
 use crate::overlay::Overlays;
 
@@ -24,6 +26,24 @@ pub const AGENTS_FOCUS_EVENT: &str = "agents://focus";
 pub const INBOX: &str = "inbox";
 /// Space between the dock and the screen edge, logical pixels.
 const DOCK_MARGIN: f64 = 10.0;
+/// From the bottom of the dock to the middle of its last chip (padding plus
+/// half a chip), logical pixels.
+const LAST_CHIP_INSET: f64 = 44.0;
+/// The dock's size with one chip, logical pixels.
+const ONE_CHIP_DOCK: (f64, f64) = (84.0, 88.0);
+pub const BUDDY_HANDOFF_EVENT: &str = "buddy://handoff";
+/// Tells the dock a chip is on its way, so it drops in when the copy lands.
+pub const DOCK_INCOMING_EVENT: &str = "dock://incoming";
+
+/// Where the buddy's copy flies when agents start, in one overlay's own
+/// logical pixels. It can be off that overlay's screen: the copy then flies
+/// off toward the monitor the dock is on.
+#[derive(Serialize, TS, Clone, Copy, Debug)]
+#[ts(export)]
+pub struct BuddyHandoff {
+    pub x: f64,
+    pub y: f64,
+}
 /// Plan card size in logical pixels (matches tauri.conf.json).
 const PLAN_SIZE: (f64, f64) = (460.0, 520.0);
 
@@ -469,6 +489,81 @@ pub fn fly_pill_to_dock(app: &AppHandle) {
         std::thread::sleep(std::time::Duration::from_millis(120));
         hide_pill(&app);
     });
+}
+
+/// Whether new agents are handed off by the buddy (it's showing and there's
+/// a dock to fly to) rather than by the voice pill.
+fn buddy_hands_off(app: &AppHandle) -> bool {
+    app.state::<crate::settings::SettingsStore>()
+        .get()
+        .agents
+        .dock
+        && crate::cursor::buddy_shown(app)
+}
+
+/// The hand-off from the buddy: a copy peels off beside the cursor and flies
+/// to the dock, where the new agent's chip drops in. Each overlay page runs
+/// the flight itself; only the one showing the buddy draws it. Call it just
+/// before the agents are created.
+pub fn buddy_to_dock(app: &AppHandle) {
+    if !buddy_hands_off(app) {
+        return;
+    }
+    let _ = app.emit_to(DOCK, DOCK_INCOMING_EVENT, ());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        // Give the dock a moment to make room for the new chip.
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let Some((tx, ty)) = last_chip_centre(&app) else {
+            return;
+        };
+        for (label, m) in app.state::<Overlays>().snapshot() {
+            let (x, y) = m.to_local_logical(tx, ty);
+            let _ = app.emit_to(label.as_str(), BUDDY_HANDOFF_EVENT, BuddyHandoff { x, y });
+        }
+    });
+}
+
+/// After agents start from a spoken request: the buddy already carries the
+/// hand-off when it's showing, so the pill just goes; otherwise the pill
+/// glides to the dock itself.
+pub fn pill_after_start(app: &AppHandle) {
+    if buddy_hands_off(app) {
+        hide_pill(app);
+    } else {
+        fly_pill_to_dock(app);
+    }
+}
+
+/// The middle of the dock's newest chip in global physical pixels: the
+/// bottom of the column, or where a first chip will appear when the dock is
+/// still hidden.
+fn last_chip_centre(app: &AppHandle) -> Option<(f64, f64)> {
+    let m = dock_monitor(app)?;
+    if let Some(dock) = app.get_webview_window(DOCK) {
+        if let (Ok(p), Ok(s), Ok(true)) =
+            (dock.outer_position(), dock.outer_size(), dock.is_visible())
+        {
+            return Some((
+                p.x as f64 + s.width as f64 / 2.0,
+                p.y as f64 + s.height as f64 - LAST_CHIP_INSET * m.scale,
+            ));
+        }
+    }
+    let left = app
+        .state::<crate::settings::SettingsStore>()
+        .get()
+        .agents
+        .dock_side
+        == crate::settings::schema::DockSide::Left;
+    let size = (ONE_CHIP_DOCK.0 * m.scale, ONE_CHIP_DOCK.1 * m.scale);
+    let (x, y) = dock_origin(
+        (m.x as f64, m.y as f64, m.width as f64, m.height as f64),
+        size,
+        DOCK_MARGIN * m.scale,
+        left,
+    );
+    Some((x + size.0 / 2.0, y + size.1 / 2.0))
 }
 
 pub fn hide_pill(app: &AppHandle) {

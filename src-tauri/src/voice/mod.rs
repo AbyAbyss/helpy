@@ -385,7 +385,7 @@ fn run_session(
     }
     if let Some(started) = crate::agents::planner::voice_reply(app, &text) {
         if started {
-            crate::windows::fly_pill_to_dock(app);
+            crate::windows::pill_after_start(app);
         } else {
             crate::windows::hide_pill(app);
         }
@@ -402,7 +402,7 @@ fn run_session(
         return match tauri::async_runtime::block_on(crate::agents::planner::plan(app, &request, None, true)) {
             Ok(plan) => {
                 if plan.started {
-                    crate::windows::fly_pill_to_dock(app);
+                    crate::windows::pill_after_start(app);
                 }
                 reply(app, plan.reply)
             }

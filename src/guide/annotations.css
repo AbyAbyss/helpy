@@ -1,4 +1,6 @@
-/* Guidance marks. --t scales every duration (1 / animation speed). */
+/* Guidance marks. --t scales every duration (1 / animation speed). When the
+   buddy tours the marks, each one gets --d0 (when it starts drawing) and
+   --dd (how long it draws), and the defaults below give way to them. */
 .ann {
   position: absolute;
   inset: 0;
@@ -31,10 +33,16 @@
 }
 
 .ann__box,
-.ann__shaft {
+.ann__shaft,
+.ann__line {
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
-  animation: ann-draw calc(var(--t) * 420ms) cubic-bezier(0.45, 0, 0.2, 1) both;
+  animation: ann-draw var(--dd, calc(var(--t) * 420ms)) var(--ease, cubic-bezier(0.45, 0, 0.2, 1)) var(--d0, 0ms) both;
+}
+
+/* A pointer stays hidden until the buddy reaches it. */
+.ann__appear {
+  animation: ann-fade 1ms linear var(--d0, 0ms) both;
 }
 
 .ann__pulse {
@@ -42,14 +50,14 @@
   opacity: 0;
   transform-box: fill-box;
   transform-origin: center;
-  animation: ann-pulse calc(var(--t) * 1800ms) ease-out calc(var(--t) * 420ms) infinite;
+  animation: ann-pulse calc(var(--t) * 1800ms) ease-out calc(var(--d0, 0ms) + var(--dd, calc(var(--t) * 420ms))) infinite;
 }
 
 .ann__head {
   fill: var(--mark);
   stroke: var(--mark);
   stroke-width: 1.5;
-  animation: ann-pop calc(var(--t) * 200ms) ease-out calc(var(--t) * 360ms) both;
+  animation: ann-pop calc(var(--t) * 200ms) ease-out calc(var(--d0, 0ms) + var(--dd, calc(var(--t) * 420ms)) * 0.86) both;
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -77,7 +85,7 @@
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  animation: ann-rise calc(var(--t) * 240ms) ease-out calc(var(--t) * 200ms) both;
+  animation: ann-rise calc(var(--t) * 240ms) ease-out calc(var(--d0, 0ms) + var(--dd, calc(var(--t) * 250ms)) * 0.8) both;
 }
 
 .ann__tag--above {
@@ -90,6 +98,14 @@
 
 .ann__tag--mid.ann__tag--end {
   transform: translate(-100%, -50%);
+}
+
+.ann__tag--centre {
+  transform: translate(-50%, -50%);
+}
+
+.ann__tag--over {
+  transform: translate(-50%, calc(-100% - 8px));
 }
 
 .ann__label {
