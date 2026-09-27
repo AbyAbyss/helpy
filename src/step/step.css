@@ -181,6 +181,7 @@ body,
 
 .card__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-top: 2px;
@@ -223,6 +224,10 @@ body,
   border-color: transparent;
   background: transparent;
   color: var(--card-ink-2);
+  padding: 0 8px;
+}
+
+.btn--icon {
   padding: 0 8px;
 }
 

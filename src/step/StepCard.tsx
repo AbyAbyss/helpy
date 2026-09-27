@@ -87,6 +87,11 @@ export function StepCard() {
               <button type="button" className="icon-btn" title={mini ? "Show the whole card" : "Make smaller"} onClick={() => setMini(!mini)}>
                 {mini ? <ExpandIcon /> : <MinimizeIcon />}
               </button>
+              {mini && (
+                <button type="button" className="icon-btn" title="Stop (Esc)" aria-label="Stop" onClick={() => api.guideAction("stop")}>
+                  <CloseIcon />
+                </button>
+              )}
             </span>
           </header>
 
@@ -136,22 +141,22 @@ export function StepCard() {
           ) : (
             <footer className="card__actions">
               <button type="button" className="btn btn--quiet" onClick={() => api.guideAction("stop")}>
-                Stop <kbd>Esc</kbd>
+                Stop {!card.playing && <kbd>Esc</kbd>}
               </button>
               <span className="card__spacer" />
               <button
                 type="button"
-                className="btn"
+                className={`btn${card.canDoIt || card.playing ? " btn--icon" : ""}`}
                 disabled={card.checking}
                 title="Repeat"
                 aria-label="Repeat"
                 onClick={() => api.guideAction("repeat")}
               >
                 <RepeatIcon />
-                {!card.canDoIt && "Repeat"}
+                {!card.canDoIt && !card.playing && "Repeat"}
               </button>
               {card.canBack && (
-                <button type="button" className="btn" title="Previous step" aria-label="Previous step" onClick={() => api.guideAction("prev")}>
+                <button type="button" className="btn btn--icon" title="Previous step" aria-label="Previous step" onClick={() => api.guideAction("prev")}>
                   <BackIcon />
                 </button>
               )}
@@ -237,6 +242,14 @@ function BackIcon() {
   return (
     <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
       <path d="M12 4.5 6.5 10l5.5 5.5" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+      <path d="m6 6 8 8m0-8-8 8" />
     </svg>
   );
 }

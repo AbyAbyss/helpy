@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import type { Guidance } from "../bindings/Guidance";
 import type { Mark } from "../bindings/Mark";
 import { arrow, bubbleBelow, dimPath, HIGHLIGHT_PAD, inkFor, labelAbove, lineLabelAt, linePath } from "./geometry";
@@ -36,10 +36,33 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
     "--t": String(1 / look.animationSpeed),
   } as CSSProperties;
   const holes = marks.flatMap((m) => (m.type === "highlight" ? [m] : []));
+  const root = useRef<HTMLDivElement>(null);
+
+  // Labels placed by different marks can land on each other; each one that
+  // would cover an earlier label or writing moves down clear of it.
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const placed: DOMRect[] = [];
+    for (const node of el.querySelectorAll<HTMLElement>(".ann__tag, .ann__bubble, .ann__write, .ann__picture")) {
+      node.style.marginTop = "";
+      let r = node.getBoundingClientRect();
+      if (r.width === 0) continue;
+      if (!node.matches(".ann__write, .ann__picture")) {
+        let shift = 0;
+        for (let hit = overlap(r, placed); hit; hit = overlap(r, placed)) {
+          shift += hit.bottom - r.top + 4;
+          node.style.marginTop = `${shift}px`;
+          r = node.getBoundingClientRect();
+        }
+      }
+      placed.push(r);
+    }
+  }, [marks]);
   const classes = ["ann", look.glow && "ann--glow", look.reduceMotion && "ann--still", `ann--${look.labelStyle}`].filter(Boolean).join(" ");
 
   return (
-    <div className={classes} style={style}>
+    <div ref={root} className={classes} style={style}>
       <svg className="ann__svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
         {look.dim > 0 && holes.length > 0 && (
           <path className="ann__dim" d={dimPath(width, height, holes)} fillRule="evenodd" style={{ fill: `rgba(8, 10, 14, ${look.dim})` }} />
@@ -79,6 +102,7 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
               </g>
             );
           }
+          if (m.type === "text" || m.type === "image") return null;
           return (
             <g key={i} className="ann__appear" style={timed(timing, i)}>
               <circle className="ann__ring" cx={m.x} cy={m.y} r={14} />
@@ -95,6 +119,11 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
       ))}
     </div>
   );
+}
+
+/** The first placed box `r` overlaps, if any. */
+function overlap(r: DOMRect, placed: DOMRect[]): DOMRect | undefined {
+  return placed.find((p) => r.left < p.right && r.right > p.left && r.top < p.bottom && r.bottom > p.top);
 }
 
 function MarkLabels({ mark: m, debug }: { mark: Mark; debug: boolean }) {
@@ -117,6 +146,23 @@ function MarkLabels({ mark: m, debug }: { mark: Mark; debug: boolean }) {
         {m.label && <span className="ann__label">{m.label}</span>}
         {raw}
       </div>
+    );
+  }
+  if (m.type === "text") {
+    return (
+      <div className="ann__write" style={{ left: m.x, top: m.y, fontSize: m.size }}>
+        <span>{m.text}</span>
+        {raw}
+      </div>
+    );
+  }
+  if (m.type === "image") {
+    return (
+      <figure className="ann__picture" style={{ left: m.x, top: m.y, width: m.width }}>
+        <img src={m.src} alt={m.caption ?? ""} />
+        {m.caption && <figcaption>{m.caption}</figcaption>}
+        {raw}
+      </figure>
     );
   }
   if (m.type === "line") {

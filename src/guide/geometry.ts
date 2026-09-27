@@ -177,3 +177,8 @@ export function dimPath(width: number, height: number, holes: { x: number; y: nu
   }
   return d;
 }
+
+/** Roughly how wide text written on the screen is, CSS pixels. */
+export function textWidth(text: string, size: number): number {
+  return Math.max(1, [...text].length) * size * 0.55;
+}

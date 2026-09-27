@@ -12,6 +12,12 @@ pub const SHOW_STEP: &str = "show_step";
 const MAX_ACTIONS: usize = 6;
 const MAX_INSTRUCTION: usize = 300;
 const MAX_LABEL: usize = 60;
+/// Characters in text written on the screen.
+const MAX_TEXT: usize = 40;
+/// Characters in a picture's search words.
+const MAX_QUERY: usize = 100;
+/// Narrowest a reference picture may be, screenshot pixels.
+const MIN_PICTURE: f64 = 80.0;
 /// Corners in one line or shape.
 const MAX_POINTS: usize = 24;
 /// How far outside the screenshot a coordinate may be before it's rejected
@@ -59,9 +65,39 @@ pub enum Action {
         #[serde(default)]
         label: Option<String>,
     },
+    /// Words, numbers or a formula written on the screen, centred on x, y.
+    Text {
+        x: f64,
+        y: f64,
+        text: String,
+        #[serde(default)]
+        size: Option<String>,
+    },
+    /// A reference picture from the web, top-left at x, y.
+    Image {
+        x: f64,
+        y: f64,
+        width: f64,
+        query: String,
+        #[serde(default)]
+        caption: Option<String>,
+        /// The picture as a data URL, once Helpy has found it.
+        #[serde(skip)]
+        src: Option<String>,
+    },
     Speak {
         text: String,
     },
+}
+
+/// Font size in CSS pixels for text written on the screen.
+fn text_size(size: Option<&str>) -> Result<f64, String> {
+    match size.unwrap_or("medium") {
+        "small" => Ok(18.0),
+        "medium" => Ok(28.0),
+        "large" => Ok(44.0),
+        other => Err(format!("Text size \"{other}\" isn't small, medium or large.")),
+    }
 }
 
 /// A step as the model sends it.
@@ -129,6 +165,23 @@ pub enum Mark {
         label: Option<String>,
         raw: String,
     },
+    Text {
+        x: f64,
+        y: f64,
+        text: String,
+        /// Font size in CSS pixels.
+        size: f64,
+        raw: String,
+    },
+    Image {
+        x: f64,
+        y: f64,
+        width: f64,
+        /// A data URL.
+        src: String,
+        caption: Option<String>,
+        raw: String,
+    },
 }
 
 /// A place the user is expected to click, in global physical pixels.
@@ -181,7 +234,7 @@ fn actions_schema() -> Value {
         "items": {
             "type": "object",
             "properties": {
-                "type": { "type": "string", "enum": ["highlight", "point", "arrow", "line", "speak"] },
+                "type": { "type": "string", "enum": ["highlight", "point", "arrow", "line", "text", "image", "speak"] },
                 "x": { "type": "number" }, "y": { "type": "number" },
                 "width": { "type": "number" }, "height": { "type": "number" },
                 "fromX": { "type": "number" }, "fromY": { "type": "number" },
@@ -195,7 +248,10 @@ fn actions_schema() -> Value {
                 "closed": { "type": "boolean", "description": "For line: join the last point to the first, making a shape." },
                 "curved": { "type": "boolean", "description": "For line: a smooth curve through the points." },
                 "label": label,
-                "text": { "type": "string", "description": "For speak: what to say aloud." }
+                "text": { "type": "string", "description": "For text: what to write (a few words, a number or a formula like a² + b² = c²). For speak: what to say aloud." },
+                "size": { "type": "string", "enum": ["small", "medium", "large"], "description": "For text: how big to write it. Default medium." },
+                "query": { "type": "string", "description": "For image: search words for the picture, e.g. \"human heart diagram\"." },
+                "caption": { "type": "string", "description": "For image: a few words shown under the picture." }
             },
             "required": ["type"]
         },
@@ -203,7 +259,12 @@ fn actions_schema() -> Value {
             point: a pointer at x, y. arrow: from fromX, fromY to toX, toY. line: a line through points, \
             closed for a triangle, square or other shape, curved for a curve; use lines to trace, \
             underline or build on what's on screen (e.g. the sides of a triangle, a square on one side). \
-            Lines draw one after another in order. speak: say text aloud."
+            Lines draw one after another in order. text: write text centred on x, y, like a teacher on a \
+            board: numbers on a triangle's sides, a formula, a working step; keep it clear of what's already \
+            on screen. image: a reference picture found on Wikimedia Commons by query, shown with its top-left \
+            at x, y and the given width (its height follows the picture), when a picture explains better than \
+            drawing, e.g. a labelled heart diagram next to a heart on screen; put it where it covers nothing \
+            the user needs. speak: say text aloud."
     })
 }
 
@@ -216,6 +277,8 @@ pub fn json_instructions() -> String {
      Actions: {\"type\": \"highlight\", \"x\", \"y\", \"width\", \"height\", \"label\"} (x, y = top-left corner), \
      {\"type\": \"point\", \"x\", \"y\", \"label\"}, {\"type\": \"arrow\", \"fromX\", \"fromY\", \"toX\", \"toY\", \"label\"}, \
      {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape; use lines to trace or build on what's on screen), \
+     {\"type\": \"text\", \"x\", \"y\", \"text\", \"size\": \"small\"|\"medium\"|\"large\"} (writes numbers, words or a formula centred on x, y), \
+     {\"type\": \"image\", \"x\", \"y\", \"width\", \"query\", \"caption\"} (a reference picture found by query, top-left at x, y), \
      {\"type\": \"speak\", \"text\"}. Coordinates are pixels in the latest screenshot. After the user does the \
      step you get a new screenshot; reply with the next step the same way, or with normal text when done. \
      To explain something the user only watches (nothing to click), add \"explain\": true to each step: \
@@ -344,6 +407,44 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                     label: label(l),
                 }
             }
+            Action::Text { x, y, text, size } => {
+                let text = clean(&text, MAX_TEXT);
+                if text.is_empty() {
+                    return Err("Text needs something to write.".into());
+                }
+                text_size(size.as_deref())?;
+                Action::Text {
+                    x: fit(x, w, "x")?,
+                    y: fit(y, h, "y")?,
+                    text,
+                    size,
+                }
+            }
+            Action::Image {
+                x,
+                y,
+                width,
+                query,
+                caption,
+                ..
+            } => {
+                let query = clean(&query, MAX_QUERY);
+                if query.is_empty() {
+                    return Err("An image needs search words in query.".into());
+                }
+                let (x0, x1) = (fit(x, w, "x")?, fit(x + width, w, "x + width")?);
+                if x1 - x0 < MIN_PICTURE {
+                    return Err(format!("An image needs a width of at least {MIN_PICTURE} pixels."));
+                }
+                Action::Image {
+                    x: x0,
+                    y: fit(y, h, "y")?,
+                    width: x1 - x0,
+                    query,
+                    caption: label(caption),
+                    src: None,
+                }
+            }
             Action::Speak { text } => Action::Speak {
                 text: clean(&text, MAX_INSTRUCTION),
             },
@@ -438,9 +539,52 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     raw: raw(&pairs),
                 })
             }
+            Action::Text { x, y, text, size } => {
+                let (ox, oy) = meta.to_overlay(x, y);
+                Some(Mark::Text {
+                    x: ox,
+                    y: oy,
+                    text,
+                    // Checked in validate.
+                    size: text_size(size.as_deref()).unwrap_or(28.0),
+                    raw: raw(&[(x, y)]),
+                })
+            }
+            Action::Image {
+                x,
+                y,
+                width,
+                caption,
+                src,
+                ..
+            } => {
+                let (ox, oy) = meta.to_overlay(x, y);
+                Some(Mark::Image {
+                    x: ox,
+                    y: oy,
+                    width: width * kx,
+                    src: src?,
+                    caption,
+                    raw: format!("{} w{width:.0}", raw(&[(x, y)])),
+                })
+            }
             Action::Speak { .. } => None,
         })
         .collect()
+}
+
+/// Finds the step's reference pictures. An error names the one that
+/// couldn't be found, so the model can try other words or draw instead.
+pub async fn find_pictures(step: &mut Step) -> Result<(), String> {
+    for a in &mut step.actions {
+        if let Action::Image { query, src, .. } = a {
+            let found = super::picture::find(query).await.map_err(|e| {
+                format!("{e} Try other search words, or draw or write it instead.")
+            })?;
+            *src = Some(found);
+        }
+    }
+    Ok(())
 }
 
 /// What to say aloud for a step: its speak actions, or the instruction.
@@ -491,7 +635,10 @@ pub fn targets(step: &Step, meta: CaptureMeta) -> Vec<Target> {
                 Some(Target::Spot { x: gx, y: gy })
             }
             // Lines explain; they aren't places to click.
-            Action::Line { .. } | Action::Speak { .. } => None,
+            Action::Line { .. }
+            | Action::Text { .. }
+            | Action::Image { .. }
+            | Action::Speak { .. } => None,
         })
         .collect()
 }
@@ -768,6 +915,55 @@ mod tests {
             { "type": "line", "points": [[1, 1], [5, 3000]] }
         ] }))
         .contains("1568x882"));
+    }
+
+    #[test]
+    fn writes_text_on_screen_but_not_as_a_place_to_click() {
+        let s = validate(
+            &json!({ "instruction": "c is 5.", "actions": [
+                { "type": "text", "x": 100, "y": 50, "text": "c = 5", "size": "large" },
+                { "type": "text", "x": 10, "y": 10, "text": "3" }
+            ]}),
+            1568,
+            882,
+        )
+        .unwrap();
+        assert!(targets(&s, meta()).is_empty());
+        let sizes: Vec<_> = marks(&s, meta())
+            .into_iter()
+            .map(|m| match m {
+                Mark::Text { size, .. } => size,
+                _ => panic!("expected text"),
+            })
+            .collect();
+        assert_eq!(sizes, [44.0, 28.0]);
+
+        let bad = |v: Value| validate(&json!({ "instruction": "x", "actions": [v] }), 1568, 882).unwrap_err();
+        assert!(bad(json!({ "type": "text", "x": 1, "y": 1, "text": " " })).contains("something to write"));
+        assert!(bad(json!({ "type": "text", "x": 1, "y": 1, "text": "a", "size": "huge" })).contains("huge"));
+    }
+
+    #[test]
+    fn a_picture_is_drawn_only_once_found_and_is_not_a_place_to_click() {
+        let mut s = validate(
+            &json!({ "instruction": "A heart.", "actions": [
+                { "type": "image", "x": 100, "y": 50, "width": 400, "query": " human heart diagram ", "caption": "Heart" }
+            ]}),
+            1568,
+            882,
+        )
+        .unwrap();
+        assert!(targets(&s, meta()).is_empty());
+        assert!(marks(&s, meta()).is_empty());
+        if let Action::Image { query, src, .. } = &mut s.actions[0] {
+            assert_eq!(query, "human heart diagram");
+            *src = Some("data:image/png;base64,AA==".into());
+        }
+        assert!(matches!(&marks(&s, meta())[..], [Mark::Image { .. }]));
+
+        let bad = |v: Value| validate(&json!({ "instruction": "x", "actions": [v] }), 1568, 882).unwrap_err();
+        assert!(bad(json!({ "type": "image", "x": 1, "y": 1, "width": 300, "query": "" })).contains("query"));
+        assert!(bad(json!({ "type": "image", "x": 1, "y": 1, "width": 20, "query": "heart" })).contains("width"));
     }
 
     #[test]

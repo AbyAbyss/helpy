@@ -348,7 +348,8 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
             "\n\nWhen the user asks where something is, or how to do something themselves in an app on their \
              screen (\"how do I…\", \"where is…\", \"show me how…\"), look at the screen, then guide them with \
              show_step, one step at a time, instead of only describing the steps. Point at exactly what to click. \
-             To explain something on screen (a diagram, a chart, a layout), draw lines and shapes over it with \
+             To explain something on screen (a diagram, a chart, a layout), draw lines and shapes over it, write \
+             numbers, words or formulas on it (text actions), or show a reference picture beside it (image actions) with \
              show_step, one idea per step, with explain: true and total set; each step plays while you write the \
              next, so send the next one as soon as the tool returns. After the last step, reply with one short sentence (after a \
              walkthrough, check the new screenshot first). Don't guide them \
@@ -857,18 +858,22 @@ impl Turn<'_> {
         let Some(meta) = *self.app.state::<AskState>().screen.lock().unwrap() else {
             return error("Look at the screen before showing a step.".into());
         };
+        let mut step = match step::validate(input, meta.image_width, meta.image_height) {
+            Ok(s) => s,
+            Err(m) => return error(m),
+        };
+        if self.settings.guidance.snap_to_controls {
+            step = guide::snap::snap(step, meta).await;
+        }
+        // Pictures download while the step before is still playing.
+        if let Err(m) = step::find_pictures(&mut step).await {
+            return error(m);
+        }
         // A step that's playing finishes first; how it ended decides
         // whether this one is still wanted.
         let (end, number) = match self.wait_for_playing(guide::Upcoming::Ready).await {
             Some((n, end)) if !matches!(end, guide::StepEnd::Done) => (end, n),
             _ => {
-                let mut step = match step::validate(input, meta.image_width, meta.image_height) {
-                    Ok(s) => s,
-                    Err(m) => return error(m),
-                };
-                if self.settings.guidance.snap_to_controls {
-                    step = guide::snap::snap(step, meta).await;
-                }
                 *steps += 1;
                 self.send(AskEvent::Step {
                     number: *steps,

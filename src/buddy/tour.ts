@@ -3,7 +3,7 @@
 // Pure so it can be tested; the overlay plays it frame by frame.
 
 import type { Mark } from "../bindings/Mark";
-import { arrow, HIGHLIGHT_PAD, pointAlong, polylineLength, sampleLine, type Pt } from "../guide/geometry";
+import { arrow, HIGHLIGHT_PAD, pointAlong, polylineLength, sampleLine, textWidth, type Pt } from "../guide/geometry";
 
 /** One mark on the tour, in ms from the tour's start. */
 export type Leg = {
@@ -62,6 +62,21 @@ export function traceOf(m: Mark, curvedArrows: boolean): Pt[] {
       );
     case "point":
       return [{ x: m.x, y: m.y }];
+    case "image":
+      // Across the top of the picture as it opens.
+      return [
+        { x: m.x, y: m.y },
+        { x: m.x + m.width, y: m.y },
+      ];
+    case "text": {
+      // Along the writing's baseline, left to right, as it's written in.
+      const half = textWidth(m.text, m.size) / 2;
+      const y = m.y + m.size * 0.35;
+      return [
+        { x: m.x - half, y },
+        { x: m.x + half, y },
+      ];
+    }
   }
 }
 

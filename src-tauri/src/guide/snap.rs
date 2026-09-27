@@ -53,7 +53,10 @@ pub async fn snap(mut step: Step, meta: CaptureMeta) -> Step {
                     (*x, *y) = back(sx, sy);
                 }
             }
-            Action::Line { .. } | Action::Speak { .. } => {}
+            Action::Line { .. }
+            | Action::Text { .. }
+            | Action::Image { .. }
+            | Action::Speak { .. } => {}
         }
     }
     step

@@ -12,6 +12,14 @@ describe("buddy tour", () => {
     expect(t[4]).toEqual(t[0]);
   });
 
+  it("writes text left to right along its baseline, centred on its point", () => {
+    const t = traceOf({ type: "text", x: 300, y: 100, text: "c = 5", size: 28, raw: "" }, true);
+    expect(t).toHaveLength(2);
+    expect(t[0].x).toBeLessThan(300);
+    expect(t[1].x - 300).toBeCloseTo(300 - t[0].x);
+    expect(t[0].y).toBeGreaterThan(100);
+  });
+
   it("follows a curved arrow's bow and ends on its tip", () => {
     const t = traceOf({ type: "arrow", fromX: 0, fromY: 200, toX: 400, toY: 200, label: null, raw: "" }, true);
     expect(t[0]).toEqual({ x: 0, y: 200 });

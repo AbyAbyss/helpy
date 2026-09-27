@@ -6,6 +6,7 @@
 //! once it has been said and the next one has arrived, unless the user
 //! pauses or goes back to an earlier one.
 
+pub mod picture;
 pub mod snap;
 pub mod step;
 
