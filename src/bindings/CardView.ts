@@ -28,4 +28,20 @@ playing: boolean,
 /**
  * The user paused the explanation on this step.
  */
-paused: boolean, };
+paused: boolean, 
+/**
+ * The step has been said and the next one hasn't arrived yet.
+ */
+waiting: boolean, 
+/**
+ * The explanation is over; the card stays for going back through it.
+ */
+finished: boolean, 
+/**
+ * An earlier explanation step can be shown again.
+ */
+canBack: boolean, 
+/**
+ * The user went back to an earlier step; Next moves forward again.
+ */
+reviewing: boolean, };

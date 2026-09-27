@@ -75,6 +75,8 @@ pub struct StepInput {
     pub total: Option<u32>,
     #[serde(default)]
     pub actions: Vec<Action>,
+    #[serde(default)]
+    pub explain: bool,
 }
 
 /// A checked step: every coordinate is inside the screenshot.
@@ -83,6 +85,9 @@ pub struct Step {
     pub instruction: String,
     pub total: Option<u32>,
     pub actions: Vec<Action>,
+    /// Part of an explanation the user watches: it plays on its own while
+    /// the model writes the next step.
+    pub explain: bool,
 }
 
 /// A shape on one overlay, in that overlay's CSS pixels.
@@ -141,8 +146,8 @@ pub fn tool() -> ToolDef {
             short instruction. Coordinates are pixels in the most recent \
             screenshot. The tool returns once the user has done the step, with a new screenshot, so you can \
             check the result and show the next step. When you're explaining something the user only watches \
-            (nothing for them to click), give every step at once: the first here and the rest in `then`; they \
-            play one after another without waiting for the user. Use it when the user asks where something is \
+            (nothing for them to click), set explain: true: the tool returns at once while the step plays, so \
+            send the next step straight away. Use it when the user asks where something is \
             or how to do something themselves in the app in front of them, not when they ask you to do it for them."
             .into(),
         schema: schema(),
@@ -150,25 +155,18 @@ pub fn tool() -> ToolDef {
 }
 
 fn schema() -> Value {
-    let instruction = json!({ "type": "string", "description": "One short sentence telling the user what to do." });
-    let actions = actions_schema();
     json!({
         "type": "object",
         "properties": {
-            "instruction": instruction,
+            "instruction": { "type": "string", "description": "One short sentence telling the user what to do." },
             "step": { "type": "integer", "description": "This step's number, starting at 1." },
             "total": { "type": "integer", "description": "Your best estimate of the number of steps." },
-            "actions": actions,
-            "then": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": { "instruction": instruction, "actions": actions },
-                    "required": ["instruction", "actions"]
-                },
-                "description": "Only for an explanation the user watches without clicking: the steps after \
-                    this one, on the same screen. Each plays when the one before has been said; the tool \
-                    returns after the last. Leave it out when the user has to do something between steps."
+            "actions": actions_schema(),
+            "explain": {
+                "type": "boolean",
+                "description": "True for a step of an explanation the user only watches, with nothing to \
+                    click. It plays on its own; send the next step as soon as the tool returns, and give \
+                    total so the user sees how far along they are."
             }
         },
         "required": ["instruction", "actions"]
@@ -220,8 +218,8 @@ pub fn json_instructions() -> String {
      {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape; use lines to trace or build on what's on screen), \
      {\"type\": \"speak\", \"text\"}. Coordinates are pixels in the latest screenshot. After the user does the \
      step you get a new screenshot; reply with the next step the same way, or with normal text when done. \
-     To explain something the user only watches (nothing to click), give every step at once: add \
-     \"then\": [{\"instruction\", \"actions\"}, ...] to the step, and they play one after another."
+     To explain something the user only watches (nothing to click), add \"explain\": true to each step: \
+     it plays on its own and you get a reply at once, so send the next step straight away."
         .into()
 }
 
@@ -355,24 +353,8 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
         instruction,
         total: s.total.filter(|t| (1..=100).contains(t)),
         actions,
+        explain: s.explain,
     })
-}
-
-/// A step and the steps in its `then`, which play one after another without
-/// waiting for the user. An error in any of them rejects them all.
-pub fn validate_all(input: &Value, width: u32, height: u32) -> Result<Vec<Step>, String> {
-    let mut steps = vec![validate(input, width, height)?];
-    let then = match input.get("then") {
-        None | Some(Value::Null) => return Ok(steps),
-        Some(Value::Array(then)) => then,
-        Some(_) => return Err("`then` must be a list of steps.".into()),
-    };
-    for (i, next) in then.iter().enumerate() {
-        let step = validate(next, width, height)
-            .map_err(|e| format!("Step {} in `then`: {e}", i + 1))?;
-        steps.push(step);
-    }
-    Ok(steps)
 }
 
 fn raw(points: &[(f64, f64)]) -> String {
@@ -789,31 +771,10 @@ mod tests {
     }
 
     #[test]
-    fn an_explanation_arrives_as_one_step_with_the_rest_in_then() {
-        let steps = validate_all(
-            &json!({
-                "instruction": "This is side a.",
-                "actions": [{ "type": "line", "points": [[10, 10], [10, 100]] }],
-                "then": [
-                    { "instruction": "This is side b.", "actions": [] },
-                    { "instruction": "And c.", "actions": [{ "type": "point", "x": 50, "y": 50 }] }
-                ]
-            }),
-            1568,
-            882,
-        )
-        .unwrap();
-        let said: Vec<_> = steps.iter().map(|s| s.instruction.as_str()).collect();
-        assert_eq!(said, ["This is side a.", "This is side b.", "And c."]);
-
-        let alone = json!({ "instruction": "Click Save.", "actions": [] });
-        assert_eq!(validate_all(&alone, 1568, 882).unwrap().len(), 1);
-
-        let bad = json!({
-            "instruction": "a", "actions": [],
-            "then": [{ "instruction": "b", "actions": [{ "type": "point", "x": 9000, "y": 1 }] }]
-        });
-        assert!(validate_all(&bad, 1568, 882).unwrap_err().starts_with("Step 1 in `then`"));
+    fn explanation_steps_are_marked_as_such() {
+        let step = |v: Value| validate(&v, 1568, 882).unwrap();
+        assert!(step(json!({ "instruction": "This is side a.", "actions": [], "explain": true })).explain);
+        assert!(!step(json!({ "instruction": "Click Save.", "actions": [] })).explain);
     }
 
     #[test]

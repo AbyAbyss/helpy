@@ -349,8 +349,9 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
              screen (\"how do I…\", \"where is…\", \"show me how…\"), look at the screen, then guide them with \
              show_step, one step at a time, instead of only describing the steps. Point at exactly what to click. \
              To explain something on screen (a diagram, a chart, a layout), draw lines and shapes over it with \
-             show_step, one idea per step, and send the whole explanation in one show_step call (the later steps in \
-             `then`) so it plays straight through. After the last step, check the new screenshot and reply with one short sentence. Don't guide them \
+             show_step, one idea per step, with explain: true and total set; each step plays while you write the \
+             next, so send the next one as soon as the tool returns. After the last step, reply with one short sentence (after a \
+             walkthrough, check the new screenshot first). Don't guide them \
              when they ask you to do something for them."
                 .to_string()
         }
@@ -558,6 +559,8 @@ struct Turn<'a> {
     /// Reads the answer aloud (voice questions with voice guidance on).
     feed: Option<crate::voice::Feed>,
     cancel: CancellationToken,
+    /// The explanation step playing while the model writes the next one.
+    playing: Mutex<Option<(u32, tauri::async_runtime::JoinHandle<guide::StepEnd>)>>,
 }
 
 impl Turn<'_> {
@@ -829,6 +832,14 @@ impl Turn<'_> {
         messages
     }
 
+    /// Tells the explanation step that's playing what follows it and waits
+    /// until it has finished. Its number and how it ended, if one was playing.
+    async fn wait_for_playing(&self, next: guide::Upcoming) -> Option<(u32, guide::StepEnd)> {
+        let (number, step) = self.playing.lock().unwrap().take()?;
+        guide::set_upcoming(self.app, next);
+        Some((number, step.await.unwrap_or(guide::StepEnd::Stopped)))
+    }
+
     /// Shows one guidance step and waits for the user. Returns what goes
     /// back to the model (and whether it's an error), or Cancelled.
     async fn guide_step(
@@ -846,49 +857,49 @@ impl Turn<'_> {
         let Some(meta) = *self.app.state::<AskState>().screen.lock().unwrap() else {
             return error("Look at the screen before showing a step.".into());
         };
-        let mut flow = match step::validate_all(input, meta.image_width, meta.image_height) {
-            Ok(s) => s,
-            Err(m) => return error(m),
+        // A step that's playing finishes first; how it ended decides
+        // whether this one is still wanted.
+        let (end, number) = match self.wait_for_playing(guide::Upcoming::Ready).await {
+            Some((n, end)) if !matches!(end, guide::StepEnd::Done) => (end, n),
+            _ => {
+                let mut step = match step::validate(input, meta.image_width, meta.image_height) {
+                    Ok(s) => s,
+                    Err(m) => return error(m),
+                };
+                if self.settings.guidance.snap_to_controls {
+                    step = guide::snap::snap(step, meta).await;
+                }
+                *steps += 1;
+                self.send(AskEvent::Step {
+                    number: *steps,
+                    total: step.total.map(|t| t.max(*steps)),
+                    instruction: step.instruction.clone(),
+                });
+                if step.explain {
+                    let (app, settings, cancel) = (self.app.clone(), self.settings.clone(), self.cancel.clone());
+                    let number = *steps;
+                    guide::set_upcoming(self.app, guide::Upcoming::Unknown);
+                    let playing = tauri::async_runtime::spawn(async move {
+                        guide::show(&app, &settings, number, &step, meta, true, &cancel).await
+                    });
+                    *self.playing.lock().unwrap() = Some((number, playing));
+                    return Ok((
+                        vec![Part::Text(format!(
+                            "Step {number} is playing on the user's screen now. Send the next step of the \
+                             explanation straight away, or if that was the last, finish with one short sentence"
+                        ))],
+                        false,
+                    ));
+                }
+                let end = guide::show(self.app, &self.settings, *steps, &step, meta, false, &self.cancel)
+                    .await;
+                (end, *steps)
+            }
         };
-        // Steps past the limit are dropped; the model hears it's reached.
-        flow.truncate((max - *steps) as usize);
-        let playing = flow.len() > 1;
-        let first = *steps + 1;
-        let last = *steps + flow.len() as u32;
-        let mut end = guide::StepEnd::Done;
-        for mut step in flow {
-            if self.settings.guidance.snap_to_controls {
-                step = guide::snap::snap(step, meta).await;
-            }
-            *steps += 1;
-            // A playing explanation knows exactly how many steps it has.
-            if playing {
-                step.total = Some(last);
-            }
-            self.send(AskEvent::Step {
-                number: *steps,
-                total: step.total.map(|t| t.max(*steps)),
-                instruction: step.instruction.clone(),
-            });
-            end = guide::show(self.app, &self.settings, *steps, &step, meta, playing, &self.cancel)
-                .await;
-            if !matches!(end, guide::StepEnd::Done) {
-                break;
-            }
-        }
+        let steps = number;
         let done = match end {
             guide::StepEnd::Stopped => {
                 return Err(ProviderError::new(ErrorKind::Cancelled, "Stopped"))
-            }
-            guide::StepEnd::Done if playing => {
-                // Nothing on screen changed, so there's no need to look again.
-                return Ok((
-                    vec![Part::Text(format!(
-                        "The user watched steps {first} to {last}. Finish with one short sentence, \
-                         or answer if they ask something"
-                    ))],
-                    false,
-                ));
             }
             guide::StepEnd::Done => format!("The user did step {steps}"),
             guide::StepEnd::Stray => format!(
@@ -991,6 +1002,22 @@ impl Turn<'_> {
             } else {
                 None
             };
+            if tool_calls.is_empty() && !wants_screen && json_step.is_none() && call + 1 < max_calls {
+                // An explanation still on screen stays until the user closes it;
+                // something they say about it goes back to the model.
+                match self.wait_for_playing(guide::Upcoming::Nothing).await {
+                    Some((_, guide::StepEnd::Stopped)) => {
+                        return Err(ProviderError::new(ErrorKind::Cancelled, "Stopped"))
+                    }
+                    Some((n, guide::StepEnd::Said(text))) => {
+                        messages.push(Message::user_text(format!(
+                            "During step {n} the user said: \"{text}\""
+                        )));
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
             if (tool_calls.is_empty() && !wants_screen && json_step.is_none())
                 || call + 1 == max_calls
             {
@@ -1301,11 +1328,15 @@ async fn answer(app: &AppHandle, pending: Pending) {
         plan,
         feed,
         cancel,
+        playing: Mutex::new(None),
     };
     let history = turn.compact(history).await;
     let result = turn.run(history, text.clone(), images).await;
     *state.last_turn.lock().unwrap() = Some(Instant::now());
     log::info!("ask: question ended ({})", if result.is_ok() { "answered" } else { "stopped or failed" });
+    if let Some((_, step)) = turn.playing.lock().unwrap().take() {
+        step.abort();
+    }
     guide::end(app);
 
     match result {

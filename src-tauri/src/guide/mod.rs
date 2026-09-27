@@ -3,12 +3,13 @@
 //! step, either by clicking near the target or by pressing Next. A click
 //! elsewhere or a spoken reply also ends the wait, so the model can re-point
 //! or wrap up. Steps of an explanation play on their own instead: each ends
-//! once it has been said, unless the user pauses.
+//! once it has been said and the next one has arrived, unless the user
+//! pauses or goes back to an earlier one.
 
 pub mod snap;
 pub mod step;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -71,6 +72,25 @@ pub struct CardView {
     pub playing: bool,
     /// The user paused the explanation on this step.
     pub paused: bool,
+    /// The step has been said and the next one hasn't arrived yet.
+    pub waiting: bool,
+    /// The explanation is over; the card stays for going back through it.
+    pub finished: bool,
+    /// An earlier explanation step can be shown again.
+    pub can_back: bool,
+    /// The user went back to an earlier step; Next moves forward again.
+    pub reviewing: bool,
+}
+
+/// What comes after the explanation step that's playing.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Upcoming {
+    /// The model is still writing.
+    Unknown = 0,
+    /// The next step is waiting to be shown.
+    Ready = 1,
+    /// The model has finished; there's no next step.
+    Nothing = 2,
 }
 
 enum Command {
@@ -82,6 +102,7 @@ enum Command {
     Confirm,
     Back,
     Pause,
+    Prev,
 }
 
 #[derive(Default)]
@@ -95,6 +116,19 @@ pub struct GuideState {
     clicks: Mutex<Option<bool>>,
     /// Which native frosted-glass look the step card has, if any.
     glass: OnceLock<Option<&'static str>>,
+    /// An `Upcoming`, for the explanation step that's playing.
+    upcoming: AtomicU8,
+    /// The explanation steps shown so far, for going back.
+    played: Mutex<Vec<(u32, Step, CaptureMeta)>>,
+    /// The user dragged the card, so it stays where they put it.
+    moved: AtomicBool,
+}
+
+/// Tells the explanation step that's playing what comes after it.
+pub fn set_upcoming(app: &AppHandle, next: Upcoming) {
+    app.state::<GuideState>()
+        .upcoming
+        .store(next as u8, Ordering::SeqCst);
 }
 
 /// Gives the step card a frosted, slightly see-through background where the
@@ -282,6 +316,8 @@ pub fn end(app: &AppHandle) {
     log::info!("guide: walkthrough ended");
     state.waiter.lock().unwrap().take();
     state.card.lock().unwrap().take();
+    state.played.lock().unwrap().clear();
+    state.moved.store(false, Ordering::SeqCst);
     emit_marks(app, "", Vec::new());
     if let Some(w) = app.get_webview_window(windows::STEP) {
         let _ = w.hide();
@@ -353,7 +389,8 @@ pub enum StepEnd {
 
 /// Shows one step and waits until the user has done it, clicked elsewhere,
 /// replied by voice, or stopped the walkthrough. A `playing` step also ends
-/// on its own once it has been said (or read), unless paused.
+/// on its own once it has been said (or read) and the next step is ready.
+/// After the last one it stays up until the user closes it.
 pub async fn show(
     app: &AppHandle,
     s: &Settings,
@@ -371,6 +408,13 @@ pub async fn show(
     let marks = step::marks(step, meta);
     let targets = step::targets(step, meta);
     let overlay = overlay_for(app, meta);
+    let latest = if playing {
+        let mut played = state.played.lock().unwrap();
+        played.push((number, step.clone(), meta));
+        played.len() - 1
+    } else {
+        0
+    };
     let label = overlay.as_ref().map(|(l, _)| l.clone()).unwrap_or_default();
     let draw = || emit_marks(app, &label, marks.clone());
     draw();
@@ -389,6 +433,10 @@ pub async fn show(
             problem: None,
             playing,
             paused: false,
+            waiting: false,
+            finished: false,
+            can_back: latest > 0,
+            reviewing: false,
         },
     );
     let update_card = |f: &dyn Fn(&mut CardView)| {
@@ -401,7 +449,7 @@ pub async fn show(
     if let Some(w) = app.get_webview_window(windows::STEP) {
         // Without a matching overlay (the monitors just changed), the card
         // still shows where it was, so Next and Stop stay reachable.
-        if let Some((_, m)) = &overlay {
+        if let Some((_, m)) = overlay.as_ref().filter(|_| !state.moved.load(Ordering::SeqCst)) {
             let around = step::bounds(&targets, HIT_MARGIN * 3.0 * m.scale);
             let (x, y) = card_origin(s.guidance.card_position, m, around);
             let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
@@ -429,6 +477,25 @@ pub async fn show(
     let mut due = tokio::time::Instant::now() + reading_time(&step.instruction);
     let mut quiet_since: Option<tokio::time::Instant> = None;
     let mut tick = tokio::time::interval(Duration::from_millis(100));
+    // Which played step is on screen: `latest` unless the user went back.
+    let mut view = latest;
+    // This step has been said (or skipped with Next).
+    let mut said = false;
+    let (mut waiting, mut finished) = (false, false);
+    // Shows an explanation step that's already played, or this one again.
+    let show_played = |i: usize| {
+        let played = state.played.lock().unwrap();
+        let Some((n, st, m)) = played.get(i) else { return };
+        let label = overlay_for(app, *m).map(|(l, _)| l).unwrap_or_default();
+        emit_marks(app, &label, step::marks(st, *m));
+        say(app, s, &step::speech(st));
+        update_card(&|c| {
+            c.number = *n;
+            c.instruction = st.instruction.clone();
+            c.can_back = i > 0;
+            c.reviewing = i < latest;
+        });
+    };
 
     let end = loop {
         tokio::select! {
@@ -437,9 +504,9 @@ pub async fn show(
                 faded = true;
                 emit_marks(app, &label, Vec::new());
             }
-            _ = tick.tick(), if playing && !paused => {
+            _ = tick.tick(), if playing && !paused && view == latest => {
                 let now = tokio::time::Instant::now();
-                let finished = if voiced {
+                said = said || if voiced {
                     if speaker.is_speaking() {
                         quiet_since = None;
                     }
@@ -447,12 +514,56 @@ pub async fn show(
                 } else {
                     now >= due
                 };
-                if finished {
-                    settle = false;
-                    break StepEnd::Done;
+                if !said {
+                    continue;
+                }
+                match state.upcoming.load(Ordering::SeqCst) {
+                    u if u == Upcoming::Ready as u8 => {
+                        settle = false;
+                        break StepEnd::Done;
+                    }
+                    u if u == Upcoming::Nothing as u8 => {
+                        if !finished {
+                            finished = true;
+                            update_card(&|c| {
+                                c.waiting = false;
+                                c.finished = true;
+                            });
+                        }
+                    }
+                    _ => {
+                        if !waiting {
+                            waiting = true;
+                            update_card(&|c| c.waiting = true);
+                        }
+                    }
                 }
             }
             cmd = rx.recv() => match cmd {
+                Some(Command::Next) if playing => {
+                    if view < latest {
+                        view += 1;
+                        show_played(view);
+                        if view == latest {
+                            // Back at the newest step: it plays on again.
+                            said = false;
+                            due = tokio::time::Instant::now() + reading_time(&step.instruction);
+                            quiet_since = None;
+                        }
+                    } else if finished {
+                        settle = false;
+                        break StepEnd::Done;
+                    } else {
+                        // Moves on as soon as the next step is there.
+                        said = true;
+                        speaker.stop();
+                    }
+                }
+                Some(Command::Prev) if playing && view > 0 => {
+                    view -= 1;
+                    show_played(view);
+                }
+                Some(Command::Prev) => {}
                 None | Some(Command::Next) => {
                     settle = false;
                     break StepEnd::Done;
@@ -472,9 +583,9 @@ pub async fn show(
                     if paused {
                         speaker.stop();
                     } else {
-                        // Carry on from the start of this step.
-                        draw();
-                        say(app, s, &step::speech(step));
+                        // Carry on from the start of the step on screen.
+                        show_played(view);
+                        said = false;
                         due = tokio::time::Instant::now() + reading_time(&step.instruction);
                         quiet_since = None;
                     }
@@ -624,8 +735,9 @@ fn on_card(app: &AppHandle, x: f64, y: f64) -> bool {
         && y < p.y as f64 + size.height as f64
 }
 
-/// The step card's buttons: "next", "repeat", "stop", "pause" while an
-/// explanation plays, and for Do it "doIt", "confirm" and "back".
+/// The step card's buttons: "next", "repeat", "stop", "pause" and "prev"
+/// while an explanation plays, "moved" after a drag, and for Do it "doIt",
+/// "confirm" and "back".
 #[tauri::command]
 pub fn guide_action(app: AppHandle, action: String) {
     let state = app.state::<GuideState>();
@@ -641,6 +753,9 @@ pub fn guide_action(app: AppHandle, action: String) {
         "confirm" => send(Command::Confirm),
         "back" => send(Command::Back),
         "pause" => send(Command::Pause),
+        "prev" => send(Command::Prev),
+        // The user dragged the card; later steps leave it there.
+        "moved" => state.moved.store(true, Ordering::SeqCst),
         "stop" => crate::ai::ask::cancel(&app),
         _ => {}
     }

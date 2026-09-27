@@ -53,6 +53,22 @@ body,
   align-items: center;
   gap: 8px;
   min-height: 24px;
+  cursor: grab;
+  user-select: none;
+}
+
+.card[data-mini] {
+  padding: 8px 10px;
+}
+
+.card__tools {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.card__tools .icon-btn {
+  margin-left: 0;
 }
 
 .card__mark {
@@ -112,7 +128,7 @@ body,
   stroke-linejoin: round;
 }
 
-.icon-btn svg path:first-child {
+.icon-btn[aria-pressed] svg path:first-child {
   fill: currentColor;
   stroke: none;
 }

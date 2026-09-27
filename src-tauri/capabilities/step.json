@@ -1,12 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "step",
-  "description": "The walkthrough step card: follows guidance events and sends Next, Repeat and Stop. No file or dialog access.",
+  "description": "The walkthrough step card: follows guidance events and sends Next, Repeat and Stop, and can be dragged. No file or dialog access.",
   "windows": [
     "step"
   ],
   "permissions": [
     "core:default",
-    "core:window:allow-set-size"
+    "core:window:allow-set-size",
+    "core:window:allow-start-dragging"
   ]
 }

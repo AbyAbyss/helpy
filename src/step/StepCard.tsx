@@ -14,6 +14,8 @@ export function StepCard() {
   const [card, setCard] = useState<CardView | null>(null);
   const [settings] = useSettings();
   const [glass, setGlass] = useState<string | null>(null);
+  // Shrunk to its header so it covers less of the screen.
+  const [mini, setMini] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,6 +39,18 @@ export function StepCard() {
   }, []);
 
   const voice = settings?.voiceOutput.voiceGuidance ?? false;
+  // A new walkthrough starts with the full card.
+  useEffect(() => {
+    if (card?.number === 1) setMini(false);
+  }, [card?.number]);
+
+  // Drag the card by its header; Helpy then leaves it where it's put.
+  const drag = (e: React.MouseEvent) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+    getCurrentWindow().startDragging().catch(() => {});
+    api.guideAction("moved");
+  };
+
   const toggleVoice = () => {
     api.set("voiceOutput.voiceGuidance", !voice);
     if (voice) api.stopSpeaking();
@@ -45,24 +59,39 @@ export function StepCard() {
   return (
     <div ref={root} className="step" data-glass={glass ?? undefined} data-still={settings?.guidance.reduceMotion || undefined}>
       {card && (
-        <div className="card" key={card.number} role="dialog" aria-live="polite" aria-label={`Step ${card.number}`}>
-          <header className="card__head">
+        <div className="card" key={card.number} data-mini={mini || undefined} role="dialog" aria-live="polite" aria-label={`Step ${card.number}`}>
+          <header className="card__head" title="Drag to move" onMouseDown={drag}>
             <Mark />
             <span className="card__count">
               Step {card.number}
               {card.total != null && <> of {card.total}</>}
             </span>
             {card.total != null && card.total > 1 && <Progress number={card.number} total={card.total} />}
-            <button
-              type="button"
-              className="icon-btn"
-              aria-pressed={voice}
-              title={voice ? "Stop reading steps aloud" : "Read steps aloud"}
-              onClick={toggleVoice}
-            >
-              <SpeakerIcon on={voice} />
-            </button>
+            <span className="card__tools">
+              {mini && card.playing && !card.finished && (
+                <button type="button" className="icon-btn" title={card.paused ? "Play" : "Pause"} onClick={() => api.guideAction("pause")}>
+                  {card.paused ? <PlayIcon /> : <PauseIcon />}
+                </button>
+              )}
+              {!mini && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-pressed={voice}
+                  title={voice ? "Stop reading steps aloud" : "Read steps aloud"}
+                  onClick={toggleVoice}
+                >
+                  <SpeakerIcon on={voice} />
+                </button>
+              )}
+              <button type="button" className="icon-btn" title={mini ? "Show the whole card" : "Make smaller"} onClick={() => setMini(!mini)}>
+                {mini ? <ExpandIcon /> : <MinimizeIcon />}
+              </button>
+            </span>
           </header>
+
+          {!mini && (
+            <>
 
           <p className="card__text">{card.instruction}</p>
 
@@ -72,7 +101,18 @@ export function StepCard() {
               Checking your screen…
             </p>
           ) : card.playing ? (
-            <p className="card__hint">{card.paused ? "Paused. Press Play to carry on." : "Plays on by itself. Pause to stay on this step."}</p>
+            <p className={`card__hint${card.waiting && !card.reviewing ? " card__hint--busy" : ""}`}>
+              {card.waiting && !card.reviewing && <span className="spinner" aria-hidden="true" />}
+              {card.reviewing
+                ? "Going back through it. Next moves forward."
+                : card.finished
+                  ? "That's all of it. Go back through it, or press Done."
+                  : card.paused
+                    ? "Paused. Press Play to carry on."
+                    : card.waiting
+                      ? "Getting the next step…"
+                      : "Plays on by itself. Pause to stay on this step."}
+            </p>
           ) : card.confirming ? (
             <p className="card__hint card__hint--ask">Helpy will click the marked spot once. Is that the right place?</p>
           ) : (
@@ -110,7 +150,12 @@ export function StepCard() {
                 <RepeatIcon />
                 {!card.canDoIt && "Repeat"}
               </button>
-              {card.playing && (
+              {card.canBack && (
+                <button type="button" className="btn" title="Previous step" aria-label="Previous step" onClick={() => api.guideAction("prev")}>
+                  <BackIcon />
+                </button>
+              )}
+              {card.playing && !card.finished && !card.reviewing && (
                 <button type="button" className="btn" onClick={() => api.guideAction("pause")}>
                   {card.paused ? <PlayIcon /> : <PauseIcon />}
                   {card.paused ? "Play" : "Pause"}
@@ -123,9 +168,11 @@ export function StepCard() {
                 </button>
               )}
               <button type="button" className="btn btn--primary" disabled={card.checking} onClick={() => api.guideAction("next")}>
-                Next
+                {card.finished && !card.reviewing ? "Done" : "Next"}
               </button>
             </footer>
+          )}
+            </>
           )}
         </div>
       )}
@@ -182,6 +229,30 @@ function PlayIcon() {
   return (
     <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
       <path d="M6.5 4.5v11l9-5.5z" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+      <path d="M12 4.5 6.5 10l5.5 5.5" />
+    </svg>
+  );
+}
+
+function MinimizeIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+      <path d="M5 10h10" />
+    </svg>
+  );
+}
+
+function ExpandIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+      <path d="M5.5 12.5 10 8l4.5 4.5" />
     </svg>
   );
 }
