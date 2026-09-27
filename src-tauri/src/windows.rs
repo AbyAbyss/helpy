@@ -596,12 +596,13 @@ pub fn agents_open_panel(app: AppHandle, id: Option<String>) {
     show_agents(&app, id);
 }
 
-/// Opens a web page in the browser, e.g. a setup guide. Only https links.
+/// Opens a web page in the browser, e.g. a setup guide or a link in an
+/// answer. Only http and https links.
 #[tauri::command]
 pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    if !url.starts_with("https://") {
-        return Err("Only https links can be opened".into());
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only web links can be opened".into());
     }
     app.opener()
         .open_url(url, None::<&str>)

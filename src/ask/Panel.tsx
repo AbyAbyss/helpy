@@ -6,6 +6,7 @@ import type { AskEvent } from "../bindings/AskEvent";
 import type { AskStatus } from "../bindings/AskStatus";
 import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api, EVENTS } from "../lib/ipc";
+import { linkify, WebLink } from "../lib/links";
 import { useSettings, useTheme } from "../lib/useSettings";
 import { apply, waiting, type Item } from "./transcript";
 
@@ -216,12 +217,11 @@ function ItemView({ item, onPermission, onAgents }: { item: Item; onPermission: 
         <div className="msg msg--ai">
           <Markdown
             components={{
-              // Links would navigate this panel away; show them as text instead.
-              a: ({ children, href }) => <span className="md-link" title={href}>{children}</span>,
+              a: WebLink,
               img: () => null,
             }}
           >
-            {item.text}
+            {linkify(item.text)}
           </Markdown>
         </div>
       );

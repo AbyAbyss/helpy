@@ -435,7 +435,7 @@ fn range(args: &Value) -> Option<(usize, usize)> {
 }
 
 /// Only web links, so an agent can't open files or apps with it.
-fn open_link(url: &str) -> Result<String, String> {
+pub(crate) fn open_link(url: &str) -> Result<String, String> {
     let u = reqwest::Url::parse(url.trim()).map_err(|_| format!("\"{url}\" isn't a link."))?;
     if !matches!(u.scheme(), "http" | "https") {
         return Err("open_link opens only http and https links.".into());

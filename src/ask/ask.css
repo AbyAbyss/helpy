@@ -277,6 +277,15 @@ textarea {
   text-underline-offset: 2px;
 }
 
+a.md-link {
+  color: inherit;
+  cursor: pointer;
+}
+
+a.md-link:hover {
+  text-decoration-color: var(--accent);
+}
+
 .shot {
   align-self: flex-start;
   display: flex;

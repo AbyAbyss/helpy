@@ -639,6 +639,18 @@ body {
   margin-bottom: 0;
 }
 
+.result__body a.md-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.result__body a.md-link:hover {
+  text-decoration-color: var(--accent);
+}
+
 .result__body code {
   font: 0.9em var(--font-mono);
   font-variant-ligatures: none;

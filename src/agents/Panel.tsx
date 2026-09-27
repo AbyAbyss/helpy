@@ -10,6 +10,7 @@ import { AgentFiles } from "../dock/Files";
 import { duration, STATUS_LABEL, tokens, tone } from "../dock/dockState";
 import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api, EVENTS } from "../lib/ipc";
+import { linkify, WebLink } from "../lib/links";
 import { ApprovalBox, Inbox } from "./Approvals";
 import { Templates } from "./Templates";
 import { useSettings, useTheme } from "../lib/useSettings";
@@ -394,7 +395,7 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
           </div>
           <AgentFiles agent={a.id} files={a.files} />
           <div className="result__body">
-            <Markdown components={{ a: ({ children, href }) => <span title={href}>{children}</span>, img: () => null }}>{a.result}</Markdown>
+            <Markdown components={{ a: WebLink, img: () => null }}>{linkify(a.result)}</Markdown>
           </div>
           {a.suggestions.length > 0 && (
             <div className="suggest">

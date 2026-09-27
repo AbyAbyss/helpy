@@ -32,6 +32,7 @@ use crate::settings::{Settings, SettingsStore};
 
 pub const VIEW_SCREEN: &str = "view_screen";
 pub const START_AGENTS: &str = "start_agents";
+const OPEN_LINK: &str = crate::agents::tools::OPEN_LINK;
 pub const SERVICE_ACTIONS: &str = "service_actions";
 pub const USE_SERVICE: &str = "use_service";
 /// What a model without tool calling replies when it needs the screen.
@@ -358,6 +359,8 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
     }
     .as_str();
     if plan.agents {
+        s += "\n\nWhen the user asks you to open a link, website or page, call open_link yourself; it opens in \
+              their browser, so don't hand it to agents or say you can't. Don't open links they didn't ask for.";
         s += "\n\nWhen the user asks you to do something for them (\"create a reminder\", \"add an event\", \
               \"sort my downloads\", \"find me…\", \"build…\"), such as researching, organizing files, creating \
               reminders or calendar events, or building an app or site, call start_agents with the user's full \
@@ -419,6 +422,20 @@ pub fn prune_images(messages: &mut [Message]) {
     }
     for m in &mut messages[..latest] {
         strip(&mut m.parts);
+    }
+}
+
+fn open_link_tool() -> ToolDef {
+    ToolDef {
+        name: OPEN_LINK.into(),
+        description: "Open a web link in the user's default browser, when they ask you to open a link, a \
+            website or a page."
+            .into(),
+        schema: json!({
+            "type": "object",
+            "properties": { "url": { "type": "string", "description": "An http or https link." } },
+            "required": ["url"]
+        }),
     }
 }
 
@@ -936,6 +953,7 @@ impl Turn<'_> {
             tools.push(step::tool());
         }
         if self.plan.agents {
+            tools.push(open_link_tool());
             tools.push(start_agents_tool());
             if !self.services().is_empty() {
                 tools.extend(service_tools());
@@ -1046,6 +1064,12 @@ impl Turn<'_> {
                             input["fact"].as_str().unwrap_or_default(),
                         ) {
                             Ok(_) => (vec![Part::Text("Saved.".into())], false),
+                            Err(m) => (vec![Part::Text(m)], true),
+                        },
+                        OPEN_LINK => match crate::agents::tools::open_link(
+                            input["url"].as_str().unwrap_or_default(),
+                        ) {
+                            Ok(m) => (vec![Part::Text(m)], false),
                             Err(m) => (vec![Part::Text(m)], true),
                         },
                         SERVICE_ACTIONS => self.service_actions(&input),
