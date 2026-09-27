@@ -469,7 +469,7 @@ pub async fn circle_to_agent(app: AppHandle, task: String) -> Result<(), String>
         request += &format!(" Helpy already said this about it:\n{}", notes.join("\n"));
     }
     end(&app);
-    crate::agents::planner::plan(&app, &request, Some(jpeg))
+    crate::agents::planner::plan(&app, &request, Some(jpeg), false)
         .await
         .map(|_| ())
 }

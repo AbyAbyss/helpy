@@ -991,7 +991,7 @@ impl Turn<'_> {
                                 .unwrap_or(false)
                                 .then(|| latest_image(&messages))
                                 .flatten();
-                            match crate::agents::planner::plan(self.app, &request, image).await {
+                            match crate::agents::planner::plan(self.app, &request, image, self.feed.is_some()).await {
                                 Ok(plan) => {
                                     started_agents = true;
                                     if plan.started && self.feed.is_some() {

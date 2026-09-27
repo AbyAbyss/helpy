@@ -399,7 +399,7 @@ fn run_session(
                 transcript: text.clone(),
             },
         );
-        return match tauri::async_runtime::block_on(crate::agents::planner::plan(app, &request, None)) {
+        return match tauri::async_runtime::block_on(crate::agents::planner::plan(app, &request, None, true)) {
             Ok(plan) => {
                 if plan.started {
                     crate::windows::fly_pill_to_dock(app);

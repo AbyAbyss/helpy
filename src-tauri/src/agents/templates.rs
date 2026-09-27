@@ -405,6 +405,7 @@ pub fn agents_template_plan(
         folders,
         String::new(),
         None,
+        false,
     )
 }
 

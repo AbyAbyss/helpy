@@ -245,7 +245,13 @@ async fn open_page(s: &Settings, request: &str) -> Option<String> {
     (!blocked).then_some(url)
 }
 
-pub async fn plan(app: &AppHandle, request: &str, image: Option<String>) -> Result<Plan, String> {
+/// `voice`: the user asked out loud, so the agents' replies are read aloud.
+pub async fn plan(
+    app: &AppHandle,
+    request: &str,
+    image: Option<String>,
+    voice: bool,
+) -> Result<Plan, String> {
     let s = app.state::<SettingsStore>().get();
     let mut groups = tools::groups(&s.agents);
     groups.extend(crate::connectors::external(app, &s).groups());
@@ -303,7 +309,7 @@ pub async fn plan(app: &AppHandle, request: &str, image: Option<String>) -> Resu
         }
         None => parse(&text, &groups, s.agents.default_mode)?,
     };
-    offer(app, &s, request, mode, agents, folders, reply, image)
+    offer(app, &s, request, mode, agents, folders, reply, image, voice)
 }
 
 /// A template the planner picked: {"template": id, "params": {...}}.
@@ -353,6 +359,7 @@ pub fn offer(
     folders: Vec<String>,
     reply: String,
     image: Option<String>,
+    voice: bool,
 ) -> Result<Plan, String> {
     let mut groups = tools::groups(&s.agents);
     groups.extend(crate::connectors::external(app, s).groups());
@@ -386,6 +393,9 @@ pub fn offer(
     let quiet = starts_quietly(s.agents.confirm_plans, &plan);
     let mut plan = plan;
     plan.started = quiet;
+    if voice {
+        voice_plan(app, &plan.id);
+    }
     *app.state::<AgentsState>().plan.lock().unwrap() = Some((plan.clone(), image));
     if quiet {
         start(app, &plan.id, plan.mode)?;
@@ -451,9 +461,28 @@ fn start(app: &AppHandle, id: &str, mode: RunMode) -> Result<(), String> {
             keep_open: a.keep_open,
         })
         .collect();
-    super::create(app, &plan.request, mode, agents, image);
+    let ids = super::create(app, &plan.request, mode, agents, image);
+    let spoken = app
+        .state::<AgentsState>()
+        .voice_plans
+        .lock()
+        .unwrap()
+        .remove(&plan.id);
+    if spoken {
+        for id in &ids {
+            super::voice_asked(app, id);
+        }
+    }
     close_card(app);
     Ok(())
+}
+
+fn voice_plan(app: &AppHandle, id: &str) {
+    app.state::<AgentsState>()
+        .voice_plans
+        .lock()
+        .unwrap()
+        .insert(id.to_string());
 }
 
 /// Voice replies while a plan card is open: "yes, go" starts it, "no" or
@@ -478,6 +507,7 @@ pub fn voice_reply(app: &AppHandle, text: &str) -> Option<bool> {
             "yes", "go", "start", "yeah", "yep", "ok", "okay", "sure", "do",
         ])
     {
+        voice_plan(app, &plan.id);
         return Some(start(app, &plan.id, plan.mode).is_ok());
     }
     None
@@ -515,7 +545,7 @@ pub async fn agents_plan(app: AppHandle, request: String, image: Option<String>)
     if request.trim().is_empty() {
         return Err("Describe what the agent should do".into());
     }
-    plan(&app, request.trim(), image).await
+    plan(&app, request.trim(), image, false).await
 }
 
 #[cfg(test)]

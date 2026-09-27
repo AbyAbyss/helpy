@@ -79,6 +79,8 @@ pub struct AgentsState {
     /// Agents the user last spoke to: their replies are read aloud until
     /// they finish.
     voice_asked: Mutex<std::collections::HashSet<String>>,
+    /// Plans asked for or started by voice: their agents' replies are read aloud.
+    voice_plans: Mutex<std::collections::HashSet<String>>,
     /// What the user said to running agents, not yet taken (steering).
     steer: Mutex<HashMap<String, Vec<String>>>,
     /// Agents waiting for their helpers; they don't hold a running slot.
@@ -162,6 +164,7 @@ impl AgentsState {
             plan: Mutex::new(None),
             voice_target: Mutex::new(None),
             voice_asked: Mutex::new(std::collections::HashSet::new()),
+            voice_plans: Mutex::new(std::collections::HashSet::new()),
             steer: Mutex::new(HashMap::new()),
             delegating: Mutex::new(std::collections::HashSet::new()),
             changed: tokio::sync::Notify::new(),
