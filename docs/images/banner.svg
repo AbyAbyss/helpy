@@ -61,12 +61,12 @@
     <g font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif">
       <rect x="898" y="122" width="30" height="30" rx="9" fill="#ffffff" fill-opacity="0.08"/>
       <circle cx="913" cy="137" r="6" fill="#4ade99"/>
-      <text x="940" y="134" fill="#f1f3f8" font-size="15" font-weight="700">Desktop tidy</text>
-      <text x="940" y="151" fill="#4ade99" font-size="12.5" font-weight="600">Done · 7s</text>
-      <text x="898" y="183" fill="#dfe3ea" font-size="13.5">Sorted 2 files into Documents</text>
-      <text x="898" y="201" fill="#dfe3ea" font-size="13.5">and Images.</text>
+      <text x="940" y="134" fill="#f1f3f8" font-size="15" font-weight="700">GitHub repos to Notion</text>
+      <text x="940" y="151" fill="#4ade99" font-size="12.5" font-weight="600">Done · 3 agents</text>
+      <text x="898" y="183" fill="#dfe3ea" font-size="13.5">69 repos in Notion: 28 public,</text>
+      <text x="898" y="201" fill="#dfe3ea" font-size="13.5">29 private, 12 forks. Dinner in 10 min.</text>
       <rect x="898" y="216" width="234" height="44" rx="12" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.08"/>
-      <text x="912" y="243" fill="#e8ebf1" font-size="13">Sort Downloads too</text>
+      <text x="912" y="243" fill="#e8ebf1" font-size="13">Open the Notion page</text>
       <text x="1116" y="243" fill="#8a92a3" font-size="13" text-anchor="end">→</text>
     </g>
 
