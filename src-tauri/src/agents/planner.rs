@@ -461,6 +461,8 @@ fn start(app: &AppHandle, id: &str, mode: RunMode) -> Result<(), String> {
             keep_open: a.keep_open,
         })
         .collect();
+    // Before the chips exist, so the dock holds them back for the flight.
+    crate::windows::buddy_to_dock(app);
     let ids = super::create(app, &plan.request, mode, agents, image);
     let spoken = app
         .state::<AgentsState>()

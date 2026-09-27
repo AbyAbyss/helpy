@@ -25,6 +25,8 @@ export type ArrowShape = {
   /** Three points of the head; the first is the tip. */
   head: [Pt, Pt, Pt];
   length: number;
+  /** The curve's control point, or null for a straight arrow. */
+  control: Pt | null;
 };
 
 /**
@@ -65,7 +67,88 @@ export function arrow(from: Pt, to: Pt, curved: boolean, width: number): ArrowSh
   const end = { x: to.x - ux * headLen * 0.8, y: to.y - uy * headLen * 0.8 };
   const f = (p: Pt) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
   const shaft = control ? `M ${f(from)} Q ${f(control)} ${f(end)}` : `M ${f(from)} L ${f(end)}`;
-  return { shaft, head, length };
+  return { shaft, head, length, control };
+}
+
+/** The cubic Bézier pieces of a line: straight, or a smooth curve through every point. */
+function pieces(points: Pt[], closed: boolean, curved: boolean): [Pt, Pt, Pt, Pt][] {
+  const n = points.length;
+  const count = closed ? n : n - 1;
+  const at = (i: number) => (closed ? points[(i + n) % n] : points[Math.max(0, Math.min(n - 1, i))]);
+  const out: [Pt, Pt, Pt, Pt][] = [];
+  for (let i = 0; i < count; i++) {
+    const p1 = at(i);
+    const p2 = at(i + 1);
+    if (!curved) {
+      out.push([p1, p1, p2, p2]);
+      continue;
+    }
+    // Catmull-Rom through the points, as Bézier control points.
+    const p0 = at(i - 1);
+    const p3 = at(i + 2);
+    out.push([p1, { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 }, { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 }, p2]);
+  }
+  return out;
+}
+
+/** SVG path for a line mark. */
+export function linePath(points: Pt[], closed: boolean, curved: boolean): string {
+  if (points.length === 0) return "";
+  const f = (p: Pt) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  let d = `M ${f(points[0])}`;
+  for (const [, c1, c2, p] of pieces(points, closed, curved)) d += curved ? ` C ${f(c1)} ${f(c2)} ${f(p)}` : ` L ${f(p)}`;
+  return closed ? `${d} Z` : d;
+}
+
+/** Points along a line mark, in drawing order, close enough together to trace. */
+export function sampleLine(points: Pt[], closed: boolean, curved: boolean, steps = 12): Pt[] {
+  if (points.length === 0) return [];
+  const out = [points[0]];
+  for (const [a, b, c, d] of pieces(points, closed, curved)) {
+    if (!curved) {
+      out.push(d);
+      continue;
+    }
+    for (let k = 1; k <= steps; k++) {
+      const t = k / steps;
+      const u = 1 - t;
+      out.push({
+        x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
+        y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y,
+      });
+    }
+  }
+  return out;
+}
+
+/** Where a line's label goes: the middle of an open line, the centre of a shape. */
+export function lineLabelAt(points: Pt[], closed: boolean, curved: boolean): Pt {
+  if (closed) {
+    const sum = points.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y }), { x: 0, y: 0 });
+    return { x: sum.x / points.length, y: sum.y / points.length };
+  }
+  return pointAlong(sampleLine(points, closed, curved), 0.5);
+}
+
+/** Total length of a polyline. */
+export function polylineLength(pts: Pt[]): number {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return len;
+}
+
+/** The point a share `t` (0 to 1) of the way along a polyline. */
+export function pointAlong(pts: Pt[], t: number): Pt {
+  if (pts.length < 2) return pts[0] ?? { x: 0, y: 0 };
+  let left = Math.max(0, Math.min(1, t)) * polylineLength(pts);
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const seg = Math.hypot(b.x - a.x, b.y - a.y);
+    if (left <= seg && seg > 0) return { x: a.x + ((b.x - a.x) * left) / seg, y: a.y + ((b.y - a.y) * left) / seg };
+    left -= seg;
+  }
+  return pts[pts.length - 1];
 }
 
 /** Whether a label for a box at `top` fits above it, or must go below. */

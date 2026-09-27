@@ -7,4 +7,4 @@ export type Mark = { "type": "highlight", x: number, y: number, width: number, h
 /**
  * The model's own numbers, for the debug view.
  */
-raw: string, } | { "type": "point", x: number, y: number, label: string | null, raw: string, } | { "type": "arrow", fromX: number, fromY: number, toX: number, toY: number, label: string | null, raw: string, };
+raw: string, } | { "type": "point", x: number, y: number, label: string | null, raw: string, } | { "type": "arrow", fromX: number, fromY: number, toX: number, toY: number, label: string | null, raw: string, } | { "type": "line", points: Array<[number, number]>, closed: boolean, curved: boolean, label: string | null, raw: string, };

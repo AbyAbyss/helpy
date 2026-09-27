@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrow, bubbleBelow, dimPath, inkFor, labelAbove } from "./geometry";
+import { arrow, bubbleBelow, dimPath, inkFor, labelAbove, lineLabelAt, linePath, pointAlong, sampleLine } from "./geometry";
 
 describe("guidance geometry", () => {
   it("picks readable text on light and dark highlight colours", () => {
@@ -45,5 +45,30 @@ describe("guidance geometry", () => {
     ]);
     expect(d.match(/Z/g)).toHaveLength(3);
     expect(d.startsWith("M0 0H100V100H0Z")).toBe(true);
+  });
+
+  it("draws lines straight or as a curve through every point", () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ];
+    expect(linePath(pts, false, false)).toBe("M 0.0 0.0 L 100.0 0.0 L 100.0 100.0");
+    expect(linePath(pts, true, false).endsWith("Z")).toBe(true);
+    const curve = linePath(pts, false, true);
+    expect(curve.match(/ C /g)).toHaveLength(2);
+    // A curve's samples pass through each point.
+    const s = sampleLine(pts, false, true, 8);
+    expect(s[8]).toEqual({ x: 100, y: 0 });
+    expect(s[s.length - 1]).toEqual({ x: 100, y: 100 });
+    // A closed straight shape comes back to its start.
+    const closed = sampleLine(pts, true, false);
+    expect(closed[closed.length - 1]).toEqual({ x: 0, y: 0 });
+  });
+
+  it("labels an open line at its middle and a shape at its centre", () => {
+    expect(lineLabelAt([{ x: 0, y: 0 }, { x: 200, y: 0 }], false, false)).toEqual({ x: 100, y: 0 });
+    expect(lineLabelAt([{ x: 0, y: 0 }, { x: 90, y: 0 }, { x: 0, y: 90 }], true, false)).toEqual({ x: 30, y: 30 });
+    expect(pointAlong([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], 0.75)).toEqual({ x: 10, y: 5 });
   });
 });

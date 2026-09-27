@@ -8,6 +8,10 @@ import { useSettings, useTheme } from "../lib/useSettings";
 import { inDock, STATUS_LABEL, tone } from "./dockState";
 
 const MAX_CHIPS = 8;
+/** A chip the buddy hands off drops in this long after it sets off, ms. */
+const HANDOFF_LAND = 650;
+/** The drop's length (the `drop` keyframes in dock.css), ms. */
+const DROP_MS = 720;
 
 /** Keeps every agent up to date from events. Shared by the dock and panel. */
 export function useAgents() {
@@ -67,7 +71,10 @@ export function Dock() {
   // The card lives in its own window; this only marks its chip.
   const [open, setOpen] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
-  const seenIds = useRef<Set<string>>(new Set());
+  // When each chip first showed up, and how long its drop waits.
+  const arrivals = useRef<Map<string, { at: number; delay: number }>>(new Map());
+  // When the buddy last set off with a new agent.
+  const incomingAt = useRef(-Infinity);
 
   const side = settings?.agents.dockSide ?? "right";
   const shown = inDock([...agents.values()], now, settings?.agents.doneSeconds ?? 60);
@@ -77,7 +84,11 @@ export function Dock() {
   useEffect(() => {
     api.dockCardCurrent().then(setOpen, () => {});
     const off = listen<string | null>(EVENTS.dockCard, (e) => setOpen(e.payload));
-    return () => void off.then((f) => f());
+    const offIncoming = listen(EVENTS.dockIncoming, () => (incomingAt.current = performance.now()));
+    return () => {
+      off.then((f) => f());
+      offIncoming.then((f) => f());
+    };
   }, []);
 
   // The window follows the content's size; Rust keeps it on the edge. The
@@ -105,11 +116,17 @@ export function Dock() {
     if (agents.get(id)?.unseen) api.agentSeen(id);
   };
 
-  // New agents arrive with a little flourish (the end of the hand-off).
+  // New agents arrive with a little flourish (the end of the hand-off),
+  // held back until the buddy's copy lands when it carried them here. The
+  // drop's delay while it plays, else null.
   const arrived = (id: string) => {
-    if (seenIds.current.has(id)) return false;
-    seenIds.current.add(id);
-    return true;
+    const now = performance.now();
+    let a = arrivals.current.get(id);
+    if (!a) {
+      a = { at: now, delay: Math.max(0, HANDOFF_LAND - (now - incomingAt.current)) };
+      arrivals.current.set(id, a);
+    }
+    return now < a.at + a.delay + DROP_MS ? a.delay : null;
   };
 
   if (empty) return <div ref={root} className="dock dock--empty" />;
@@ -127,23 +144,28 @@ export function Dock() {
             +{hidden}
           </button>
         )}
-        {chips.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            className={`chip chip--${tone(a.status)}${arrived(a.id) ? " chip--new" : ""}${open === a.id ? " is-open" : ""}`}
-            aria-label={`${a.name}: ${STATUS_LABEL[a.status]}`}
-            onMouseEnter={(e) => hover(a.id, e.currentTarget)}
-            onFocus={(e) => hover(a.id, e.currentTarget)}
-            // Toggles the card; the card's ↗ button opens the panel.
-            onClick={(e) => (open === a.id ? api.dockCardClose() : hover(a.id, e.currentTarget))}
-          >
-            <Mark />
-            {/* Remounts on every status change, so each change ripples once. */}
-            <span key={a.status} className="chip__ripple" aria-hidden="true" />
-            {a.unseen && <span className="chip__dot" />}
-          </button>
-        ))}
+        {chips.map((a) => {
+          const drop = arrived(a.id);
+          return (
+            <button
+              key={a.id}
+              type="button"
+              className={`chip chip--${tone(a.status)}${drop !== null ? " chip--new" : ""}${open === a.id ? " is-open" : ""}`}
+              // The drop, then the glow that follows it.
+              style={drop ? { animationDelay: `${drop}ms, ${drop + DROP_MS}ms` } : undefined}
+              aria-label={`${a.name}: ${STATUS_LABEL[a.status]}`}
+              onMouseEnter={(e) => hover(a.id, e.currentTarget)}
+              onFocus={(e) => hover(a.id, e.currentTarget)}
+              // Toggles the card; the card's ↗ button opens the panel.
+              onClick={(e) => (open === a.id ? api.dockCardClose() : hover(a.id, e.currentTarget))}
+            >
+              <Mark />
+              {/* Remounts on every status change, so each change ripples once. */}
+              <span key={a.status} className="chip__ripple" aria-hidden="true" />
+              {a.unseen && <span className="chip__dot" />}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
