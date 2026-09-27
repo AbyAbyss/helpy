@@ -208,12 +208,42 @@ pub async fn capture_cursor_monitor(
     })
 }
 
+/// Makes sure Helpy may record the screen. Without it macOS still hands
+/// over a capture, but with only the wallpaper, so it's checked first. macOS
+/// shows its own prompt only while Helpy has no answer on record; after one
+/// was denied or removed, the settings page opens instead, once per launch.
+#[cfg(target_os = "macos")]
+fn check_screen_permission() -> Result<(), ProviderError> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
+    }
+    static OPENED_SETTINGS: AtomicBool = AtomicBool::new(false);
+    // Both only read the permission as it was when Helpy started.
+    if unsafe { CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() } {
+        return Ok(());
+    }
+    if !OPENED_SETTINGS.swap(true, Ordering::SeqCst) {
+        let _ = crate::permissions::permissions_open("screen".into());
+    }
+    Err(ProviderError::new(
+        ErrorKind::Setup,
+        "Helpy doesn't have Screen Recording permission. Turn Helpy on in System Settings → Privacy & \
+         Security → Screen Recording (remove it with – and add it again if it's already on), then quit \
+         and reopen Helpy",
+    ))
+}
+
 /// The cursor's monitor at full resolution, for cropping.
 pub async fn grab_cursor_monitor(app: &AppHandle) -> Result<Frame, ProviderError> {
     let privacy = app.state::<SettingsStore>().get().privacy;
     if privacy.capture_paused {
         return Err(paused());
     }
+    #[cfg(target_os = "macos")]
+    check_screen_permission()?;
     let pos = app.cursor_position().map_err(|e| {
         ProviderError::new(ErrorKind::Setup, format!("Couldn't find the cursor: {e}"))
     })?;
