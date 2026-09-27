@@ -865,14 +865,22 @@ impl Turn<'_> {
         if self.settings.guidance.snap_to_controls {
             step = guide::snap::snap(step, meta).await;
         }
-        // Pictures download while the step before is still playing.
-        if let Err(m) = step::find_pictures(&mut step).await {
-            return error(m);
-        }
+        // Pictures download while the step before is still playing. One
+        // that isn't found is left out rather than failing the step.
+        let missing = step::find_pictures(&mut step).await;
+        let missing = if missing.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " No picture was found for {}, so it's shown without; search with 2 to 4 plainer words, or draw it, next time.",
+                missing.iter().map(|q| format!("\"{q}\"")).collect::<Vec<_>>().join(", ")
+            )
+        };
         // A step that's playing finishes first; how it ended decides
         // whether this one is still wanted.
-        let (end, number) = match self.wait_for_playing(guide::Upcoming::Ready).await {
-            Some((n, end)) if !matches!(end, guide::StepEnd::Done) => (end, n),
+        // `note` is about this step, so it's dropped when the step isn't shown.
+        let (end, number, note) = match self.wait_for_playing(guide::Upcoming::Ready).await {
+            Some((n, end)) if !matches!(end, guide::StepEnd::Done) => (end, n, String::new()),
             _ => {
                 *steps += 1;
                 self.send(AskEvent::Step {
@@ -890,15 +898,15 @@ impl Turn<'_> {
                     *self.playing.lock().unwrap() = Some((number, playing));
                     return Ok((
                         vec![Part::Text(format!(
-                            "Step {number} is playing on the user's screen now. Send the next step of the \
-                             explanation straight away, or if that was the last, finish with one short sentence"
+                            "Step {number} is playing on the user's screen now.{missing} Send the next step of \
+                             the explanation straight away, or if that was the last, finish with one short sentence"
                         ))],
                         false,
                     ));
                 }
                 let end = guide::show(self.app, &self.settings, *steps, &step, meta, false, &self.cancel)
                     .await;
-                (end, *steps)
+                (end, *steps, missing)
             }
         };
         let steps = number;
@@ -918,6 +926,10 @@ impl Turn<'_> {
                  still want help, or finish with a short answer if they don't"
             ),
         };
+        let done = match note.is_empty() {
+            true => done,
+            false => format!("{done}.{}", note.trim_end_matches('.')),
+        };
         Ok(match self.screen(false, true).await {
             Ok(shot) => (
                 Self::screenshot_parts(&format!("{done}. Here is their screen now"), shot),
@@ -935,6 +947,7 @@ impl Turn<'_> {
         question: String,
         images: Vec<String>,
     ) -> Result<(Vec<Message>, Completion, bool), ProviderError> {
+        drop_unanswered_tool_calls(&mut messages);
         let mut user = Message::user_text(question);
         for data in images.into_iter().rev() {
             user.parts.insert(
@@ -1026,6 +1039,7 @@ impl Turn<'_> {
             if (tool_calls.is_empty() && !wants_screen && json_step.is_none())
                 || call + 1 == max_calls
             {
+                drop_unanswered_tool_calls(&mut messages);
                 if completion.stop == StopReason::MaxTokens {
                     self.send(AskEvent::Notice {
                         message: "The answer was cut off at the length limit. Raise \"Max response length\" in Settings → AI providers for longer answers.".into(),
@@ -1338,7 +1352,11 @@ async fn answer(app: &AppHandle, pending: Pending) {
     let history = turn.compact(history).await;
     let result = turn.run(history, text.clone(), images).await;
     *state.last_turn.lock().unwrap() = Some(Instant::now());
-    log::info!("ask: question ended ({})", if result.is_ok() { "answered" } else { "stopped or failed" });
+    match &result {
+        Ok(_) => log::info!("ask: question ended (answered)"),
+        Err(e) if e.kind == ErrorKind::Cancelled => log::info!("ask: question ended (stopped)"),
+        Err(e) => log::warn!("ask: question failed: {}", e.message),
+    }
     if let Some((_, step)) = turn.playing.lock().unwrap().take() {
         step.abort();
     }
@@ -1445,6 +1463,36 @@ fn keep_recent(mut messages: Vec<Message>, questions: usize) -> Vec<Message> {
         messages.drain(..starts[starts.len() - questions]);
     }
     messages
+}
+
+/// Removes tool calls that never got a result, which every provider
+/// rejects in the history of the next request. They're left when an answer
+/// ends on its last allowed call, or was saved that way before.
+fn drop_unanswered_tool_calls(messages: &mut Vec<Message>) {
+    for i in 0..messages.len() {
+        if messages[i].role != Role::Assistant {
+            continue;
+        }
+        let answered: Vec<String> = messages
+            .get(i + 1)
+            .map(|next| {
+                next.parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        Part::ToolResult { id, .. } => Some(id.clone()),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let m = &mut messages[i];
+        m.parts
+            .retain(|p| !matches!(p, Part::ToolUse { id, .. } if !answered.contains(id)));
+        // An empty reply isn't allowed either.
+        if !m.parts.iter().any(|p| matches!(p, Part::Text(_) | Part::ToolUse { .. })) {
+            m.parts.push(Part::Text("(I stopped here: that answer reached its limit of steps.)".into()));
+        }
+    }
 }
 
 /// Where each question starts: a user message that isn't a tool result.
@@ -1568,6 +1616,38 @@ mod tests {
         assert_eq!(kept[0], q("two"));
         assert_eq!(kept[2], result);
         assert_eq!(keep_recent(history.clone(), 10), history);
+    }
+
+    #[test]
+    fn drops_tool_calls_that_never_got_a_result() {
+        let call = |id: &str| Part::ToolUse {
+            id: id.into(),
+            name: "view_screen".into(),
+            input: serde_json::json!({}),
+            signature: None,
+        };
+        let answered = Message {
+            role: Role::Assistant,
+            parts: vec![Part::Text("Looking".into()), call("1")],
+        };
+        let result = Message {
+            role: Role::User,
+            parts: vec![Part::ToolResult {
+                id: "1".into(),
+                name: "view_screen".into(),
+                parts: vec![],
+                is_error: false,
+            }],
+        };
+        let dangling = Message {
+            role: Role::Assistant,
+            parts: vec![call("2")],
+        };
+        let mut history = vec![Message::user_text("hi"), answered.clone(), result.clone(), dangling];
+        drop_unanswered_tool_calls(&mut history);
+        assert_eq!(history[1], answered);
+        assert_eq!(history[2], result);
+        assert!(matches!(&history[3].parts[..], [Part::Text(_)]));
     }
     use crate::settings::schema::{ModelConfig, ProviderConfig, ProviderKind};
 

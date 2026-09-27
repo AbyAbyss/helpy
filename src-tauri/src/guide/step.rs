@@ -250,7 +250,7 @@ fn actions_schema() -> Value {
                 "label": label,
                 "text": { "type": "string", "description": "For text: what to write (a few words, a number or a formula like a² + b² = c²). For speak: what to say aloud." },
                 "size": { "type": "string", "enum": ["small", "medium", "large"], "description": "For text: how big to write it. Default medium." },
-                "query": { "type": "string", "description": "For image: search words for the picture, e.g. \"human heart diagram\"." },
+                "query": { "type": "string", "description": "For image: 2 to 4 plain words naming the subject, the way a picture file is named, e.g. \"heart diagram\", \"thalamus\", \"spinal cord cross section\". Longer searches usually find nothing." },
                 "caption": { "type": "string", "description": "For image: a few words shown under the picture." }
             },
             "required": ["type"]
@@ -278,7 +278,7 @@ pub fn json_instructions() -> String {
      {\"type\": \"point\", \"x\", \"y\", \"label\"}, {\"type\": \"arrow\", \"fromX\", \"fromY\", \"toX\", \"toY\", \"label\"}, \
      {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape; use lines to trace or build on what's on screen), \
      {\"type\": \"text\", \"x\", \"y\", \"text\", \"size\": \"small\"|\"medium\"|\"large\"} (writes numbers, words or a formula centred on x, y), \
-     {\"type\": \"image\", \"x\", \"y\", \"width\", \"query\", \"caption\"} (a reference picture found by query, top-left at x, y), \
+     {\"type\": \"image\", \"x\", \"y\", \"width\", \"query\", \"caption\"} (a reference picture found by query, 2 to 4 plain words naming the subject, top-left at x, y), \
      {\"type\": \"speak\", \"text\"}. Coordinates are pixels in the latest screenshot. After the user does the \
      step you get a new screenshot; reply with the next step the same way, or with normal text when done. \
      To explain something the user only watches (nothing to click), add \"explain\": true to each step: \
@@ -573,18 +573,21 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
         .collect()
 }
 
-/// Finds the step's reference pictures. An error names the one that
-/// couldn't be found, so the model can try other words or draw instead.
-pub async fn find_pictures(step: &mut Step) -> Result<(), String> {
+/// Finds the step's reference pictures. Ones that can't be found are left
+/// out of the step; their search words are returned so the model can hear.
+pub async fn find_pictures(step: &mut Step) -> Vec<String> {
+    let mut missing = Vec::new();
     for a in &mut step.actions {
         if let Action::Image { query, src, .. } = a {
-            let found = super::picture::find(query).await.map_err(|e| {
-                format!("{e} Try other search words, or draw or write it instead.")
-            })?;
-            *src = Some(found);
+            match super::picture::find(query).await {
+                Ok(found) => *src = Some(found),
+                Err(_) => missing.push(query.clone()),
+            }
         }
     }
-    Ok(())
+    step.actions
+        .retain(|a| !matches!(a, Action::Image { src: None, .. }));
+    missing
 }
 
 /// What to say aloud for a step: its speak actions, or the instruction.

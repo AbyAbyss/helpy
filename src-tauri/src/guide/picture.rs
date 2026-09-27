@@ -9,8 +9,11 @@ use base64::Engine;
 use serde_json::Value;
 
 const API: &str = "https://commons.wikimedia.org/w/api.php";
-/// Wikimedia asks every client to say who it is.
-const USER_AGENT: &str = "Helpy/1.0 (desktop assistant; reference pictures)";
+/// Wikimedia asks every client to say who it is and how to reach its
+/// makers; without that its rate limits are far lower.
+const USER_AGENT: &str = "Helpy/1.0 (https://github.com/AbyAbyss/helpy)";
+/// Longest wait for a rate limit to lift before giving up on a picture.
+const MAX_RETRY_WAIT: Duration = Duration::from_secs(3);
 /// Width of the thumbnail asked for, pixels. Enough for a card on screen.
 const THUMB_WIDTH: u32 = 800;
 const MAX_BYTES: usize = 3_000_000;
@@ -29,9 +32,8 @@ pub async fn find(query: &str) -> Result<String, String> {
     let http = client()?;
     let width = THUMB_WIDTH.to_string();
     let limit = CANDIDATES.to_string();
-    let found: Value = http
-        .get(API)
-        .query(&[
+    let search = || {
+        http.get(API).query(&[
             ("action", "query"),
             ("format", "json"),
             ("generator", "search"),
@@ -43,9 +45,9 @@ pub async fn find(query: &str) -> Result<String, String> {
             ("iiprop", "url|mime"),
             ("iiurlwidth", width.as_str()),
         ])
-        .send()
-        .await
-        .map_err(|e| format!("Couldn't search for a picture: {e}"))?
+    };
+    let found: Value = send(search)
+        .await?
         .json()
         .await
         .map_err(|e| format!("Couldn't read the picture search: {e}"))?;
@@ -79,8 +81,31 @@ fn thumbnails(found: &Value) -> Vec<String> {
     hits.into_iter().map(|(_, u)| u).collect()
 }
 
+/// Sends a request, waiting once for a rate limit to lift when Wikimedia
+/// says it will soon.
+async fn send(
+    request: impl Fn() -> reqwest::RequestBuilder,
+) -> Result<reqwest::Response, String> {
+    let fail = |e: reqwest::Error| format!("Couldn't reach Wikimedia Commons: {e}");
+    let res = request().send().await.map_err(fail)?;
+    if res.status() != reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Ok(res);
+    }
+    let wait = res
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok()?.parse().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(MAX_RETRY_WAIT);
+    if wait > MAX_RETRY_WAIT {
+        return Err("Wikimedia Commons is limiting requests right now.".into());
+    }
+    tokio::time::sleep(wait).await;
+    request().send().await.map_err(fail)
+}
+
 async fn download(http: &reqwest::Client, url: &str) -> Result<String, String> {
-    let res = http.get(url).send().await.map_err(|e| e.to_string())?;
+    let res = send(|| http.get(url)).await?;
     let mime = res
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
