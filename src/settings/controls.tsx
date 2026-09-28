@@ -161,8 +161,10 @@ export function HotkeyField(props: {
       type="button"
       className={`hotkey${recording ? " is-recording" : ""}${invalid ? " is-invalid" : ""}`}
       aria-describedby={hintId}
-      onClick={() => {
+      onClick={(e) => {
         if (recording) return;
+        // WebKit (macOS) doesn't focus buttons on click, so keys would miss this field.
+        e.currentTarget.focus();
         setRecording(true);
         onRecordingChange(true);
       }}
