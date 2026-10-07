@@ -9,6 +9,7 @@
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-desktop-3a3f4b">
   <img alt="Bring your own model" src="https://img.shields.io/badge/AI-bring%20your%20own%20model-ff6166">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-3da639"></a>
 </p>
 
 <p align="center">
@@ -240,3 +241,7 @@ design/         source SVGs for the app and tray icons
 - **Clicks during walkthroughs** are observed with a listen-only hook for mouse clicks; the click still reaches your app. On macOS it's a Core Graphics event tap that needs the Accessibility permission; on Linux and Windows it's `rdev`, which isn't available on Wayland. Without it, the step card asks you to press Next instead.
 - **Accessibility on Linux** goes through AT-SPI, which Helpy switches on for the session when it first needs it (as a screen reader would). Apps that run natively on Wayland don't report screen positions, so snapping and password blanking only see XWayland and X11 apps. The blocklist needs a window manager that lists windows; the Privacy page says when it can't.
 - **Linux:** overlays need a compositing window manager to be transparent; the settings page warns when none is running. On Wayland, Helpy runs through XWayland when it can. The General section lists what won't work in your session.
+
+## License
+
+[MIT](LICENSE). Copyright (c) 2026 AbyAbyss.
