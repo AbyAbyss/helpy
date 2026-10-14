@@ -56,6 +56,7 @@ pub async fn snap(mut step: Step, meta: CaptureMeta) -> Step {
             Action::Line { .. }
             | Action::Text { .. }
             | Action::Image { .. }
+            | Action::Chart { .. }
             | Action::Speak { .. } => {}
         }
     }

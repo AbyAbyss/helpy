@@ -13,6 +13,17 @@
   position: absolute;
   inset: 0;
   overflow: visible;
+  z-index: 1;
+}
+
+/* Pictures and charts lie under the strokes, so arrows can point into
+   them; labels and writing stay on top of both. */
+.ann > div > * {
+  z-index: 2;
+}
+
+.ann > div > .ann__picture {
+  z-index: 0;
 }
 
 .ann__dim {
@@ -301,6 +312,19 @@
   width: 100%;
   height: auto;
   border-radius: 6px;
+}
+
+.ann__chart {
+  color: #1a1d24;
+  font: 13px/1.4 var(--font-ui);
+}
+
+.ann__chart .md-diagram {
+  margin: 0;
+}
+
+.ann__chart .md-diagram svg {
+  max-height: none;
 }
 
 .ann__picture figcaption {

@@ -352,7 +352,9 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
              show_step, one step at a time, instead of only describing the steps. Point at exactly what to click. \
              To explain something on screen (a diagram, a chart, a layout), draw lines and shapes over it, write \
              numbers, words or formulas on it (text actions), or show a reference picture beside it (image actions) with \
-             show_step, one idea per step, with explain: true and total set; each step plays while you write the \
+             show_step, one idea per step, with explain: true and total set. When the user wants numbers shown as a \
+             chart, look at the screen, then draw the chart in empty space with a chart action (Mermaid source) and \
+             explain it in the next steps with arrows, highlights and text on it; each step plays while you write the \
              next, so send the next one as soon as the tool returns. After the last step, reply with one short sentence (after a \
              walkthrough, check the new screenshot first). Don't guide them \
              when they ask you to do something for them."

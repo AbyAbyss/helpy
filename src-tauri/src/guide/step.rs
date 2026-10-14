@@ -16,6 +16,10 @@ const MAX_LABEL: usize = 60;
 const MAX_TEXT: usize = 40;
 /// Characters in a picture's search words.
 const MAX_QUERY: usize = 100;
+/// Characters of Mermaid source in one chart.
+const MAX_CHART: usize = 3000;
+/// Narrowest a chart may be, screenshot pixels.
+const MIN_CHART: f64 = 200.0;
 /// Narrowest a reference picture may be, screenshot pixels.
 const MIN_PICTURE: f64 = 80.0;
 /// Corners in one line or shape.
@@ -84,6 +88,15 @@ pub enum Action {
         /// The picture as a data URL, once Helpy has found it.
         #[serde(skip)]
         src: Option<String>,
+    },
+    /// A chart or diagram drawn from Mermaid source, top-left at x, y.
+    Chart {
+        x: f64,
+        y: f64,
+        width: f64,
+        chart: String,
+        #[serde(default)]
+        caption: Option<String>,
     },
     Speak {
         text: String,
@@ -182,6 +195,15 @@ pub enum Mark {
         caption: Option<String>,
         raw: String,
     },
+    Chart {
+        x: f64,
+        y: f64,
+        width: f64,
+        /// Mermaid source.
+        source: String,
+        caption: Option<String>,
+        raw: String,
+    },
 }
 
 /// A place the user is expected to click, in global physical pixels.
@@ -234,7 +256,7 @@ fn actions_schema() -> Value {
         "items": {
             "type": "object",
             "properties": {
-                "type": { "type": "string", "enum": ["highlight", "point", "arrow", "line", "text", "image", "speak"] },
+                "type": { "type": "string", "enum": ["highlight", "point", "arrow", "line", "text", "image", "chart", "speak"] },
                 "x": { "type": "number" }, "y": { "type": "number" },
                 "width": { "type": "number" }, "height": { "type": "number" },
                 "fromX": { "type": "number" }, "fromY": { "type": "number" },
@@ -251,7 +273,8 @@ fn actions_schema() -> Value {
                 "text": { "type": "string", "description": "For text: what to write (a few words, a number or a formula like a² + b² = c²). For speak: what to say aloud." },
                 "size": { "type": "string", "enum": ["small", "medium", "large"], "description": "For text: how big to write it. Default medium." },
                 "query": { "type": "string", "description": "For image: 2 to 4 plain words naming the subject, the way a picture file is named, e.g. \"heart diagram\", \"thalamus\", \"spinal cord cross section\". Longer searches usually find nothing." },
-                "caption": { "type": "string", "description": "For image: a few words shown under the picture." }
+                "chart": { "type": "string", "description": "For chart: Mermaid source for a chart of the numbers, e.g. \"pie title Spending\\n  \\\"Rent\\\" : 1200\\n  \\\"Food\\\" : 450\", or xychart-beta for bars and lines, or a flowchart." },
+                "caption": { "type": "string", "description": "For image or chart: a few words shown under it." }
             },
             "required": ["type"]
         },
@@ -264,7 +287,9 @@ fn actions_schema() -> Value {
             on screen. image: a reference picture found on Wikimedia Commons by query, shown with its top-left \
             at x, y and the given width (its height follows the picture), when a picture explains better than \
             drawing, e.g. a labelled heart diagram next to a heart on screen; put it where it covers nothing \
-            the user needs. speak: say text aloud."
+            the user needs. chart: a chart of numbers (pie, bars, lines) or a diagram drawn from Mermaid source, \
+            top-left at x, y with the given width, when the user wants data shown as a chart; put it in empty \
+            space, then explain it in the next steps with arrows, highlights and text on it. speak: say text aloud."
     })
 }
 
@@ -279,6 +304,7 @@ pub fn json_instructions() -> String {
      {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape; use lines to trace or build on what's on screen), \
      {\"type\": \"text\", \"x\", \"y\", \"text\", \"size\": \"small\"|\"medium\"|\"large\"} (writes numbers, words or a formula centred on x, y), \
      {\"type\": \"image\", \"x\", \"y\", \"width\", \"query\", \"caption\"} (a reference picture found by query, 2 to 4 plain words naming the subject, top-left at x, y), \
+     {\"type\": \"chart\", \"x\", \"y\", \"width\", \"chart\", \"caption\"} (a chart or diagram from Mermaid source, e.g. pie or xychart-beta, top-left at x, y), \
      {\"type\": \"speak\", \"text\"}. Coordinates are pixels in the latest screenshot. After the user does the \
      step you get a new screenshot; reply with the next step the same way, or with normal text when done. \
      To explain something the user only watches (nothing to click), add \"explain\": true to each step: \
@@ -445,6 +471,29 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                     src: None,
                 }
             }
+            Action::Chart {
+                x,
+                y,
+                width,
+                chart,
+                caption,
+            } => {
+                let chart = chart.trim().to_string();
+                if chart.is_empty() || chart.chars().count() > MAX_CHART {
+                    return Err(format!("A chart needs Mermaid source in chart, up to {MAX_CHART} characters."));
+                }
+                let (x0, x1) = (fit(x, w, "x")?, fit(x + width, w, "x + width")?);
+                if x1 - x0 < MIN_CHART {
+                    return Err(format!("A chart needs a width of at least {MIN_CHART} pixels."));
+                }
+                Action::Chart {
+                    x: x0,
+                    y: fit(y, h, "y")?,
+                    width: x1 - x0,
+                    chart,
+                    caption: label(caption),
+                }
+            }
             Action::Speak { text } => Action::Speak {
                 text: clean(&text, MAX_INSTRUCTION),
             },
@@ -568,6 +617,23 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     raw: format!("{} w{width:.0}", raw(&[(x, y)])),
                 })
             }
+            Action::Chart {
+                x,
+                y,
+                width,
+                chart,
+                caption,
+            } => {
+                let (ox, oy) = meta.to_overlay(x, y);
+                Some(Mark::Chart {
+                    x: ox,
+                    y: oy,
+                    width: width * kx,
+                    source: chart,
+                    caption,
+                    raw: format!("{} w{width:.0}", raw(&[(x, y)])),
+                })
+            }
             Action::Speak { .. } => None,
         })
         .collect()
@@ -641,6 +707,7 @@ pub fn targets(step: &Step, meta: CaptureMeta) -> Vec<Target> {
             Action::Line { .. }
             | Action::Text { .. }
             | Action::Image { .. }
+            | Action::Chart { .. }
             | Action::Speak { .. } => None,
         })
         .collect()
@@ -967,6 +1034,23 @@ mod tests {
         let bad = |v: Value| validate(&json!({ "instruction": "x", "actions": [v] }), 1568, 882).unwrap_err();
         assert!(bad(json!({ "type": "image", "x": 1, "y": 1, "width": 300, "query": "" })).contains("query"));
         assert!(bad(json!({ "type": "image", "x": 1, "y": 1, "width": 20, "query": "heart" })).contains("width"));
+    }
+
+    #[test]
+    fn a_chart_is_drawn_from_its_source_and_is_not_a_place_to_click() {
+        let s = validate(
+            &json!({ "instruction": "Your spending.", "explain": true, "actions": [
+                { "type": "chart", "x": 100, "y": 50, "width": 500, "chart": " pie\n \"Rent\" : 1200 ", "caption": "Spending" }
+            ]}),
+            1568,
+            882,
+        )
+        .unwrap();
+        assert!(targets(&s, meta()).is_empty());
+        assert!(matches!(&marks(&s, meta())[..], [Mark::Chart { source, .. }] if source == "pie\n \"Rent\" : 1200"));
+        let bad = |v: Value| validate(&json!({ "instruction": "x", "actions": [v] }), 1568, 882).unwrap_err();
+        assert!(bad(json!({ "type": "chart", "x": 1, "y": 1, "width": 400, "chart": " " })).contains("chart"));
+        assert!(bad(json!({ "type": "chart", "x": 1, "y": 1, "width": 100, "chart": "pie" })).contains("width"));
     }
 
     #[test]

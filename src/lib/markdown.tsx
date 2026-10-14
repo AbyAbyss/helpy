@@ -29,8 +29,7 @@ const dark = () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?
 /** Helpy's colours for charts, strong enough to read on light and dark. */
 const PALETTE = ["#e5484d", "#3b82f6", "#22a06b", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
-function themeVariables() {
-  const d = dark();
+function themeVariables(d: boolean) {
   const pies = Object.fromEntries(PALETTE.map((c, i) => [`pie${i + 1}`, c]));
   return {
     ...pies,
@@ -57,9 +56,10 @@ function themeVariables() {
 /**
  * A Mermaid diagram or chart. While a reply is still streaming the source is
  * often incomplete, so it's drawn a moment after it stops changing, and shown
- * as code if it doesn't parse.
+ * as code if it doesn't parse. `light` draws it for a white card whatever the
+ * system theme.
  */
-export function Diagram({ source }: { source: string }) {
+export function Diagram({ source, light = false }: { source: string; light?: boolean }) {
   const id = `mmd-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -68,7 +68,7 @@ export function Diagram({ source }: { source: string }) {
     const t = setTimeout(async () => {
       try {
         const { default: mermaid } = await import("mermaid");
-        mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables: themeVariables(), fontFamily: "inherit" });
+        mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables: themeVariables(!light && dark()), fontFamily: "inherit" });
         const { svg } = await mermaid.render(id, source.trim());
         if (live) {
           setSvg(svg);
@@ -84,7 +84,7 @@ export function Diagram({ source }: { source: string }) {
       live = false;
       clearTimeout(t);
     };
-  }, [id, source]);
+  }, [id, source, light]);
   if (svg && !failed) return <div className="md-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
   return (
     <pre className="md-diagram-src">

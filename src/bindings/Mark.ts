@@ -15,4 +15,8 @@ size: number, raw: string, } | { "type": "image", x: number, y: number, width: n
 /**
  * A data URL.
  */
-src: string, caption: string | null, raw: string, };
+src: string, caption: string | null, raw: string, } | { "type": "chart", x: number, y: number, width: number, 
+/**
+ * Mermaid source.
+ */
+source: string, caption: string | null, raw: string, };

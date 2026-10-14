@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import type { Guidance } from "../bindings/Guidance";
 import type { Mark } from "../bindings/Mark";
 import { arrow, bubbleBelow, dimPath, HIGHLIGHT_PAD, inkFor, labelAbove, lineLabelAt, linePath } from "./geometry";
+import { Diagram } from "../lib/markdown";
 import "./annotations.css";
 
 type Props = {
@@ -102,7 +103,7 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
               </g>
             );
           }
-          if (m.type === "text" || m.type === "image") return null;
+          if (m.type === "text" || m.type === "image" || m.type === "chart") return null;
           return (
             <g key={i} className="ann__appear" style={timed(timing, i)}>
               <circle className="ann__ring" cx={m.x} cy={m.y} r={14} />
@@ -160,6 +161,15 @@ function MarkLabels({ mark: m, debug }: { mark: Mark; debug: boolean }) {
     return (
       <figure className="ann__picture" style={{ left: m.x, top: m.y, width: m.width }}>
         <img src={m.src} alt={m.caption ?? ""} />
+        {m.caption && <figcaption>{m.caption}</figcaption>}
+        {raw}
+      </figure>
+    );
+  }
+  if (m.type === "chart") {
+    return (
+      <figure className="ann__picture ann__chart" style={{ left: m.x, top: m.y, width: m.width }}>
+        <Diagram source={m.source} light />
         {m.caption && <figcaption>{m.caption}</figcaption>}
         {raw}
       </figure>

@@ -63,7 +63,8 @@ export function traceOf(m: Mark, curvedArrows: boolean): Pt[] {
     case "point":
       return [{ x: m.x, y: m.y }];
     case "image":
-      // Across the top of the picture as it opens.
+    case "chart":
+      // Across the top of the picture or chart as it opens.
       return [
         { x: m.x, y: m.y },
         { x: m.x + m.width, y: m.y },
