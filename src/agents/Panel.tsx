@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import Markdown from "react-markdown";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { AgentView } from "../bindings/AgentView";
@@ -10,10 +9,10 @@ import { AgentFiles } from "../dock/Files";
 import { duration, STATUS_LABEL, tokens, tone } from "../dock/dockState";
 import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api, EVENTS } from "../lib/ipc";
-import { linkify, WebLink } from "../lib/links";
 import { ApprovalBox, Inbox } from "./Approvals";
 import { Templates } from "./Templates";
 import { useSettings, useTheme } from "../lib/useSettings";
+import { RichText } from "../lib/markdown";
 
 type Filter = "active" | "finished" | "all";
 const FINISHED = ["done", "failed", "stopped", "cancelled"];
@@ -395,7 +394,7 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
           </div>
           <AgentFiles agent={a.id} files={a.files} />
           <div className="result__body">
-            <Markdown components={{ a: WebLink, img: () => null }}>{linkify(a.result)}</Markdown>
+            <RichText text={a.result} />
           </div>
           {a.suggestions.length > 0 && (
             <div className="suggest">

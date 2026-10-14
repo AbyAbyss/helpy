@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import Markdown from "react-markdown";
 import type { AskAction } from "../bindings/AskAction";
 import type { AskEvent } from "../bindings/AskEvent";
 import type { AskStatus } from "../bindings/AskStatus";
 import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api, EVENTS } from "../lib/ipc";
-import { linkify, WebLink } from "../lib/links";
 import { useSettings, useTheme } from "../lib/useSettings";
 import { apply, waiting, withDocuments, type Item } from "./transcript";
+import { RichText } from "../lib/markdown";
 
 const EXAMPLES = ["How do I find my spam folder?", "What does this error mean?", "Summarize what's on my screen"];
 
@@ -215,14 +214,7 @@ function ItemView({ item, onPermission, onAgents }: { item: Item; onPermission: 
     case "assistant":
       return (
         <div className="msg msg--ai">
-          <Markdown
-            components={{
-              a: WebLink,
-              img: () => null,
-            }}
-          >
-            {linkify(item.text)}
-          </Markdown>
+          <RichText text={item.text} />
         </div>
       );
     case "screen":

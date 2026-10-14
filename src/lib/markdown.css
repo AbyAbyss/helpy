@@ -1,0 +1,159 @@
+/* Rich answers in any window. Colours come from the surrounding text, so
+   they fit the light, dark and glass themes alike. */
+
+.md-table {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.md-table table {
+  border-collapse: collapse;
+  font-size: 0.92em;
+  line-height: 1.4;
+}
+
+.md-table th,
+.md-table td {
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table th {
+  font-weight: 650;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.md-table tr:nth-child(even) td {
+  background: color-mix(in srgb, currentColor 3%, transparent);
+}
+
+.md-pre,
+.md-diagram-src {
+  margin: 8px 0;
+  padding: 10px 12px;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  font-size: 0.88em;
+  line-height: 1.5;
+}
+
+.md-pre code,
+.md-diagram-src code {
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: pre;
+}
+
+.md-diagram {
+  margin: 8px 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.md-diagram svg {
+  display: block;
+  max-width: 100%;
+  max-height: 340px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.md-img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  margin: 8px 0;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.md-img-alt {
+  opacity: 0.7;
+}
+
+.katex-display {
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+li.task-list-item {
+  list-style: none;
+}
+
+li.task-list-item input {
+  margin: 0 6px 0 -18px;
+  vertical-align: -1px;
+}
+
+del {
+  opacity: 0.7;
+}
+
+/* Code colours: a quiet palette that reads on light and dark. */
+.hljs-comment,
+.hljs-quote {
+  opacity: 0.6;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-literal {
+  color: #c2410c;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #15803d;
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-variable,
+.hljs-template-variable {
+  color: #7c3aed;
+}
+.hljs-title,
+.hljs-section,
+.hljs-attr,
+.hljs-type {
+  color: #1d4ed8;
+}
+.hljs-deletion {
+  color: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-built_in,
+  .hljs-literal {
+    color: #fb923c;
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-addition {
+    color: #4ade80;
+  }
+  .hljs-number,
+  .hljs-symbol,
+  .hljs-variable,
+  .hljs-template-variable {
+    color: #c4b5fd;
+  }
+  .hljs-title,
+  .hljs-section,
+  .hljs-attr,
+  .hljs-type {
+    color: #93c5fd;
+  }
+  .hljs-deletion {
+    color: #fca5a5;
+  }
+}

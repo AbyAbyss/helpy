@@ -1,7 +1,8 @@
 //! Turning streamed Markdown answers into text worth reading aloud.
 
 /// Strips Markdown so a voice doesn't read symbols: emphasis, code, headings,
-/// links (keeps their text), and code blocks (dropped entirely).
+/// links (keeps their text), and code blocks, diagrams and tables (dropped
+/// entirely: they're for reading on screen).
 pub fn speakable(markdown: &str) -> String {
     let mut out = String::new();
     let mut in_code_block = false;
@@ -11,7 +12,7 @@ pub fn speakable(markdown: &str) -> String {
             in_code_block = !in_code_block;
             continue;
         }
-        if in_code_block {
+        if in_code_block || trimmed.starts_with('|') {
             continue;
         }
         let line = trimmed.trim_start_matches('#').trim_start();
@@ -266,6 +267,12 @@ mod tests {
             speakable(md),
             "Steps\n1. Open Junk Email in the folder list.\nSee the guide first\nDone."
         );
+    }
+
+    #[test]
+    fn tables_are_left_for_the_screen() {
+        let md = "Three desks:\n| Desk | Price |\n|---|---|\n| A | £200 |\nThe cheapest is A.";
+        assert_eq!(speakable(md), "Three desks:\nThe cheapest is A.");
     }
 
     #[test]

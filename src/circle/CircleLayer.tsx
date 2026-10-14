@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import Markdown from "react-markdown";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { CircleAction } from "../bindings/CircleAction";
@@ -10,6 +9,7 @@ import { api, EVENTS } from "../lib/ipc";
 import { apply, idle, running, type CircleView, type Turn } from "./circleState";
 import { boundsOf, nearestOnRect, placeCard, placeLabels, type Pt, type Rect } from "./placement";
 import "./circle.css";
+import { RichText } from "../lib/markdown";
 
 const CARD = { w: 400, h: 440 };
 const ACTIONS: { id: Exclude<CircleAction, "menu">; label: string }[] = [
@@ -337,7 +337,7 @@ function TurnView({ turn: t }: { turn: Turn }) {
           <pre className="turn__text">{t.text}</pre>
         ) : (
           <div className="turn__md">
-            <Markdown components={{ a: ({ children }) => <span>{children}</span>, img: () => null }}>{t.text}</Markdown>
+            <RichText text={t.text} links={false} />
           </div>
         ))}
       {t.copied != null && <p className="turn__ok">Copied {t.copied.toLocaleString()} characters to the clipboard.</p>}

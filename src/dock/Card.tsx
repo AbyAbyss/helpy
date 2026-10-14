@@ -1,10 +1,10 @@
 import { useState } from "react";
-import Markdown from "react-markdown";
 import type { AgentView } from "../bindings/AgentView";
 import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api } from "../lib/ipc";
 import { AgentFiles } from "./Files";
 import { duration, lastCommand, spend, STATUS_LABEL, tone } from "./dockState";
+import { RichText } from "../lib/markdown";
 
 const FINISHED = ["done", "ready", "failed", "stopped", "cancelled"];
 
@@ -161,7 +161,7 @@ export function Card(props: {
         {done && (
           <>
             <div className="card__result rise">
-              <Markdown components={{ a: ({ children }) => <span>{children}</span>, img: () => null }}>{a.result}</Markdown>
+              <RichText text={a.result ?? ""} links={false} />
             </div>
             <AgentFiles agent={a.id} files={a.files} compact />
             {a.suggestions.length > 0 && (

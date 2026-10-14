@@ -403,7 +403,8 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
         );
     }
     p += "\nWhen you're done, reply without calling any tools: start with one sentence that sums up the result, then \
-          the details the user needs, briefly. If useful, end with a line \"NEXT: first idea | second idea\" with up \
+          the details the user needs, briefly, in Markdown: a table for comparisons, and a Mermaid chart in a ```mermaid \
+          block (pie, or xychart-beta for bars and lines) when numbers are easier to see than read. If useful, end with a line \"NEXT: first idea | second idea\" with up \
           to 3 short follow-up actions the user might want.";
     if s.general.response_language != "auto" {
         p += &format!(
