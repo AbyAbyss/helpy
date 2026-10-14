@@ -566,6 +566,9 @@ struct Turn<'a> {
     cancel: CancellationToken,
     /// The explanation step playing while the model writes the next one.
     playing: Mutex<Option<(u32, tauri::async_runtime::JoinHandle<guide::StepEnd>)>>,
+    /// An explanation's pictures and charts, kept on screen through its
+    /// later steps; models often send them only with the first.
+    visuals: Mutex<Vec<step::Action>>,
 }
 
 impl Turn<'_> {
@@ -869,9 +872,13 @@ impl Turn<'_> {
         if self.settings.guidance.snap_to_controls {
             step = guide::snap::snap(step, meta).await;
         }
+        if step.explain && !step::has_visuals(&step) {
+            step.actions.splice(0..0, self.visuals.lock().unwrap().iter().cloned());
+        }
         // Pictures download while the step before is still playing. One
         // that isn't found is left out rather than failing the step.
         let missing = step::find_pictures(&mut step).await;
+        *self.visuals.lock().unwrap() = if step.explain { step::visuals(&step) } else { Vec::new() };
         let missing = if missing.is_empty() {
             String::new()
         } else {
@@ -1352,6 +1359,7 @@ async fn answer(app: &AppHandle, pending: Pending) {
         feed,
         cancel,
         playing: Mutex::new(None),
+        visuals: Mutex::new(Vec::new()),
     };
     let history = turn.compact(history).await;
     let result = turn.run(history, text.clone(), images).await;

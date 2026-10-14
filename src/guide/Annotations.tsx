@@ -159,7 +159,7 @@ function MarkLabels({ mark: m, debug }: { mark: Mark; debug: boolean }) {
   }
   if (m.type === "image") {
     return (
-      <figure className="ann__picture" style={{ left: m.x, top: m.y, width: m.width }}>
+      <figure className={`ann__picture${m.kept ? " is-kept" : ""}`} style={{ left: m.x, top: m.y, width: m.width }}>
         <img src={m.src} alt={m.caption ?? ""} />
         {m.caption && <figcaption>{m.caption}</figcaption>}
         {raw}
@@ -168,7 +168,7 @@ function MarkLabels({ mark: m, debug }: { mark: Mark; debug: boolean }) {
   }
   if (m.type === "chart") {
     return (
-      <figure className="ann__picture ann__chart" style={{ left: m.x, top: m.y, width: m.width }}>
+      <figure className={`ann__picture ann__chart${m.kept ? " is-kept" : ""}`} style={{ left: m.x, top: m.y, width: m.width }}>
         <Diagram source={m.source} light />
         {m.caption && <figcaption>{m.caption}</figcaption>}
         {raw}

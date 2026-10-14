@@ -15,8 +15,12 @@ size: number, raw: string, } | { "type": "image", x: number, y: number, width: n
 /**
  * A data URL.
  */
-src: string, caption: string | null, raw: string, } | { "type": "chart", x: number, y: number, width: number, 
+src: string, caption: string | null, 
+/**
+ * Already on screen from an earlier step: shown without drawing in.
+ */
+kept: boolean, raw: string, } | { "type": "chart", x: number, y: number, width: number, 
 /**
  * Mermaid source.
  */
-source: string, caption: string | null, raw: string, };
+source: string, caption: string | null, kept: boolean, raw: string, };

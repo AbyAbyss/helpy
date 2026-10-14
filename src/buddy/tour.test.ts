@@ -75,4 +75,12 @@ describe("buddy tour", () => {
       expect(Math.abs(f[i].angle - f[i - 1].angle)).toBeLessThanOrEqual(180);
     }
   });
+
+  it("doesn't revisit a picture kept from the step before", () => {
+    const kept: Mark = { type: "image", x: 500, y: 500, width: 200, src: "data:,", caption: null, kept: true, raw: "" };
+    const tour = planTour([kept, line([[100, 0], [300, 0]])], { x: 0, y: 0 }, 1, true);
+    expect(tour.legs[0].dur).toBe(0);
+    expect(tour.legs[0].trace).toEqual([{ x: 0, y: 0 }]);
+    expect(tour.legs[1].trace[0]).toEqual({ x: 100, y: 0 });
+  });
 });

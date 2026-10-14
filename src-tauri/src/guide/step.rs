@@ -88,6 +88,9 @@ pub enum Action {
         /// The picture as a data URL, once Helpy has found it.
         #[serde(skip)]
         src: Option<String>,
+        /// Carried over from an earlier step of the explanation.
+        #[serde(skip)]
+        kept: bool,
     },
     /// A chart or diagram drawn from Mermaid source, top-left at x, y.
     Chart {
@@ -97,6 +100,8 @@ pub enum Action {
         chart: String,
         #[serde(default)]
         caption: Option<String>,
+        #[serde(skip)]
+        kept: bool,
     },
     Speak {
         text: String,
@@ -193,6 +198,8 @@ pub enum Mark {
         /// A data URL.
         src: String,
         caption: Option<String>,
+        /// Already on screen from an earlier step: shown without drawing in.
+        kept: bool,
         raw: String,
     },
     Chart {
@@ -202,6 +209,7 @@ pub enum Mark {
         /// Mermaid source.
         source: String,
         caption: Option<String>,
+        kept: bool,
         raw: String,
     },
 }
@@ -469,6 +477,7 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                     query,
                     caption: label(caption),
                     src: None,
+                    kept: false,
                 }
             }
             Action::Chart {
@@ -477,6 +486,7 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                 width,
                 chart,
                 caption,
+                ..
             } => {
                 let chart = chart.trim().to_string();
                 if chart.is_empty() || chart.chars().count() > MAX_CHART {
@@ -492,6 +502,7 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                     width: x1 - x0,
                     chart,
                     caption: label(caption),
+                    kept: false,
                 }
             }
             Action::Speak { text } => Action::Speak {
@@ -605,6 +616,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                 width,
                 caption,
                 src,
+                kept,
                 ..
             } => {
                 let (ox, oy) = meta.to_overlay(x, y);
@@ -614,6 +626,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     width: width * kx,
                     src: src?,
                     caption,
+                    kept,
                     raw: format!("{} w{width:.0}", raw(&[(x, y)])),
                 })
             }
@@ -623,6 +636,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                 width,
                 chart,
                 caption,
+                kept,
             } => {
                 let (ox, oy) = meta.to_overlay(x, y);
                 Some(Mark::Chart {
@@ -631,6 +645,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     width: width * kx,
                     source: chart,
                     caption,
+                    kept,
                     raw: format!("{} w{width:.0}", raw(&[(x, y)])),
                 })
             }
@@ -644,7 +659,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
 pub async fn find_pictures(step: &mut Step) -> Vec<String> {
     let mut missing = Vec::new();
     for a in &mut step.actions {
-        if let Action::Image { query, src, .. } = a {
+        if let Action::Image { query, src: src @ None, .. } = a {
             match super::picture::find(query).await {
                 Ok(found) => *src = Some(found),
                 Err(_) => missing.push(query.clone()),
@@ -654,6 +669,41 @@ pub async fn find_pictures(step: &mut Step) -> Vec<String> {
     step.actions
         .retain(|a| !matches!(a, Action::Image { src: None, .. }));
     missing
+}
+
+/// Whether the step brings a picture or chart of its own.
+pub fn has_visuals(step: &Step) -> bool {
+    step.actions
+        .iter()
+        .any(|a| matches!(a, Action::Image { .. } | Action::Chart { .. }))
+}
+
+/// The step's pictures and charts, to keep on screen through the next steps
+/// of an explanation that don't bring their own.
+pub fn visuals(step: &Step) -> Vec<Action> {
+    step.actions
+        .iter()
+        .filter_map(|a| match a.clone() {
+            Action::Image { src: Some(src), x, y, width, query, caption, .. } => Some(Action::Image {
+                x,
+                y,
+                width,
+                query,
+                caption,
+                src: Some(src),
+                kept: true,
+            }),
+            Action::Chart { x, y, width, chart, caption, .. } => Some(Action::Chart {
+                x,
+                y,
+                width,
+                chart,
+                caption,
+                kept: true,
+            }),
+            _ => None,
+        })
+        .collect()
 }
 
 /// What to say aloud for a step: its speak actions, or the instruction.
@@ -1051,6 +1101,30 @@ mod tests {
         let bad = |v: Value| validate(&json!({ "instruction": "x", "actions": [v] }), 1568, 882).unwrap_err();
         assert!(bad(json!({ "type": "chart", "x": 1, "y": 1, "width": 400, "chart": " " })).contains("chart"));
         assert!(bad(json!({ "type": "chart", "x": 1, "y": 1, "width": 100, "chart": "pie" })).contains("width"));
+    }
+
+    #[test]
+    fn found_pictures_and_charts_are_kept_for_later_steps() {
+        let mut s = validate(
+            &json!({ "instruction": "A heart.", "explain": true, "actions": [
+                { "type": "image", "x": 100, "y": 50, "width": 400, "query": "heart diagram" },
+                { "type": "chart", "x": 600, "y": 50, "width": 300, "chart": "pie\n \"A\" : 1" },
+                { "type": "arrow", "fromX": 1, "fromY": 1, "toX": 50, "toY": 50 }
+            ]}),
+            1568,
+            882,
+        )
+        .unwrap();
+        // Not found yet: only the chart can be kept.
+        assert_eq!(visuals(&s).len(), 1);
+        if let Action::Image { src, .. } = &mut s.actions[0] {
+            *src = Some("data:image/png;base64,AA==".into());
+        }
+        let kept = visuals(&s);
+        assert_eq!(kept.len(), 2);
+        assert!(kept.iter().all(|a| matches!(a, Action::Image { kept: true, .. } | Action::Chart { kept: true, .. })));
+        let next = Step { actions: kept, ..s.clone() };
+        assert!(matches!(&marks(&next, meta())[..], [Mark::Image { kept: true, .. }, Mark::Chart { kept: true, .. }]));
     }
 
     #[test]

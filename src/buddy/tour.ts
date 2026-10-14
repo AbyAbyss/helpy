@@ -92,6 +92,11 @@ export function planTour(marks: Mark[], from: Pt, scale: number, curvedArrows: b
   let at = from;
   let t = 0;
   for (const m of marks) {
+    // A picture or chart kept from the step before is already there.
+    if ((m.type === "image" || m.type === "chart") && m.kept) {
+      legs.push({ fly: t, draw: t, dur: 0, trace: [at] });
+      continue;
+    }
     const trace = traceOf(m, curvedArrows);
     const start = trace[0];
     const fly = clamp(Math.hypot(start.x - at.x, start.y - at.y) / FLY_SPEED, 160, 620) * scale;

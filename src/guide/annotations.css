@@ -314,6 +314,11 @@
   border-radius: 6px;
 }
 
+/* Still on screen from the step before: no drawing in again. */
+.ann__picture.is-kept {
+  animation: none;
+}
+
 .ann__chart {
   color: #1a1d24;
   font: 13px/1.4 var(--font-ui);
