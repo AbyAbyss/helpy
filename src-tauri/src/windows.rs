@@ -566,6 +566,11 @@ fn last_chip_centre(app: &AppHandle) -> Option<(f64, f64)> {
     Some((x + size.0 / 2.0, y + size.1 / 2.0))
 }
 
+pub fn pill_shown(app: &AppHandle) -> bool {
+    app.get_webview_window(PILL)
+        .is_some_and(|w| w.is_visible().unwrap_or(false))
+}
+
 pub fn hide_pill(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(PILL) {
         let _ = w.hide();

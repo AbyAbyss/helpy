@@ -12,6 +12,9 @@ const BARS = 9;
 const PROFILE = [0.35, 0.55, 0.8, 0.95, 1, 0.95, 0.8, 0.55, 0.35];
 /** How long a finished answer or a message stays before the pill hides. */
 const HIDE_AFTER = { done: 7000, message: 3500, error: 6000 };
+/** With the pointer on it, it stays longer, though not for good: macOS can
+ * miss the pointer leaving a window that isn't focused. */
+const HOVER_HOLD = 20000;
 
 /**
  * The compact voice view: a glowing waveform next to the cursor, with a
@@ -61,13 +64,13 @@ export function Pill() {
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
 
-  // Hide once there's nothing more to show, unless the pointer is on it.
+  // Hide once there's nothing more to show; later while the pointer is on it.
   useEffect(() => {
-    if (hover || speaking) return;
+    if (speaking) return;
     const delay =
       state.mode === "done" ? HIDE_AFTER.done : state.mode === "message" ? (state.tone === "error" ? HIDE_AFTER.error : HIDE_AFTER.message) : null;
     if (delay === null) return;
-    const t = setTimeout(() => api.voicePillHide(), delay);
+    const t = setTimeout(() => api.voicePillHide(), hover ? HOVER_HOLD : delay);
     return () => clearTimeout(t);
   }, [state, hover, speaking]);
 

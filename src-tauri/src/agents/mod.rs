@@ -382,7 +382,9 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
          - Before you say you're done, check the result yourself (open the file, run the test, look at the page) \
          rather than assuming it worked.\n\
          - Only say you did something when a tool call did it and said so. If none of your tools can do part of \
-         the task, say so plainly in your answer instead of describing it as done.\n",
+         the task, say so plainly in your answer instead of describing it as done.\n\
+         - Never make up facts, prices or figures, and never fill a page or chart with mock or sample data unless \
+         the user asked for it. If you can't find real figures, say so in your answer (and on the page).\n",
         name = a.name,
         when = now.format("%A %-d %B %Y, %H:%M (%Z)"),
         goal = a.goal,

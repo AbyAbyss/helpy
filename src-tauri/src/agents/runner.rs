@@ -743,6 +743,10 @@ impl Run<'_> {
         agent.status_line = status_from(&result).unwrap_or_else(|| "Done.".into());
         agent.result = Some(result);
         agent.suggestions = suggestions;
+        // Models often stop ticking their checklist; a finished agent's is done.
+        for item in &mut agent.plan {
+            item.status = PlanStatus::Done;
+        }
         agent.status = if agent.keep_open {
             Status::Ready
         } else {
@@ -1322,11 +1326,11 @@ mod tests {
         assert_eq!(
             a.plan,
             vec![
-                PlanItem { text: "Find sources".into(), status: PlanStatus::Todo },
-                PlanItem { text: "Write it up".into(), status: PlanStatus::Doing },
+                PlanItem { text: "Find sources".into(), status: PlanStatus::Done },
+                PlanItem { text: "Write it up".into(), status: PlanStatus::Done },
             ]
         );
-        assert_eq!(a.plan_text(), "Plan: 0 of 2 done.\n[ ] Find sources\n[>] Write it up");
+        assert_eq!(a.plan_text(), "Plan: 2 of 2 done.\n[x] Find sources\n[x] Write it up");
         assert_eq!(a.notes, ["Budget is £400"]);
         // The bad plan was refused and the old one kept; the results reached the model.
         let results: Vec<String> = a

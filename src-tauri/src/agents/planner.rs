@@ -533,13 +533,19 @@ pub fn agents_plan_current(app: AppHandle) -> Option<Plan> {
 
 #[tauri::command]
 pub fn agents_plan_start(app: AppHandle, id: String, mode: RunMode) -> Result<(), String> {
-    start(&app, &id, mode)
+    start(&app, &id, mode)?;
+    // A spoken request's pill is still up while its plan card is confirmed.
+    if crate::windows::pill_shown(&app) {
+        crate::windows::pill_after_start(&app);
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub fn agents_plan_cancel(app: AppHandle) {
     app.state::<AgentsState>().plan.lock().unwrap().take();
     close_card(&app);
+    crate::windows::hide_pill(&app);
 }
 
 /// A typed request from the agent panel, with a picture if one was attached
