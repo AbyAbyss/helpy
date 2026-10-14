@@ -200,8 +200,8 @@ export const api = {
   agentDelete: (id: string) => invoke<void>("agents_delete", { id }),
   agentDuplicate: (id: string) => invoke<void>("agents_duplicate", { id }),
   agentExport: (id: string, path: string) => invoke<void>("agents_export", { id, path }),
-  setBraveKey: (key: string) => invoke<void>("agents_set_brave_key", { key }),
-  hasBraveKey: () => invoke<boolean>("agents_has_brave_key"),
+  setSearchKey: (service: "tavily" | "brave", key: string) => invoke<void>("agents_set_search_key", { service, key }),
+  hasSearchKey: (service: "tavily" | "brave") => invoke<boolean>("agents_has_search_key", { service }),
   plan: (request: string, image?: string) => invoke<Plan>("agents_plan", { request, image }),
   templates: () => invoke<TemplateInfo[]>("agents_templates"),
   /** Fills in a template and shows its plan card. */

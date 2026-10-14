@@ -1,8 +1,8 @@
 //! Web search behind one small trait, so engines can be added without
 //! touching the agents. DuckDuckGo and Bing work with no account; DuckDuckGo
-//! is the default, with Bing next when DuckDuckGo is rate limiting. Brave
-//! (with an API key) and SearXNG (with an instance address) are used when set
-//! up in Settings → Agents.
+//! is the default, with Bing next when DuckDuckGo is rate limiting. Tavily
+//! and Brave (with an API key) and SearXNG (with an instance address) are
+//! used when set up in Settings → Agents.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -38,16 +38,20 @@ pub trait SearchAdapter: Send + Sync {
     ) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>>;
 }
 
-/// The engines to try in order, from settings: Brave when its key is set,
-/// SearXNG when its address is set, otherwise DuckDuckGo and then Bing.
+/// The engines to try in order, from settings: Tavily or Brave when its key
+/// is set, SearXNG when its address is set, otherwise DuckDuckGo and then Bing.
 pub fn pick(
     engine: SearchEngine,
+    tavily_key: Option<String>,
     brave_key: Option<String>,
     searxng_url: &str,
 ) -> Vec<Box<dyn SearchAdapter>> {
     let searxng = (!searxng_url.trim().is_empty()).then(|| Searxng {
         base: searxng_url.trim().trim_end_matches('/').to_string(),
     });
+    if let (SearchEngine::Tavily | SearchEngine::Auto, Some(key)) = (engine, tavily_key) {
+        return vec![Box::new(Tavily { key })];
+    }
     match (engine, brave_key, searxng) {
         (SearchEngine::Brave, Some(key), _) | (SearchEngine::Auto, Some(key), _) => {
             vec![Box::new(Brave { key })]
@@ -361,6 +365,46 @@ impl SearchAdapter for Brave {
     }
 }
 
+// ---------- Tavily ----------
+
+/// Tavily's search API, made for agents: each result comes with the relevant
+/// part of the page, not just a snippet.
+pub struct Tavily {
+    key: String,
+}
+
+impl SearchAdapter for Tavily {
+    fn name(&self) -> &'static str {
+        "Tavily"
+    }
+    fn search<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+        query: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<Hit>, SearchError>> {
+        Box::pin(async move {
+            let resp = http
+                .post("https://api.tavily.com/search")
+                .bearer_auth(&self.key)
+                .json(&serde_json::json!({ "query": query, "max_results": MAX_HITS }))
+                .send()
+                .await
+                .map_err(|e| http_error("Tavily", e))?;
+            // Tavily's own codes for a key whose credits are used up.
+            if matches!(resp.status().as_u16(), 432 | 433) {
+                return Err(SearchError::Permanent(
+                    "Tavily's credits for this key are used up; add more or pick another engine in Settings → Agents".into(),
+                ));
+            }
+            if !resp.status().is_success() {
+                return Err(status_error("Tavily", resp.status()));
+            }
+            let v: Value = resp.json().await.map_err(|e| http_error("Tavily", e))?;
+            Ok(parse_json_hits(&v["results"], "content"))
+        })
+    }
+}
+
 // ---------- SearXNG ----------
 
 /// A SearXNG instance (open source, self-hostable). Its JSON output has to be
@@ -497,13 +541,17 @@ mod tests {
         let names = |engines: Vec<Box<dyn SearchAdapter>>| {
             engines.iter().map(|e| e.name()).collect::<Vec<_>>()
         };
-        assert_eq!(names(pick(SearchEngine::Auto, None, "")), ["DuckDuckGo", "Bing"]);
-        assert_eq!(names(pick(SearchEngine::Auto, key(), "http://sx")), ["Brave"]);
-        assert_eq!(names(pick(SearchEngine::Auto, None, "http://sx")), ["SearXNG"]);
-        // Asked for Brave but no key: fall back instead of failing.
-        assert_eq!(names(pick(SearchEngine::Brave, None, "")), ["DuckDuckGo", "Bing"]);
-        assert_eq!(names(pick(SearchEngine::DuckDuckGo, key(), "http://sx")), ["DuckDuckGo"]);
-        assert_eq!(names(pick(SearchEngine::Bing, key(), "")), ["Bing"]);
+        assert_eq!(names(pick(SearchEngine::Auto, None, None, "")), ["DuckDuckGo", "Bing"]);
+        assert_eq!(names(pick(SearchEngine::Auto, key(), key(), "http://sx")), ["Tavily"]);
+        assert_eq!(names(pick(SearchEngine::Auto, None, key(), "http://sx")), ["Brave"]);
+        assert_eq!(names(pick(SearchEngine::Auto, None, None, "http://sx")), ["SearXNG"]);
+        assert_eq!(names(pick(SearchEngine::Tavily, key(), key(), "")), ["Tavily"]);
+        assert_eq!(names(pick(SearchEngine::Brave, key(), key(), "")), ["Brave"]);
+        // Asked for Brave or Tavily but no key: fall back instead of failing.
+        assert_eq!(names(pick(SearchEngine::Brave, None, None, "")), ["DuckDuckGo", "Bing"]);
+        assert_eq!(names(pick(SearchEngine::Tavily, None, None, "")), ["DuckDuckGo", "Bing"]);
+        assert_eq!(names(pick(SearchEngine::DuckDuckGo, key(), key(), "http://sx")), ["DuckDuckGo"]);
+        assert_eq!(names(pick(SearchEngine::Bing, None, key(), "")), ["Bing"]);
     }
 
     struct Fixed(&'static str, Result<Vec<Hit>, &'static str>);

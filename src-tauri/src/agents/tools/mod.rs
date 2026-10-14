@@ -863,7 +863,7 @@ mod tests {
             settings: a.clone(),
             files: Files::new(&[], PathBuf::from("/tmp/none")),
             http: web::client(),
-            search: search::pick(a.search_engine, None, ""),
+            search: search::pick(a.search_engine, None, None, ""),
             projects: PathBuf::from("/tmp"),
             external: None,
             browser: None,

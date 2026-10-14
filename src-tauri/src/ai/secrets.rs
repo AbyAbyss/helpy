@@ -172,7 +172,7 @@ pub fn key_for(
     }
 }
 
-/// Key of a tool service agents use (Brave Search).
+/// Key of a tool service agents use (Brave Search, Tavily).
 pub fn get_service(service: &str) -> Result<Option<String>, ProviderError> {
     get_account(&format!("tool:{service}"))
 }

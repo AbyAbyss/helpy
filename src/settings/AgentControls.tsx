@@ -238,24 +238,8 @@ export function StringList({ value, placeholder, onChange }: { value: string[]; 
   );
 }
 
-/** The engine, and the Brave key (kept in the keychain) when it's used. */
+/** The engine, and the Tavily or Brave key (kept in the keychain) when it's used. */
 export function SearchEnginePicker({ value, onChange }: { value: SearchEngine; onChange: (v: SearchEngine) => void }) {
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
-  const [key, setKey] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  useEffect(() => {
-    api.hasBraveKey().then(setHasKey).catch(() => setHasKey(false));
-  }, []);
-  const saveKey = async (k: string) => {
-    try {
-      await api.setBraveKey(k);
-      setHasKey(k.trim() !== "");
-      setKey("");
-      setMessage(k.trim() ? "Saved in the system keychain." : "Removed.");
-    } catch (e) {
-      setMessage(String(e));
-    }
-  };
   return (
     <div className="engine">
       <Segmented
@@ -265,31 +249,55 @@ export function SearchEnginePicker({ value, onChange }: { value: SearchEngine; o
           { value: "auto", label: "Automatic" },
           { value: "duckDuckGo", label: "DuckDuckGo" },
           { value: "bing", label: "Bing" },
+          { value: "tavily", label: "Tavily" },
           { value: "brave", label: "Brave" },
           { value: "searxng", label: "SearXNG" },
         ]}
         onChange={(v) => onChange(v as SearchEngine)}
       />
-      {(value === "auto" || value === "brave") && (
-        <div className="engine__key">
-          {hasKey ? (
-            <>
-              <span className="pill pill--ok">Brave key saved</span>
-              <button type="button" className="link-btn" onClick={() => saveKey("")}>
-                Remove key
-              </button>
-            </>
-          ) : (
-            <>
-              <input className="text-input" type="password" value={key} placeholder="Brave Search API key" onChange={(e) => setKey(e.target.value)} />
-              <button type="button" className="btn btn--sm" disabled={!key.trim()} onClick={() => saveKey(key)}>
-                Save
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {message && <p className="engine__msg">{message}</p>}
+      {(value === "auto" || value === "tavily") && <EngineKey service="tavily" name="Tavily" />}
+      {(value === "auto" || value === "brave") && <EngineKey service="brave" name="Brave Search" />}
     </div>
+  );
+}
+
+function EngineKey({ service, name }: { service: "tavily" | "brave"; name: string }) {
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [key, setKey] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    api.hasSearchKey(service).then(setHasKey).catch(() => setHasKey(false));
+  }, [service]);
+  const saveKey = async (k: string) => {
+    try {
+      await api.setSearchKey(service, k);
+      setHasKey(k.trim() !== "");
+      setKey("");
+      setMessage(k.trim() ? "Saved in the system keychain." : "Removed.");
+    } catch (e) {
+      setMessage(String(e));
+    }
+  };
+  return (
+    <>
+      <div className="engine__key">
+        {hasKey ? (
+          <>
+            <span className="pill pill--ok">{name} key saved</span>
+            <button type="button" className="link-btn" onClick={() => saveKey("")}>
+              Remove key
+            </button>
+          </>
+        ) : (
+          <>
+            <input className="text-input" type="password" value={key} placeholder={`${name} API key`} onChange={(e) => setKey(e.target.value)} />
+            <button type="button" className="btn btn--sm" disabled={!key.trim()} onClick={() => saveKey(key)}>
+              Save
+            </button>
+          </>
+        )}
+      </div>
+      {message && <p className="engine__msg">{message}</p>}
+    </>
   );
 }

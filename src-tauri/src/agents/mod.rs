@@ -454,12 +454,13 @@ fn toolbox(app: &AppHandle, s: &Settings) -> Toolbox {
     if std::fs::create_dir_all(&projects).is_ok() {
         folders.push(projects.display().to_string());
     }
+    let tavily = crate::ai::secrets::get_service("tavily").ok().flatten();
     let brave = crate::ai::secrets::get_service("brave").ok().flatten();
     Toolbox {
         settings: s.agents.clone(),
         files: tools::files::Files::new(&folders, state.backups.clone()),
         http: state.http.clone(),
-        search: tools::search::pick(s.agents.search_engine, brave, &s.agents.searxng_url),
+        search: tools::search::pick(s.agents.search_engine, tavily, brave, &s.agents.searxng_url),
         projects,
         external: Some(crate::connectors::external(app, s)),
         browser: Some(state.browser.clone()),
@@ -1854,14 +1855,22 @@ pub fn agents_export(app: AppHandle, id: String, path: String) -> Result<(), Str
     std::fs::write(&path, markdown(&a)).map_err(|e| format!("Couldn't save {path}: {e}"))
 }
 
-#[tauri::command]
-pub fn agents_set_brave_key(key: String) -> Result<(), String> {
-    crate::ai::secrets::set_service("brave", &key).map_err(|e| e.message)
+/// Search engines whose key is kept in the keychain.
+fn search_service(service: &str) -> Result<&str, String> {
+    match service {
+        "brave" | "tavily" => Ok(service),
+        _ => Err(format!("{service} isn't a search engine with a key")),
+    }
 }
 
 #[tauri::command]
-pub fn agents_has_brave_key() -> Result<bool, String> {
-    crate::ai::secrets::get_service("brave")
+pub fn agents_set_search_key(service: String, key: String) -> Result<(), String> {
+    crate::ai::secrets::set_service(search_service(&service)?, &key).map_err(|e| e.message)
+}
+
+#[tauri::command]
+pub fn agents_has_search_key(service: String) -> Result<bool, String> {
+    crate::ai::secrets::get_service(search_service(&service)?)
         .map(|k| k.is_some())
         .map_err(|e| e.message)
 }
