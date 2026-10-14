@@ -209,6 +209,7 @@ pub fn run() {
             agents::agents_retry,
             agents::agents_raise,
             agents::agents_follow_up,
+            agents::agents_show_on_screen,
             agents::agents_undo,
             agents::agents_rename,
             agents::agents_dismiss,

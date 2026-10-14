@@ -385,6 +385,9 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
         <section className="result">
           <div className="result__head">
             <h2>Result</h2>
+            <button type="button" className="btn btn--quiet" onClick={() => run(() => api.agentShowOnScreen(a.id))}>
+              Show on screen
+            </button>
             <button type="button" className="btn btn--quiet" onClick={() => run(() => navigator.clipboard.writeText(a.result ?? ""), "Copied.")}>
               Copy
             </button>

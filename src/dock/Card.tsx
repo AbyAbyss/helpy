@@ -164,10 +164,16 @@ export function Card(props: {
               <RichText text={a.result ?? ""} links={false} />
             </div>
             <AgentFiles agent={a.id} files={a.files} compact />
-            {a.suggestions.length > 0 && (
+            {(a.result?.trim() || a.suggestions.length > 0) && (
               <div className="nexts">
+                {a.result?.trim() && (
+                  <button type="button" className="next" onClick={() => api.agentShowOnScreen(a.id).catch(() => {})}>
+                    <span>Show on my screen</span>
+                    <Arrow />
+                  </button>
+                )}
                 {a.suggestions.map((s, i) => (
-                  <button key={s} type="button" className="next" style={{ ["--i" as string]: i }} onClick={() => api.agentFollowUp(a.id, s)}>
+                  <button key={s} type="button" className="next" style={{ ["--i" as string]: i + 1 }} onClick={() => api.agentFollowUp(a.id, s)}>
                     <span>{s}</span>
                     <Arrow />
                   </button>

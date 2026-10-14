@@ -13,7 +13,7 @@ const MAX_ACTIONS: usize = 6;
 const MAX_INSTRUCTION: usize = 300;
 const MAX_LABEL: usize = 60;
 /// Characters in text written on the screen.
-const MAX_TEXT: usize = 40;
+const MAX_TEXT: usize = 60;
 /// Characters in a picture's search words.
 const MAX_QUERY: usize = 100;
 /// Characters of Mermaid source in one chart.
@@ -278,7 +278,7 @@ fn actions_schema() -> Value {
                 "closed": { "type": "boolean", "description": "For line: join the last point to the first, making a shape." },
                 "curved": { "type": "boolean", "description": "For line: a smooth curve through the points." },
                 "label": label,
-                "text": { "type": "string", "description": "For text: what to write (a few words, a number or a formula like a² + b² = c²). For speak: what to say aloud." },
+                "text": { "type": "string", "description": "For text: what to write (a few words, a number or a formula like a² + b² = c²; up to 60 characters). For speak: what to say aloud." },
                 "size": { "type": "string", "enum": ["small", "medium", "large"], "description": "For text: how big to write it. Default medium." },
                 "query": { "type": "string", "description": "For image: 2 to 4 plain words naming the subject, the way a picture file is named, e.g. \"heart diagram\", \"thalamus\", \"spinal cord cross section\". Longer searches usually find nothing." },
                 "chart": { "type": "string", "description": "For chart: Mermaid source for a chart of the numbers, e.g. \"pie title Spending\\n  \\\"Rent\\\" : 1200\\n  \\\"Food\\\" : 450\", or xychart-beta for bars and lines, or a flowchart." },

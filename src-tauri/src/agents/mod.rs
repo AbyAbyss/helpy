@@ -1291,6 +1291,29 @@ pub fn agents_raise(app: AppHandle, id: String) -> Result<(), String> {
     })
 }
 
+/// Hands a finished agent's result to Helpy's quick answer, which shows it
+/// on screen (a chart, a picture, marks) and explains it.
+#[tauri::command]
+pub async fn agents_show_on_screen(app: AppHandle, id: String) -> Result<(), String> {
+    let a = app.state::<AgentsState>().get(&id).ok_or("That agent is gone")?;
+    let result = a
+        .result
+        .filter(|r| !r.trim().is_empty())
+        .ok_or("This agent has no result to show yet")?;
+    crate::windows::show_ask(&app);
+    let question = show_on_screen_question(&a.name, &result);
+    crate::ai::ask::ask(&app, question, crate::ai::ask::Origin::Text, Vec::new()).await
+}
+
+/// The question, with the result attached the way the Ask panel attaches a
+/// document, so the panel shows its name rather than the whole report.
+fn show_on_screen_question(name: &str, result: &str) -> String {
+    let name = format!("{name} result").replace('"', "'");
+    format!(
+        "Show me this result on my screen and walk me through it.\n\n<document name=\"{name}\">\n{result}\n</document>"
+    )
+}
+
 /// A follow-up for a finished agent (R5): same agent, same context.
 #[tauri::command]
 pub fn agents_follow_up(
@@ -1993,6 +2016,14 @@ mod tests {
         println!("\nstatus {:?}, {} tool calls, {} tokens", agent.status, agent.counters.tool_calls, agent.counters.tokens);
         println!("result:\n{}", agent.result.clone().unwrap_or_default());
         assert_eq!(agent.status, Status::Done, "{:?}", agent.log.last());
+    }
+
+    #[test]
+    fn show_on_screen_attaches_the_result_like_a_document() {
+        assert_eq!(
+            show_on_screen_question("Rates \"5y\"", "| Year | INR |"),
+            "Show me this result on my screen and walk me through it.\n\n<document name=\"Rates '5y' result\">\n| Year | INR |\n</document>"
+        );
     }
 
     #[test]
