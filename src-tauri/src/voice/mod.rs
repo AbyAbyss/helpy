@@ -100,7 +100,7 @@ impl VoiceState {
         }
     }
 
-    fn listening(&self) -> bool {
+    pub fn listening(&self) -> bool {
         self.session.lock().unwrap().is_some()
     }
 }

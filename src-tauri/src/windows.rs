@@ -125,6 +125,8 @@ pub fn show_pill(app: &AppHandle) {
     if let Ok(cursor) = app.cursor_position() {
         place_pill(app, &w, (cursor.x, cursor.y));
     }
+    // The pill drops its waveform while the buddy shows the voice state.
+    let _ = w.emit_to(PILL, crate::cursor::VISIBLE_EVENT, crate::cursor::buddy_shown(app));
     let _ = w.show();
     let _ = w.set_always_on_top(true);
     PILL_FOLLOWS.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -133,6 +135,28 @@ pub fn show_pill(app: &AppHandle) {
 /// The pill is showing and keeps beside the cursor, like the buddy; not
 /// while it flies to the dock.
 static PILL_FOLLOWS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The pill window's top-left when the buddy shows: its words just right of
+/// the buddy (`buddy` = left, top, size), or left of the cursor when there's
+/// no room, so they never cover it. The window has a 14 px margin for its glow.
+fn beside_buddy(
+    cursor: (f64, f64),
+    buddy: (f64, f64, f64),
+    size: (f64, f64),
+    monitor: (f64, f64, f64, f64),
+    scale: f64,
+) -> (f64, f64) {
+    let (bx, by, bs) = buddy;
+    let (w, h) = size;
+    let (mx, my, mw, mh) = monitor;
+    let (pad, gap) = (14.0 * scale, 6.0 * scale);
+    let mut x = bx + bs + gap - pad;
+    if x + w > mx + mw {
+        x = bx.min(cursor.0) - gap - (w - pad);
+    }
+    let y = by - pad;
+    (x.clamp(mx, (mx + mw - w).max(mx)), y.clamp(my, (my + mh - h).max(my)))
+}
 
 /// Moves the pill along with the cursor, global physical pixels.
 pub fn pill_follow(app: &AppHandle, cursor: (f64, f64)) {
@@ -150,6 +174,18 @@ fn place_pill(app: &AppHandle, w: &tauri::WebviewWindow, cursor: (f64, f64)) {
         return;
     };
     let size = (PILL_SIZE.0 * m.scale, PILL_SIZE.1 * m.scale);
+    if crate::cursor::buddy_shown(app) {
+        let b = app.state::<crate::settings::SettingsStore>().get().buddy;
+        let buddy = (
+            cursor.0 + b.offset_x as f64 * m.scale,
+            cursor.1 + b.offset_y as f64 * m.scale,
+            b.size as f64 * m.scale,
+        );
+        let w_size = w.outer_size().map_or(size, |s| (s.width as f64, s.height as f64));
+        let (x, y) = beside_buddy(cursor, buddy, w_size, (m.x as f64, m.y as f64, m.width as f64, m.height as f64), m.scale);
+        let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        return;
+    }
     // Sit level with the cursor, where the eye already is.
     let at = (cursor.0, cursor.1 - 22.0 * m.scale);
     let (x, y) = place_near(
@@ -645,6 +681,19 @@ mod tests {
     use super::*;
 
     const MON: (f64, f64, f64, f64) = (0.0, 0.0, 1920.0, 1080.0);
+
+    #[test]
+    fn pill_words_sit_beside_the_buddy_never_on_it() {
+        let monitor = (0.0, 0.0, 1920.0, 1080.0);
+        // Buddy 40 px, 18 right and 20 below the cursor at 500, 500.
+        let buddy = (518.0, 520.0, 40.0);
+        let (x, y) = beside_buddy((500.0, 500.0), buddy, (200.0, 60.0), monitor, 1.0);
+        assert_eq!((x + 14.0, y + 14.0), (564.0, 520.0));
+        // Near the right edge the words go left of the cursor instead.
+        let buddy = (1878.0, 520.0, 40.0);
+        let (x, _) = beside_buddy((1860.0, 500.0), buddy, (200.0, 60.0), monitor, 1.0);
+        assert!(x + 200.0 - 14.0 <= 1860.0);
+    }
 
     #[test]
     fn opens_below_right_of_the_cursor() {

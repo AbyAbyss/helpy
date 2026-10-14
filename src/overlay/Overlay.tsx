@@ -7,7 +7,8 @@ import type { MarksView } from "../bindings/MarksView";
 import type { AskActivity } from "../bindings/AskActivity";
 import type { BuddyHandoff } from "../bindings/BuddyHandoff";
 import type { BuddyStyle } from "../bindings/BuddyStyle";
-import { Buddy } from "../buddy/Buddy";
+import type { VoicePhase } from "../bindings/VoicePhase";
+import { Buddy, type BuddyState } from "../buddy/Buddy";
 import { followStep, type Point } from "../buddy/follow";
 import { handoffFrames, planTour, tourAt, traceOf, type Tour } from "../buddy/tour";
 import { CircleLayer } from "../circle/CircleLayer";
@@ -40,6 +41,9 @@ export function Overlay() {
   const [working, setWorking] = useState(0);
   // A question being answered, and how many wait behind it.
   const [activity, setActivity] = useState<AskActivity>({ running: false, queued: 0 });
+  // Voice shows on the buddy itself: listening, then thinking, then speaking.
+  const [voice, setVoice] = useState<VoicePhase["phase"]>("idle");
+  const [speaking, setSpeaking] = useState(false);
   const el = useRef<HTMLDivElement>(null);
   const target = useRef<Point | null>(null);
   const pos = useRef<Point | null>(null);
@@ -119,6 +123,8 @@ export function Overlay() {
     });
     const offCount = listen<number>(EVENTS.agentCount, (e) => setWorking(e.payload));
     const offActivity = listen<AskActivity>(EVENTS.askActivity, (e) => setActivity(e.payload));
+    const offVoice = listen<VoicePhase>(EVENTS.voiceState, (e) => setVoice(e.payload.phase));
+    const offSpeaking = listen<boolean>(EVENTS.speaking, (e) => setSpeaking(e.payload));
     api.askActivity().then(setActivity, () => {});
     api.agents().then((l) => setWorking(l.agents.filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status)).length));
     api.overlayReady().then(setVisible);
@@ -130,6 +136,8 @@ export function Overlay() {
       offHandoff.then((f) => f());
       offCount.then((f) => f());
       offActivity.then((f) => f());
+      offVoice.then((f) => f());
+      offSpeaking.then((f) => f());
     };
   }, []);
 
@@ -183,6 +191,8 @@ export function Overlay() {
   const b = settings.buddy;
   // The buddy steps aside while a selection is being drawn over its spot.
   const shown = visible && (inside || touring) && !circling;
+  const mood: BuddyState =
+    voice === "listening" ? "listening" : speaking ? "speaking" : voice === "transcribing" || activity.running ? "thinking" : "idle";
   const tip = tipOf(b.style, b.size);
 
   return (
@@ -203,7 +213,7 @@ export function Overlay() {
             <Buddy
               style={b.style}
               size={b.size}
-              state={activity.running ? "thinking" : "idle"}
+              state={mood}
               animate={b.showStateAnimations}
               badge={b.showAgentBadge && working > 0 ? working : null}
               queued={activity.queued}

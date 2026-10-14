@@ -26,6 +26,9 @@ export function Pill() {
   const [hover, setHover] = useState(false);
   // The hand-off to the agent dock (R6): the waveform turns into a chip.
   const [handoff, setHandoff] = useState(false);
+  // While the buddy is showing it carries the voice state, so only the
+  // words show here, beside it.
+  const [buddy, setBuddy] = useState(false);
   const level = useRef(0);
   const voiceTurn = useRef(false);
   const bars = useRef<(HTMLSpanElement | null)[]>([]);
@@ -49,6 +52,7 @@ export function Pill() {
       listen<boolean>(EVENTS.speaking, (e) => setSpeaking(e.payload)),
       listen<string>(EVENTS.speakError, (e) => setState({ mode: "message", caption: e.payload, tone: "error" })),
       getCurrentWindow().listen("pill://handoff", () => setHandoff(true)),
+      listen<boolean>(EVENTS.buddyVisible, (e) => setBuddy(e.payload)),
       listen<AskEvent>(EVENTS.ask, ({ payload }) => {
         if (payload.type === "question") voiceTurn.current = payload.voice;
         // A spoken question waiting behind the current answer: the rest of
@@ -129,7 +133,7 @@ export function Pill() {
   return (
     <div
       ref={root}
-      className={`pill pill--${tone} pill--${state.mode}${handoff ? " pill--handoff" : ""}`}
+      className={`pill pill--${tone} pill--${state.mode}${handoff ? " pill--handoff" : buddy ? " pill--buddy" : ""}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => api.voiceExpand()}

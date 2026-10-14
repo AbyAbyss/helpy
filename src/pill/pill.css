@@ -152,3 +152,8 @@ body,
   opacity: 0;
   transition: opacity 200ms ease;
 }
+
+/* The buddy shows the voice state; only the words show, beside it. */
+.pill--buddy .wave {
+  display: none;
+}

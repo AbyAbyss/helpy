@@ -81,7 +81,8 @@ fn run(app: AppHandle) {
         }
 
         let idle = buddy.hide_when_idle
-            && last_move.elapsed() >= Duration::from_secs(buddy.idle_seconds as u64);
+            && last_move.elapsed() >= Duration::from_secs(buddy.idle_seconds as u64)
+            && !busy(&app);
         let visible = buddy.enabled && !(buddy.hide_in_fullscreen && fullscreen) && !idle;
         if last_visible != Some(visible) || resend {
             last_visible = Some(visible);
@@ -120,6 +121,13 @@ fn run(app: AppHandle) {
             CursorFrame { x, y, inside: true },
         );
     }
+}
+
+/// Helpy is listening, answering or speaking, so the user is waiting on it
+/// with the mouse still; the buddy, which shows that, stays.
+fn busy(app: &AppHandle) -> bool {
+    let v = app.state::<crate::voice::VoiceState>();
+    v.listening() || v.speaker.is_speaking() || crate::ai::ask::activity(app).running
 }
 
 /// Whether the buddy is showing next to the cursor right now.
