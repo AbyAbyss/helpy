@@ -395,13 +395,19 @@ pub enum ProviderKind {
     LlamaCpp,
     /// Any server that speaks the OpenAI chat completions API.
     OpenAiCompatible,
+    /// Nebius Token Factory: open models (NVIDIA Nemotron and others) behind
+    /// the OpenAI chat completions API.
+    Nebius,
 }
 
 impl ProviderKind {
     /// Cloud APIs that can't be used without a key. Everything else may
     /// run without one, so an unreadable keychain mustn't block it.
     pub fn requires_key(self) -> bool {
-        matches!(self, Self::Anthropic | Self::OpenAi | Self::Gemini)
+        matches!(
+            self,
+            Self::Anthropic | Self::OpenAi | Self::Gemini | Self::Nebius
+        )
     }
 }
 
@@ -823,14 +829,16 @@ pub enum ShellPolicy {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum SearchEngine {
-    /// Brave when its key is set, otherwise SearXNG when its address is set,
-    /// otherwise DuckDuckGo, then Bing when DuckDuckGo is rate limiting.
+    /// Tavily when its key is set, otherwise Brave when its key is set,
+    /// otherwise SearXNG when its address is set, otherwise DuckDuckGo, then
+    /// Bing when DuckDuckGo is rate limiting.
     #[default]
     Auto,
     DuckDuckGo,
     Bing,
     Brave,
     Searxng,
+    Tavily,
 }
 
 #[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]

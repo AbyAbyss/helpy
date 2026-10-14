@@ -133,7 +133,10 @@ pub async fn privacy_can_see_windows() -> bool {
 pub fn is_local(p: &ProviderConfig) -> bool {
     if matches!(
         p.kind,
-        ProviderKind::Anthropic | ProviderKind::OpenAi | ProviderKind::Gemini
+        ProviderKind::Anthropic
+            | ProviderKind::OpenAi
+            | ProviderKind::Gemini
+            | ProviderKind::Nebius
     ) && !p.base_url.trim().is_empty()
         && !local_url(&p.base_url)
     {

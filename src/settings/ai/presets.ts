@@ -45,6 +45,10 @@ export const PRESETS: Preset[] = [
     kind: "gemini", name: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta", key: "required",
     keyHint: "Create a key at aistudio.google.com", mark: "G", models: [],
   },
+  {
+    kind: "nebius", name: "Nebius Token Factory", baseUrl: "https://api.tokenfactory.nebius.com/v1", key: "required",
+    keyHint: "Create a key at tokenfactory.nebius.com", mark: "N", models: [],
+  },
   { kind: "ollama", name: "Ollama", baseUrl: "http://localhost:11434/v1", key: "none", mark: "Ol", models: [] },
   { kind: "lmStudio", name: "LM Studio", baseUrl: "http://localhost:1234/v1", key: "none", mark: "LM", models: [] },
   { kind: "llamaCpp", name: "llama.cpp server", baseUrl: "http://localhost:8080/v1", key: "none", mark: "ll", models: [] },
