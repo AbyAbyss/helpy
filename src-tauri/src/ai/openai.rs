@@ -28,6 +28,13 @@ fn fixed_temperature(model: &str) -> bool {
     model.starts_with('o') || model.starts_with("gpt-5")
 }
 
+/// Kimi-K3 thinks at length before every answer. Helpy gives it screen work,
+/// where without thinking it pointed just as accurately in the pointing test
+/// and answered about four times sooner (0.9 s against 3.7 s).
+fn skips_thinking(model: &str) -> bool {
+    model.starts_with("moonshotai/Kimi-K3")
+}
+
 pub fn body(req: &ChatRequest, dialect: Dialect) -> Value {
     let mut messages = Vec::new();
     if !req.system.is_empty() {
@@ -55,6 +62,9 @@ pub fn body(req: &ChatRequest, dialect: Dialect) -> Value {
         Dialect::Compatible => {
             body["max_tokens"] = json!(req.max_tokens);
             body["temperature"] = json!(req.temperature);
+            if skips_thinking(&req.model) {
+                body["chat_template_kwargs"] = json!({ "thinking": false });
+            }
         }
     }
     if !req.tools.is_empty() {
@@ -466,6 +476,9 @@ mod tests {
         let b = body(&req, Dialect::Compatible);
         assert_eq!(b["max_tokens"], 100);
         assert_eq!(b["temperature"], 0.5);
+        assert!(b.get("chat_template_kwargs").is_none());
+        req.model = "moonshotai/Kimi-K3".into();
+        assert_eq!(body(&req, Dialect::Compatible)["chat_template_kwargs"]["thinking"], false);
     }
 
     #[test]

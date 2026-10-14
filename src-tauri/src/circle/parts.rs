@@ -317,6 +317,60 @@ mod tests {
         assert_eq!(f.finish(), (Some("P".into()), None));
     }
 
+    /// Live, on Nebius with NEBIUS_API_KEY: Kimi-K3 explains the picture at
+    /// HELPY_DIAGRAM (a JPEG) and labels its parts in the PARTS format.
+    #[tokio::test]
+    #[ignore]
+    async fn nebius_kimi_labels_a_diagram() {
+        use crate::ai::types::{ChatRequest, Message, Part, Role};
+        use crate::settings::schema::{ProviderConfig, ProviderKind};
+        let key = std::env::var("NEBIUS_API_KEY").unwrap();
+        let path = std::env::var("HELPY_DIAGRAM").unwrap();
+        let jpeg = std::fs::read(&path).unwrap();
+        let (w, h) = (640, 629);
+        let crop = Crop { x: 0, y: 0, width: w, height: h, scale: 1.0, image_width: w, image_height: h };
+        let s = Settings::default();
+        let nebius = ProviderConfig {
+            id: "nebius".into(),
+            kind: ProviderKind::Nebius,
+            name: "Nebius".into(),
+            base_url: "https://api.tokenfactory.nebius.com/v1".into(),
+            models: Vec::new(),
+        };
+        let req = ChatRequest {
+            model: "moonshotai/Kimi-K3".into(),
+            system: system_prompt(&s),
+            messages: vec![Message {
+                role: Role::User,
+                parts: vec![
+                    Part::Image { media_type: "image/jpeg".into(), data: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &jpeg) },
+                    Part::Text(prompt(CircleAction::Explain, &s, crop).unwrap()),
+                ],
+            }],
+            tools: Vec::new(),
+            max_tokens: s.ai.max_response_tokens,
+            temperature: s.ai.temperature,
+        };
+        let mut filter = PartsFilter::default();
+        let mut shown = String::new();
+        let started = std::time::Instant::now();
+        crate::ai::provider::stream_chat(&reqwest::Client::new(), &nebius, Some(&key), &req, std::time::Duration::from_secs(90), &tokio_util::sync::CancellationToken::new(), &mut |t| {
+            if let Some(x) = filter.push(t) {
+                shown += &x;
+            }
+        })
+        .await
+        .unwrap_or_else(|e| panic!("{}", e.message));
+        let (rest, json) = filter.finish();
+        shown += &rest.unwrap_or_default();
+        println!("{:.1} s\n{shown}", started.elapsed().as_secs_f64());
+        let parts = parse_parts(&json.expect("no PARTS section"), crop);
+        for p in &parts {
+            println!("  {} at ({:.0}, {:.0})", p.label, p.x, p.y);
+        }
+        assert!(parts.len() >= 4, "only {} parts", parts.len());
+    }
+
     #[test]
     fn reads_parts_and_drops_ones_off_the_image() {
         let c = Crop::around(&[(100.0, 50.0), (400.0, 250.0)], &M).unwrap();

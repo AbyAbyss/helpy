@@ -5,6 +5,9 @@
 //   node scripts/grounding-eval.mjs --list nebius
 //   node scripts/grounding-eval.mjs nebius:nvidia/<vision-model> anthropic:claude-sonnet-5
 //
+// GROUNDING_EXTRA adds fields to every request, e.g.
+//   GROUNDING_EXTRA='{"chat_template_kwargs":{"thinking":false}}'
+//
 // Keys come from NEBIUS_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY, or from
 // the dev build's saved keys (add the provider in Helpy's settings first).
 // Writes grounding-out/report.html with every answer drawn on its screenshot.
@@ -162,6 +165,7 @@ async function ask(spec, c) {
   const model = rest.join(":");
   const started = Date.now();
   const res = await api(provider, "/chat/completions", {
+    ...JSON.parse(process.env.GROUNDING_EXTRA ?? "{}"),
     model,
     max_tokens: 2000,
     messages: [{

@@ -60,7 +60,7 @@ flowchart LR
 
 | Model | Hits (of 12) | Median distance from the target's centre | Average time |
 |---|---|---|---|
-| `moonshotai/Kimi-K3` | **12** | 1 px | 3.7 s |
+| `moonshotai/Kimi-K3` | **12** | 1 px | 3.7 s, or **0.9 s** with thinking off, as Helpy runs it |
 | `zai-org/GLM-5.3-Flash` (about 20× cheaper) | 11 | 5 px | 2.2 s |
 | `Qwen/Qwen3.8-27B` | 6 | 28 px | 2.1 s |
 | `deepseek-ai/DeepSeek-V4.1-Flash` | 5 | 35 px | 5.7 s |
