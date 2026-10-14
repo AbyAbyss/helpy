@@ -229,6 +229,26 @@ pub fn status_from(text: &str) -> Option<String> {
     (!line.is_empty()).then(|| truncate(line, 180))
 }
 
+/// A status line for a tool call, for when the model wrote none.
+pub fn doing(tool: &str, args: &Value) -> Option<String> {
+    let arg = |k: &str| truncate(args[k].as_str().unwrap_or("").trim(), 80);
+    let host = || {
+        reqwest::Url::parse(args["url"].as_str().unwrap_or(""))
+            .ok()
+            .and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string()))
+    };
+    Some(match tool {
+        "web_search" => format!("Searching the web for \"{}\".", arg("query")),
+        "deep_research" => format!("Researching \"{}\" in depth.", arg("question")),
+        "fetch_page" | "browser_open" => format!("Reading {}.", host()?),
+        "list_folder" | "read_file" | "grep_files" | "find_files" => "Looking through your files.".into(),
+        "write_file" | "edit_file" | "make_folder" | "move_file" => "Changing files.".into(),
+        "run_command" | "project_run" => "Running a command.".into(),
+        "create_reminder" | "create_event" => format!("Adding \"{}\".", arg("title")),
+        _ => return None,
+    })
+}
+
 /// Splits "NEXT: a | b" suggestions off the end of a final answer.
 pub fn split_suggestions(text: &str) -> (String, Vec<String>) {
     let t = text.trim_end();
@@ -878,7 +898,8 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
             run.finish(agent, &text);
             return;
         }
-        if let Some(line) = status_from(&text) {
+        // Some models don't say what they're doing; then the first call does.
+        if let Some(line) = status_from(&text).or_else(|| doing(&calls[0].1, &calls[0].2)) {
             agent.log(env.now_ms(), LogKind::Status, line.clone());
             run.set_status_line(agent, line);
         }
@@ -982,6 +1003,20 @@ pub(crate) fn clear_stale_results(messages: &[Message]) -> Vec<Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_silent_tool_call_still_gets_a_status_line() {
+        assert_eq!(
+            doing("web_search", &json!({"query": "standing desks"})).as_deref(),
+            Some("Searching the web for \"standing desks\".")
+        );
+        assert_eq!(
+            doing("fetch_page", &json!({"url": "https://www.example.co.uk/desks"})).as_deref(),
+            Some("Reading example.co.uk.")
+        );
+        assert_eq!(doing("fetch_page", &json!({"url": "nonsense"})), None);
+        assert_eq!(doing("plan", &json!({})), None);
+    }
 
     #[test]
     fn stale_tool_results_are_cleared_in_requests_only() {

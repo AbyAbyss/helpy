@@ -198,7 +198,8 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
     ));
     out.push(def(
         OPEN_LINK,
-        "Open a web link in the user's default browser, e.g. a page you made or updated, when the user asks to see it.",
+        "Open a web link in the user's default browser, e.g. a page you made or updated, when the user asks to see it. \
+         The user approves it first. Never use it to read a page; use fetch_page for that.",
         json!({ "url": { "type": "string", "description": "An http or https link" } }),
         &["url"],
     ));
@@ -532,8 +533,15 @@ impl Toolbox {
         {
             return gate;
         }
+        // It acts on the user's own browser, so it waits for their OK.
         if tool == OPEN_LINK {
-            return Gate::Allow;
+            return Gate::Ask {
+                kind: ActionKind::Browser,
+                source: "Web browser".into(),
+                summary: "Open a link in your browser".into(),
+                detail: s(args, "url").to_string(),
+                editable: Vec::new(),
+            };
         }
         let Some(group) = group_of(tool) else {
             return Gate::Never(format!("there's no tool called {tool}."));
@@ -950,7 +958,10 @@ mod tests {
             Gate::Ask { .. }
         ));
         assert!(matches!(t.gate(&g, "web_search", &json!({})), Gate::Allow));
-        assert!(matches!(t.gate(&[], OPEN_LINK, &json!({})), Gate::Allow));
+        assert!(matches!(
+            t.gate(&[], OPEN_LINK, &json!({"url": "https://a.example"})),
+            Gate::Ask { ref detail, .. } if detail == "https://a.example"
+        ));
         assert!(matches!(t.gate(&g, "grep_files", &json!({})), Gate::Allow));
         // Edits are changes: the same rule as writes, and the replacement can be edited.
         assert!(matches!(
