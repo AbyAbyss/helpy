@@ -1,0 +1,62 @@
+# Builds installers and attaches them to a draft GitHub Release.
+# Runs only when started by hand (Actions → Release → Run workflow) or when a
+# version tag such as v0.2.0 is pushed; never on ordinary pushes or merges.
+# Review the draft, then publish it on the Releases page.
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest # Apple Silicon
+          - os: windows-latest
+          - os: ubuntu-22.04 # older glibc, so the build runs on more distributions
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libpipewire-0.3-dev libclang-dev \
+            libasound2-dev libspeechd-dev cmake libxtst-dev libgbm-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # A pushed tag names the release; a manual run uses the app's version.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v__VERSION__' }}
+          releaseName: Helpy __VERSION__
+          releaseBody: |
+            Unsigned builds. On macOS, open Helpy once, then allow it under System Settings →
+            Privacy & Security → Open Anyway; if macOS says the app is damaged, run
+            `xattr -dr com.apple.quarantine /Applications/Helpy.app`. On Windows, choose
+            More info → Run anyway. See the README for setup.
+          releaseDraft: true
+          prerelease: false
