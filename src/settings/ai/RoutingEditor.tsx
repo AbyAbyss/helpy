@@ -1,7 +1,7 @@
 import type { Ai } from "../../bindings/Ai";
 import type { ModelRef } from "../../bindings/ModelRef";
 import type { Routing } from "../../bindings/Routing";
-import { allModels, refKey, ROUTES } from "./routing";
+import { allModels, refKey, ROUTES, withNebiusSetup } from "./routing";
 
 function ModelSelect(props: { id: string; ai: Ai; value: ModelRef | null; onChange: (r: ModelRef | null) => void; emptyLabel: string; exclude?: ModelRef[] }) {
   const { id, ai, value, onChange, emptyLabel, exclude = [] } = props;
@@ -34,10 +34,25 @@ function ModelSelect(props: { id: string; ai: Ai; value: ModelRef | null; onChan
   );
 }
 
-export function RoutingEditor({ ai, onChange }: { ai: Ai; onChange: (r: Routing) => void }) {
-  if (allModels(ai).length === 0) return <p className="muted">Add a provider with at least one model first.</p>;
+export function RoutingEditor({ ai, onChange, onSetup }: { ai: Ai; onChange: (r: Routing) => void; onSetup: (ai: Ai) => void }) {
+  const nebius = ai.providers.find((p) => p.kind === "nebius");
+  const setup = nebius && (
+    <div className="route">
+      <span className="route__label">
+        NVIDIA Nemotron on Nebius
+        <span className="route__help">Nemotron Super answers and runs agents, Nemotron Ultra plans them, and Kimi-K3 reads the screen.</span>
+      </span>
+      <button type="button" className="btn btn--sm" onClick={() => onSetup(withNebiusSetup(ai, nebius.id))}>
+        Use for everything
+      </button>
+    </div>
+  );
+  if (allModels(ai).length === 0) {
+    return setup ? <div className="routes">{setup}</div> : <p className="muted">Add a provider with at least one model first.</p>;
+  }
   return (
     <div className="routes">
+      {setup}
       {ROUTES.map((r) => (
         <div key={r.key} className="route">
           <label htmlFor={`route-${r.key}`} className="route__label">

@@ -302,6 +302,7 @@ pub async fn list_models(
                     .as_bool()
                     .or(Some(true)),
                 tools: Some(true),
+                ..Default::default()
             })
         })
         .collect())

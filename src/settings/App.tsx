@@ -474,7 +474,7 @@ function ControlFor({ id, field, ctx }: { id: string; field: Field; ctx: RowCont
     case "providers":
       return <ProvidersEditor ai={ctx.settings.ai} commit={ctx.commitAi} />;
     case "routing":
-      return <RoutingEditor ai={ctx.settings.ai} onChange={(routing) => ctx.commitAi({ ...ctx.settings.ai, routing })} />;
+      return <RoutingEditor ai={ctx.settings.ai} onChange={(routing) => ctx.commitAi({ ...ctx.settings.ai, routing })} onSetup={ctx.commitAi} />;
     case "fallbackChain":
       return <FallbackEditor ai={ctx.settings.ai} onChange={(fallbackChain) => ctx.commitAi({ ...ctx.settings.ai, fallbackChain })} />;
     case "connectors":

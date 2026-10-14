@@ -11,8 +11,10 @@ describe("provider presets", () => {
   });
 
   it("fills known prices, frees local models, and keeps unknown vision off", () => {
-    expect(modelFromInfo("anthropic", { id: "claude-sonnet-5", vision: true, tools: true })).toMatchObject({ inputPrice: 2, outputPrice: 10 });
-    expect(modelFromInfo("ollama", { id: "llava", vision: true, tools: false })).toMatchObject({ inputPrice: 0, outputPrice: 0, tools: false });
-    expect(modelFromInfo("openAiCompatible", { id: "x", vision: null, tools: null })).toMatchObject({ vision: false, tools: true, inputPrice: null });
+    expect(modelFromInfo("anthropic", { id: "claude-sonnet-5", vision: true, tools: true, inputPrice: null, outputPrice: null })).toMatchObject({ inputPrice: 2, outputPrice: 10 });
+    expect(modelFromInfo("ollama", { id: "llava", vision: true, tools: false, inputPrice: null, outputPrice: null })).toMatchObject({ inputPrice: 0, outputPrice: 0, tools: false });
+    expect(modelFromInfo("openAiCompatible", { id: "x", vision: null, tools: null, inputPrice: null, outputPrice: null })).toMatchObject({ vision: false, tools: true, inputPrice: null });
+    const kimi = { id: "moonshotai/Kimi-K3", vision: true, tools: null, inputPrice: 3, outputPrice: 15 };
+    expect(modelFromInfo("nebius", kimi)).toMatchObject({ vision: true, tools: true, inputPrice: 3, outputPrice: 15 });
   });
 });

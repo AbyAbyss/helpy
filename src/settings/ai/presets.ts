@@ -76,7 +76,7 @@ export function modelFromInfo(kind: ProviderKind, info: ModelInfo): ModelConfig 
     // Unknown vision stays off: sending images to a text-only model fails.
     vision: info.vision ?? false,
     tools: info.tools ?? !isLocal(kind),
-    inputPrice: price?.[0] ?? free,
-    outputPrice: price?.[1] ?? free,
+    inputPrice: price?.[0] ?? info.inputPrice ?? free,
+    outputPrice: price?.[1] ?? info.outputPrice ?? free,
   };
 }

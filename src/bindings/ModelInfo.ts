@@ -7,4 +7,8 @@ export type ModelInfo = { id: string,
 /**
  * None when the provider doesn't say.
  */
-vision: boolean | null, tools: boolean | null, };
+vision: boolean | null, tools: boolean | null, 
+/**
+ * US dollars per million tokens.
+ */
+inputPrice: number | null, outputPrice: number | null, };

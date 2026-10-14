@@ -117,6 +117,7 @@ pub async fn list_models(
             )
             .await?
         }
+        ProviderKind::Nebius => nebius_models(http, &p.base_url, require_key(p, key)?).await?,
         ProviderKind::Ollama => ollama_models(http, &p.base_url).await?,
         ProviderKind::LmStudio => match lmstudio_models(http, &p.base_url).await {
             Ok(m) => m,
@@ -197,9 +198,58 @@ async fn ollama_models(
             id: name.to_string(),
             vision: caps.as_ref().map(|c| c.iter().any(|x| x == "vision")),
             tools: caps.as_ref().map(|c| c.iter().any(|x| x == "tools")),
+            ..Default::default()
         });
     }
     Ok(out)
+}
+
+/// Nebius lists what each model reads and costs only when asked for detail.
+async fn nebius_models(
+    http: &reqwest::Client,
+    base: &str,
+    key: &str,
+) -> Result<Vec<ModelInfo>, ProviderError> {
+    let r = http
+        .get(format!("{}/models?verbose=true", base.trim_end_matches('/')))
+        .bearer_auth(key)
+        .send()
+        .await
+        .map_err(|e| ProviderError::from_reqwest(&e))?;
+    let v: Value = sse::check_status(r)
+        .await?
+        .json()
+        .await
+        .map_err(|e| ProviderError::from_reqwest(&e))?;
+    Ok(parse_nebius_models(&v))
+}
+
+/// Chat models only: `modality` is like "text+image->text", and embedding
+/// models answer with something other than text. Prices are per token.
+fn parse_nebius_models(v: &Value) -> Vec<ModelInfo> {
+    let per_million = |p: &Value| {
+        let usd: f64 = p.as_str()?.parse().ok()?;
+        Some((usd * 1e12).round() / 1e6)
+    };
+    v["data"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            let modality = m["architecture"]["modality"].as_str();
+            let (input, output) = modality.map_or(("", "text"), |s| s.split_once("->").unwrap_or((s, "")));
+            if output != "text" {
+                return None;
+            }
+            Some(ModelInfo {
+                id: m["id"].as_str()?.to_string(),
+                vision: modality.map(|_| input.contains("image")),
+                tools: None,
+                input_price: per_million(&m["pricing"]["prompt"]),
+                output_price: per_million(&m["pricing"]["completion"]),
+            })
+        })
+        .collect()
 }
 
 /// LM Studio's REST API marks vision models as type "vlm".
@@ -220,6 +270,7 @@ async fn lmstudio_models(
                 tools: m["capabilities"]
                     .as_array()
                     .map(|c| c.iter().any(|x| x == "tool_use")),
+                ..Default::default()
             })
         })
         .collect())
@@ -260,4 +311,30 @@ pub async fn detect_local(http: &reqwest::Client) -> Vec<LocalServer> {
         }
     }
     found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_nebius_vision_and_prices_and_skips_embeddings() {
+        let v = json!({"data": [
+            {"id": "moonshotai/Kimi-K3", "architecture": {"modality": "text+image->text"},
+             "pricing": {"prompt": "0.000003", "completion": "0.000015"}},
+            {"id": "nvidia/nemotron-3-super-120b-a12b", "architecture": {"modality": "text->text"},
+             "pricing": {"prompt": "0.0000003", "completion": "0.0000009"}},
+            {"id": "Qwen/Qwen3-Embedding-8B", "architecture": {"modality": "text->embedding"}},
+            {"id": "new/model"}
+        ]});
+        let models = parse_nebius_models(&v);
+        let ids: Vec<_> = models.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["moonshotai/Kimi-K3", "nvidia/nemotron-3-super-120b-a12b", "new/model"]);
+        assert_eq!(models[0].vision, Some(true));
+        assert_eq!((models[0].input_price, models[0].output_price), (Some(3.0), Some(15.0)));
+        assert_eq!(models[1].vision, Some(false));
+        assert_eq!((models[1].input_price, models[1].output_price), (Some(0.3), Some(0.9)));
+        // Nothing said: leave it to the user.
+        assert_eq!(models[2], ModelInfo { id: "new/model".into(), ..Default::default() });
+    }
 }

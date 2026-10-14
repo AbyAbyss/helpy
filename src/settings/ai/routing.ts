@@ -60,3 +60,34 @@ export function withAutoRouting(ai: Ai): Ai {
   const best = models.find((m) => m.model.vision && m.model.tools) ?? models[0];
   return best ? { ...next, routing: { ...next.routing, ask: best.ref } } : next;
 }
+
+/**
+ * Nemotron on Nebius does the thinking; Kimi-K3, the open model there that
+ * pointed at things on screen most accurately, does everything that needs to
+ * see. Adds the models the provider lacks and keeps those it has.
+ */
+const NEBIUS_SETUP = {
+  think: { id: "nvidia/nemotron-3-super-120b-a12b", vision: false, tools: true, inputPrice: 0.3, outputPrice: 0.9 },
+  plan: { id: "nvidia/Nemotron-3-Ultra-550b-a55b", vision: false, tools: true, inputPrice: 1, outputPrice: 3 },
+  see: { id: "moonshotai/Kimi-K3", vision: true, tools: true, inputPrice: 3, outputPrice: 15 },
+} satisfies Record<string, ModelConfig>;
+
+export function withNebiusSetup(ai: Ai, providerId: string): Ai {
+  const providers = ai.providers.map((p) => {
+    if (p.id !== providerId) return p;
+    const missing = Object.values(NEBIUS_SETUP).filter((m) => !p.models.some((x) => x.id === m.id));
+    return { ...p, models: [...p.models, ...missing] };
+  });
+  const ref = (m: ModelConfig): ModelRef => ({ providerId, model: m.id });
+  const { think, plan, see } = NEBIUS_SETUP;
+  const routing: Routing = {
+    ask: ref(think),
+    visionFallback: ref(see),
+    visualGuidance: ref(see),
+    circleToExplain: ref(see),
+    agentPlanning: ref(plan),
+    agentOrchestrator: ref(plan),
+    agentWorker: ref(think),
+  };
+  return { ...ai, providers, routing };
+}

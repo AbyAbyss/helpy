@@ -386,8 +386,7 @@ pub async fn list_models(
         .filter(|id| dialect == Dialect::Compatible || is_chat_model(id))
         .map(|id| ModelInfo {
             id: id.to_string(),
-            vision: None,
-            tools: None,
+            ..Default::default()
         })
         .collect())
 }

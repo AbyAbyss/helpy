@@ -335,7 +335,7 @@ function ProviderForm(props: {
             onChange={(e) => setManual(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && manual.trim()) {
-                save({ ...p, models: [...p.models, modelFromInfo(p.kind, { id: manual.trim(), vision: null, tools: null })] });
+                save({ ...p, models: [...p.models, modelFromInfo(p.kind, { id: manual.trim(), vision: null, tools: null, inputPrice: null, outputPrice: null })] });
                 setManual("");
               }
             }}

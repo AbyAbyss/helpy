@@ -221,6 +221,7 @@ pub async fn list_models(
             id: n.trim_start_matches("models/").to_string(),
             vision: Some(true),
             tools: Some(true),
+            ..Default::default()
         })
         .collect())
 }

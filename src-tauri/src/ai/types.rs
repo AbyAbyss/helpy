@@ -171,7 +171,7 @@ impl Completion {
 }
 
 /// A model as a provider reports it.
-#[derive(Clone, Debug, serde::Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ModelInfo {
@@ -179,4 +179,7 @@ pub struct ModelInfo {
     /// None when the provider doesn't say.
     pub vision: Option<bool>,
     pub tools: Option<bool>,
+    /// US dollars per million tokens.
+    pub input_price: Option<f64>,
+    pub output_price: Option<f64>,
 }
