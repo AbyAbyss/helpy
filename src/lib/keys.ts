@@ -34,14 +34,14 @@ const KEY_NAMES: Record<string, string> = {
 };
 
 /** Normalizes the aliases the Rust parser accepts. */
-function canonicalModifier(m: string): string | null {
+function canonicalModifier(m: string, mac = isMac): string | null {
   switch (m.toLowerCase()) {
     case "control": case "ctrl": return "Control";
     case "alt": case "option": return "Alt";
     case "shift": return "Shift";
     case "super": case "command": case "cmd": case "meta": return "Super";
     case "commandorcontrol": case "cmdorctrl": case "commandorctrl": case "cmdorcontrol":
-      return isMac ? "Super" : "Control";
+      return mac ? "Super" : "Control";
     default: return null;
   }
 }
@@ -51,7 +51,7 @@ export function keycaps(accel: string, mac = isMac): string[] {
   if (!accel) return [];
   const parts = accel.split("+").filter(Boolean);
   const key = parts.pop() ?? "";
-  const mods = parts.map((m) => canonicalModifier(m) ?? m);
+  const mods = parts.map((m) => canonicalModifier(m, mac) ?? m);
   const order = mac ? ["Control", "Alt", "Shift", "Super"] : ["Control", "Super", "Alt", "Shift"];
   mods.sort((a, b) => order.indexOf(a) - order.indexOf(b));
   const names = mac ? MAC_GLYPHS : PC_NAMES;
