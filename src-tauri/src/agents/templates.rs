@@ -126,8 +126,9 @@ pub fn builtins() -> Vec<Template> {
                 "{name}",
                 "Build this for me: {what}. Unless I asked for something else, make it a web app that runs by opening \
                  index.html (plain HTML, CSS and JavaScript, no install step), looks clean and works on first try. \
+                 If it shows real-world data, use real figures and say where they're from, never made-up ones. \
                  Check it works, then launch it and tell me in two or three sentences what you made and how to use it.",
-                &["build"],
+                &["build", "search", "web"],
                 &[],
             )],
             folders: Vec::new(),

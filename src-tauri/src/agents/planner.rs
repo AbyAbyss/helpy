@@ -132,7 +132,9 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          numbers, places, format wanted). Names are one or two words, like \"Research\" or \"Desktop tidy\". Set \
          keepOpen to true for open-ended work the user will want to keep changing, such as building an app or a site.\n\
          If agents must work in folders, list them in \"folders\" as full paths (~ for the home folder); the user's \
-         Desktop is ~/Desktop. Builder agents use the projects folder and don't need it listed.\n\n\
+         Desktop is ~/Desktop. Builder agents use the projects folder and don't need it listed. Give an agent the \
+         build tool only when the user asks for an app, site, game or program; a chart, table or report of facts is \
+         research (search and web), answered in the agent's reply.\n\n\
          Reply with only a JSON object: {{\"mode\": \"single\", \"agents\": [{{\"name\": \"...\", \"goal\": \"...\", \
          \"tools\": [\"...\"], \"keepOpen\": false, \"after\": []}}], \"folders\": [], \"reply\": \"one short sentence telling the user \
          what you set up\"}}\n\n\

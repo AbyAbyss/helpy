@@ -35,10 +35,12 @@ pub const START_AGENTS: &str = "start_agents";
 const OPEN_LINK: &str = crate::agents::tools::OPEN_LINK;
 pub const SERVICE_ACTIONS: &str = "service_actions";
 pub const USE_SERVICE: &str = "use_service";
+const WEB_SEARCH: &str = "web_search";
+const FETCH_PAGE: &str = "fetch_page";
 /// What a model without tool calling replies when it needs the screen.
 const SENTINEL: &str = "VIEW_SCREEN";
-/// Model calls per question, screen requests included.
-const MAX_CALLS: usize = 3;
+/// Model calls per question, screen requests and web lookups included.
+const MAX_CALLS: usize = 8;
 
 pub struct AiState {
     pub http: reqwest::Client,
@@ -367,13 +369,19 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
     if plan.agents {
         s += "\n\nWhen the user asks you to open a link, website or page, call open_link yourself; it opens in \
               their browser, so don't hand it to agents or say you can't. Don't open links they didn't ask for.";
+        s += "\n\nLook things up yourself when an answer needs facts you don't have or that change (prices, rates, \
+              news, figures, opening hours): call web_search, and fetch_page when the snippets aren't enough. Then \
+              answer, guide or draw with what you found; for \"chart the rupee against the dollar over 5 years\", \
+              search for the rates, then show the chart. You can look things up between guidance steps too. Never \
+              make up figures; say what you couldn't find.";
         s += "\n\nWhen the user asks you to do something for them (\"create a reminder\", \"add an event\", \
-              \"sort my downloads\", \"find me…\", \"build…\"), such as researching, organizing files, creating \
-              reminders or calendar events, or building an app or site, call start_agents with the user's full \
-              request. Do this even when the task could be done by clicking through an app: they asked for it to \
+              \"sort my downloads\", \"research and compare…\", \"build…\"), such as research across many sources, \
+              organizing files, creating reminders or calendar events, or building an app or site, call start_agents \
+              with the user's full request. Do this even when the task could be done by clicking through an app: they asked for it to \
               be done, not to be shown how. You can't do tasks yourself, and describing the steps instead of \
               calling start_agents leaves the task undone. The user confirms a plan card before anything starts. \
-              Answer ordinary questions directly.";
+              Answer ordinary questions directly; a chart, table or explanation is an answer, not an app, so make \
+              it yourself.";
         s += "\n\nA message can hold several requests (\"hi, what's the time, and what's on my GitHub?\"). Handle \
               every one in the same reply: answer what you can directly, use tools for the rest (independent tool \
               calls can go together), and start agents only for the parts that need them.";
@@ -443,6 +451,14 @@ fn open_link_tool() -> ToolDef {
             "required": ["url"]
         }),
     }
+}
+
+/// The agents' web search and page reading, for quick lookups.
+fn web_tools() -> Vec<ToolDef> {
+    crate::agents::tools::defs(&["search".into(), "web".into()])
+        .into_iter()
+        .filter(|d| d.name == WEB_SEARCH || d.name == FETCH_PAGE)
+        .collect()
 }
 
 fn start_agents_tool() -> ToolDef {
@@ -637,6 +653,22 @@ impl Turn<'_> {
             Some(ToolOutcome::Ok { text, .. }) => (vec![Part::Text(truncate(&text, MAX_TOOL_OUTPUT))], false),
             Some(ToolOutcome::Transient(m) | ToolOutcome::Permanent(m)) => fail(m),
             None => fail(format!("{service} has no action {action}.")),
+        }
+    }
+
+    /// A web search or a page read, done the way the agents do them.
+    async fn web(&self, tool: &str, input: &serde_json::Value) -> (Vec<Part>, bool) {
+        use crate::agents::runner::{truncate, ToolOutcome, MAX_TOOL_OUTPUT};
+        let tb = crate::agents::toolbox(self.app, &self.settings);
+        let arg = |k: &str| input[k].as_str().unwrap_or("").to_string();
+        let outcome = if tool == WEB_SEARCH {
+            crate::agents::tools::search::run(&tb.search, &tb.http, &arg("query")).await
+        } else {
+            tb.fetch_page(&arg("url")).await
+        };
+        match outcome {
+            ToolOutcome::Ok { text, .. } => (vec![Part::Text(truncate(&text, MAX_TOOL_OUTPUT))], false),
+            ToolOutcome::Transient(m) | ToolOutcome::Permanent(m) => (vec![Part::Text(m)], true),
         }
     }
 
@@ -994,6 +1026,7 @@ impl Turn<'_> {
         }
         if self.plan.agents {
             tools.push(open_link_tool());
+            tools.extend(web_tools());
             tools.push(start_agents_tool());
             if !self.services().is_empty() {
                 tools.extend(service_tools());
@@ -1131,6 +1164,7 @@ impl Turn<'_> {
                         },
                         SERVICE_ACTIONS => self.service_actions(&input),
                         USE_SERVICE => self.use_service(&input).await,
+                        WEB_SEARCH | FETCH_PAGE => self.web(&name, &input).await,
                         step::SHOW_STEP => {
                             let result = self.guide_step(&input, &mut steps).await?;
                             // The step ends with a fresh screenshot.
@@ -1618,6 +1652,8 @@ mod tests {
     /// Nemotron Super gets the question and asks for the screen; then
     /// Kimi-K3 gets the whole conversation, Super's tool call included, with
     /// the screenshot at HELPY_SHOT (a 1280x800 JPEG), and gives a step.
+    /// Web lookups go to Tavily with TAVILY_API_KEY; handing the question to
+    /// agents fails the test.
     #[tokio::test]
     #[ignore]
     async fn nebius_walkthrough_hands_the_screen_to_the_vision_model() {
@@ -1641,12 +1677,19 @@ mod tests {
         settings.ai.routing.visual_guidance = Some(r("nebius", "moonshotai/Kimi-K3"));
         let plan = plan(&settings.ai, &settings.answer_style).unwrap();
         assert_eq!((plan.screen.clone(), plan.guide.clone()), (ScreenMode::Tool, GuideMode::Tool));
-        let tools = vec![view_screen_tool(), step::tool(), open_link_tool(), start_agents_tool()];
+        let mut tools = vec![view_screen_tool(), step::tool(), open_link_tool(), start_agents_tool()];
+        tools.extend(web_tools());
+        let engines = crate::agents::tools::search::pick(
+            crate::settings::schema::SearchEngine::Tavily,
+            std::env::var("TAVILY_API_KEY").ok(),
+            None,
+            "",
+        );
         let question = std::env::var("HELPY_QUESTION").unwrap_or("How do I download Python from this website?".into());
         let mut messages = vec![Message::user_text(question)];
         let http = reqwest::Client::new();
         let cancel = tokio_util::sync::CancellationToken::new();
-        for _ in 0..4 {
+        for _ in 0..6 {
             let has_images = messages.iter().any(Message::has_images);
             let m = candidates(&settings.ai, &plan, has_images, true, false).remove(0);
             let req = ChatRequest {
@@ -1664,7 +1707,10 @@ mod tests {
             println!("{} ({:.1} s): text {:?}", m.model, started.elapsed().as_secs_f64(), done.text());
             messages.push(Message { role: Role::Assistant, parts: done.parts.clone() });
             let calls: Vec<_> = done.tool_uses().map(|(i, n, v)| (i.to_string(), n.to_string(), v.clone())).collect();
-            assert!(!calls.is_empty(), "{} answered without a tool", m.model);
+            if calls.is_empty() {
+                println!("  answered without a step");
+                return;
+            }
             println!("  {} tool calls in one reply", calls.len());
             let mut results = Vec::new();
             for (id, name, input) in calls {
@@ -1673,6 +1719,21 @@ mod tests {
                     let step = step::validate(&input, 1280, 800).unwrap_or_else(|e| panic!("invalid step: {e}"));
                     println!("  valid step: {step:?}");
                     return;
+                }
+                assert_ne!(name, START_AGENTS, "handed to agents");
+                if name == WEB_SEARCH || name == FETCH_PAGE {
+                    let out = if name == WEB_SEARCH {
+                        crate::agents::tools::search::run(&engines, &http, input["query"].as_str().unwrap_or("")).await
+                    } else {
+                        crate::agents::tools::web::fetch(&http, input["url"].as_str().unwrap_or("")).await
+                    };
+                    let text = match out {
+                        crate::agents::runner::ToolOutcome::Ok { text, .. } => text,
+                        crate::agents::runner::ToolOutcome::Transient(m) | crate::agents::runner::ToolOutcome::Permanent(m) => m,
+                    };
+                    println!("  -> {} chars", text.len());
+                    results.push(Part::ToolResult { id, name, parts: vec![Part::Text(text)], is_error: false });
+                    continue;
                 }
                 assert_eq!(name, VIEW_SCREEN);
                 let parts = vec![
@@ -1683,7 +1744,7 @@ mod tests {
             }
             messages.push(Message { role: Role::User, parts: results });
         }
-        panic!("no step after 4 calls");
+        panic!("no step after 6 calls");
     }
 
     /// A one-page PDF that says `text` in Helvetica.
@@ -2026,8 +2087,15 @@ mod tests {
         assert!(p.contains("a few sentences"));
         assert!(p.contains("\"de\""));
         assert!(p.contains("view_screen") && p.contains("show_step") && p.contains("start_agents"));
+        assert!(p.contains("web_search") && p.contains("Never make up figures"));
         assert!(p.contains("I use Outlook desktop."));
         assert!(p.contains("not instructions"));
+    }
+
+    #[test]
+    fn quick_answers_can_search_and_read_pages() {
+        let names: Vec<String> = web_tools().into_iter().map(|d| d.name).collect();
+        assert_eq!(names, [WEB_SEARCH, FETCH_PAGE]);
     }
 
     #[test]

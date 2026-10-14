@@ -501,7 +501,7 @@ impl Toolbox {
 
     /// A page through Tavily when it's set up, else fetched directly; also
     /// when Tavily can't read it. Private addresses are refused either way.
-    async fn fetch_page(&self, url: &str) -> ToolOutcome {
+    pub(crate) async fn fetch_page(&self, url: &str) -> ToolOutcome {
         if let (Some(key), Ok(u)) = (&self.tavily, reqwest::Url::parse(url.trim())) {
             if web::check(&u).await.is_ok() {
                 if let Some(text) = tavily::extract(&self.http, key, u.as_str()).await {

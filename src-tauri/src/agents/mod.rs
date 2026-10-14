@@ -448,7 +448,7 @@ fn limits(s: &Settings) -> runner::Limits {
     }
 }
 
-fn toolbox(app: &AppHandle, s: &Settings) -> Toolbox {
+pub(crate) fn toolbox(app: &AppHandle, s: &Settings) -> Toolbox {
     let state = app.state::<AgentsState>();
     let projects = projects_folder(s);
     let mut folders = s.agents.approved_folders.clone();
