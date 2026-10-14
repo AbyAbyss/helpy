@@ -559,6 +559,57 @@ mod tests {
         tools::groups(&Agents::default())
     }
 
+    /// Live, on Nebius with NEBIUS_API_KEY: Nemotron Ultra plans typical
+    /// requests with the real prompt, and the reply reads as a plan.
+    #[tokio::test]
+    #[ignore]
+    async fn nebius_ultra_plans_typical_requests() {
+        use crate::settings::schema::{ModelConfig, ProviderConfig, ProviderKind};
+        let key = std::env::var("NEBIUS_API_KEY").unwrap();
+        let nebius = ProviderConfig {
+            id: "nebius".into(),
+            kind: ProviderKind::Nebius,
+            name: "Nebius".into(),
+            base_url: "https://api.tokenfactory.nebius.com/v1".into(),
+            models: vec![ModelConfig { id: "nvidia/Nemotron-3-Ultra-550b-a55b".into(), vision: false, ..Default::default() }],
+        };
+        let mut s = Settings::default();
+        s.agents.tools.reminders = true;
+        let groups = tools::groups(&s.agents);
+        let http = reqwest::Client::new();
+        for request in [
+            "Research standing desks under £400 and make me a shortlist",
+            "Tidy up my Desktop folder: put screenshots, PDFs and images into their own folders",
+            "Remind me about the dentist tomorrow at 3pm",
+        ] {
+            let req = ChatRequest {
+                model: nebius.models[0].id.clone(),
+                system: system_prompt(&s, &groups),
+                messages: vec![Message::user_text(request)],
+                tools: Vec::new(),
+                max_tokens: s.ai.max_response_tokens.min(4000),
+                temperature: 0.3,
+            };
+            let started = std::time::Instant::now();
+            let done = crate::ai::provider::stream_chat(&http, &nebius, Some(&key), &req, std::time::Duration::from_secs(90), &CancellationToken::new(), &mut |_| {})
+                .await
+                .unwrap_or_else(|e| panic!("{}", e.message));
+            let text = done.text();
+            println!("\n{request} ({:.1} s)", started.elapsed().as_secs_f64());
+            match template_choice(&text) {
+                Some((id, values, reply)) => println!("  template {id} {values:?}: {reply}"),
+                None => {
+                    let (mode, agents, folders, reply) = parse(&text, &groups, s.agents.default_mode)
+                        .unwrap_or_else(|e| panic!("{e}\n{text}"));
+                    println!("  {mode:?}, folders {folders:?}: {reply}");
+                    for a in agents {
+                        println!("  - {}: {} {:?}", a.name, a.goal, a.tools);
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn reads_a_plan_and_keeps_it_within_bounds() {
         let (mode, agents, folders, reply) = parse(

@@ -1883,6 +1883,117 @@ mod tests {
     use super::*;
     use crate::settings::schema::{ModelConfig, ProviderConfig};
 
+    /// The app's Env without the app: real model calls and the real toolbox.
+    /// Approvals are turned down, so nothing costly or lasting happens.
+    struct LiveEnv {
+        settings: Settings,
+        provider: ProviderConfig,
+        key: String,
+        toolbox: Toolbox,
+        http: reqwest::Client,
+        cancel: CancellationToken,
+    }
+
+    impl Env for LiveEnv {
+        fn call<'a>(&'a self, _: &'a Agent, mut req: ChatRequest, _: &'a (dyn Fn(Progress) + Sync)) -> BoxFuture<'a, Result<Completion, ProviderError>> {
+            Box::pin(async move {
+                req.model = self.provider.models[0].id.clone();
+                let started = std::time::Instant::now();
+                let done = crate::ai::provider::stream_chat(&self.http, &self.provider, Some(&self.key), &req, Duration::from_secs(90), &self.cancel, &mut |_| {}).await;
+                if let Ok(c) = &done {
+                    let calls: Vec<_> = c.tool_uses().map(|(_, n, v)| format!("{n} {v}")).collect();
+                    println!("[{:.1} s] {:?} {calls:?}", started.elapsed().as_secs_f64(), c.text().chars().take(200).collect::<String>());
+                }
+                done
+            })
+        }
+        fn gate(&self, agent: &Agent, tool: &str, args: &Value) -> Gate {
+            self.toolbox.gate(&agent.tools, tool, args)
+        }
+        fn run_tool<'a>(&'a self, agent: &'a Agent, tool: &'a str, args: &'a Value) -> BoxFuture<'a, ToolOutcome> {
+            Box::pin(async move { self.toolbox.run(agent, tool, args, &|_| {}, &|_| {}).await })
+        }
+        fn answer<'a>(&'a self, agent: &'a Agent) -> BoxFuture<'a, Answer> {
+            println!("asked: {:?}", agent.pending);
+            Box::pin(async { Answer::Reject { note: Some("Not now; use web search instead.".into()) } })
+        }
+        fn batch_spent(&self, _: &Agent) -> (u64, f64) {
+            (0, 0.0)
+        }
+        fn price(&self, _: &Agent, _: u64) -> Option<f64> {
+            None
+        }
+        fn system(&self, agent: &Agent) -> String {
+            system_prompt(agent, &self.settings, &[])
+        }
+        fn tools(&self, agent: &Agent) -> Vec<ToolDef> {
+            self.toolbox.defs(&agent.tools)
+        }
+        fn save(&self, _: &Agent) {}
+        fn live(&self, _: &Agent, _: &str) {}
+        fn now_ms(&self) -> i64 {
+            now_ms()
+        }
+        fn sleep(&self, d: Duration) -> BoxFuture<'static, ()> {
+            Box::pin(tokio::time::sleep(d))
+        }
+        fn steering(&self, _: &Agent) -> Vec<String> {
+            Vec::new()
+        }
+        fn delegate<'a>(&'a self, _: &'a Agent, _: &'a str, _: &'a Value) -> BoxFuture<'a, Result<String, String>> {
+            Box::pin(async { Err("No helpers in this test.".to_string()) })
+        }
+    }
+
+    /// Live, on Nebius and Tavily (NEBIUS_API_KEY, TAVILY_API_KEY): a research
+    /// agent on Nemotron Super, through the real runner, capped at 12 tool calls.
+    #[tokio::test]
+    #[ignore]
+    async fn nebius_super_runs_a_research_agent() {
+        let tavily = std::env::var("TAVILY_API_KEY").unwrap();
+        let mut settings = Settings::default();
+        settings.agents.search_engine = SearchEngine::Tavily;
+        settings.agents.max_tool_calls = 12;
+        let provider = ProviderConfig {
+            id: "nebius".into(),
+            kind: crate::settings::schema::ProviderKind::Nebius,
+            name: "Nebius".into(),
+            base_url: "https://api.tokenfactory.nebius.com/v1".into(),
+            models: vec![ModelConfig { id: "nvidia/nemotron-3-super-120b-a12b".into(), vision: false, ..Default::default() }],
+        };
+        let toolbox = Toolbox {
+            settings: settings.agents.clone(),
+            files: tools::files::Files::new(&[], std::env::temp_dir()),
+            http: tools::web::client(),
+            search: tools::search::pick(SearchEngine::Tavily, Some(tavily.clone()), None, ""),
+            tavily: Some(tavily),
+            projects: std::env::temp_dir(),
+            external: None,
+            browser: None,
+        };
+        let env = LiveEnv {
+            key: std::env::var("NEBIUS_API_KEY").unwrap(),
+            settings: settings.clone(),
+            provider,
+            toolbox,
+            http: reqwest::Client::new(),
+            cancel: CancellationToken::new(),
+        };
+        let mut agent = Agent::new(
+            "live".into(),
+            "batch".into(),
+            0,
+            "Desk research".into(),
+            "Find 3 standing desks under £400 sold in the UK, with prices and links, as a short comparison.".into(),
+            now_ms(),
+        );
+        agent.tools = vec!["search".into(), "web".into()];
+        runner::run(&mut agent, &env, &limits(&settings), &CancellationToken::new()).await;
+        println!("\nstatus {:?}, {} tool calls, {} tokens", agent.status, agent.counters.tool_calls, agent.counters.tokens);
+        println!("result:\n{}", agent.result.clone().unwrap_or_default());
+        assert_eq!(agent.status, Status::Done, "{:?}", agent.log.last());
+    }
+
     #[test]
     fn spoken_steering_finds_the_agent_by_name() {
         let two = vec![

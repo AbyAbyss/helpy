@@ -1602,6 +1602,76 @@ pub fn ask_status(store: tauri::State<SettingsStore>) -> AskStatus {
 mod tests {
     use super::*;
 
+    /// Live, on Nebius with NEBIUS_API_KEY: a walkthrough as `run` drives it.
+    /// Nemotron Super gets the question and asks for the screen; then
+    /// Kimi-K3 gets the whole conversation, Super's tool call included, with
+    /// the screenshot at HELPY_SHOT (a 1280x800 JPEG), and gives a step.
+    #[tokio::test]
+    #[ignore]
+    async fn nebius_walkthrough_hands_the_screen_to_the_vision_model() {
+        use crate::settings::schema::{ProviderConfig, ProviderKind};
+        let key = std::env::var("NEBIUS_API_KEY").unwrap();
+        let shot = std::fs::read(std::env::var("HELPY_SHOT").unwrap()).unwrap();
+        let mut settings = Settings::default();
+        let nebius = ProviderConfig {
+            id: "nebius".into(),
+            kind: ProviderKind::Nebius,
+            name: "Nebius".into(),
+            base_url: "https://api.tokenfactory.nebius.com/v1".into(),
+            models: vec![
+                model("nvidia/nemotron-3-super-120b-a12b", false, true),
+                model("moonshotai/Kimi-K3", true, true),
+            ],
+        };
+        settings.ai.providers = vec![nebius.clone()];
+        settings.ai.routing.ask = Some(r("nebius", "nvidia/nemotron-3-super-120b-a12b"));
+        settings.ai.routing.vision_fallback = Some(r("nebius", "moonshotai/Kimi-K3"));
+        settings.ai.routing.visual_guidance = Some(r("nebius", "moonshotai/Kimi-K3"));
+        let plan = plan(&settings.ai, &settings.answer_style).unwrap();
+        assert_eq!((plan.screen.clone(), plan.guide.clone()), (ScreenMode::Tool, GuideMode::Tool));
+        let tools = vec![view_screen_tool(), step::tool(), open_link_tool(), start_agents_tool()];
+        let mut messages = vec![Message::user_text("How do I download Python from this website?")];
+        let http = reqwest::Client::new();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        for _ in 0..4 {
+            let has_images = messages.iter().any(Message::has_images);
+            let m = candidates(&settings.ai, &plan, has_images, true, false).remove(0);
+            let req = ChatRequest {
+                model: m.model.clone(),
+                system: system_prompt(&settings, &plan, &[]),
+                messages: crate::agents::runner::clear_stale_results(&messages),
+                tools: tools.clone(),
+                max_tokens: settings.ai.max_response_tokens,
+                temperature: settings.ai.temperature,
+            };
+            let started = std::time::Instant::now();
+            let done = crate::ai::provider::stream_chat(&http, &nebius, Some(&key), &req, std::time::Duration::from_secs(90), &cancel, &mut |_| {})
+                .await
+                .unwrap_or_else(|e| panic!("{} failed: {}", m.model, e.message));
+            println!("{} ({:.1} s): text {:?}", m.model, started.elapsed().as_secs_f64(), done.text());
+            messages.push(Message { role: Role::Assistant, parts: done.parts.clone() });
+            let calls: Vec<_> = done.tool_uses().map(|(i, n, v)| (i.to_string(), n.to_string(), v.clone())).collect();
+            assert!(!calls.is_empty(), "{} answered without a tool", m.model);
+            let mut results = Vec::new();
+            for (id, name, input) in calls {
+                println!("  {name} {input}");
+                if name == step::SHOW_STEP {
+                    let step = step::validate(&input, 1280, 800).unwrap_or_else(|e| panic!("invalid step: {e}"));
+                    println!("  valid step: {step:?}");
+                    return;
+                }
+                assert_eq!(name, VIEW_SCREEN);
+                let parts = vec![
+                    Part::Text("Screenshot (Display 1, 1280x800 pixels):".into()),
+                    Part::Image { media_type: "image/jpeg".into(), data: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &shot) },
+                ];
+                results.push(Part::ToolResult { id, name, parts, is_error: false });
+            }
+            messages.push(Message { role: Role::User, parts: results });
+        }
+        panic!("no step after 4 calls");
+    }
+
     /// A one-page PDF that says `text` in Helvetica.
     fn pdf(text: &str) -> Vec<u8> {
         let stream = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET");
