@@ -370,7 +370,7 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
     if plan.agents {
         s += "\n\nWhen the user asks you to open a link, website or page, call open_link yourself; it opens in \
               their browser, so don't hand it to agents or say you can't. Don't open links they didn't ask for.";
-        s += "\n\nLook things up yourself when an answer needs facts you don't have or that change (prices, rates, \
+        s += "\n\nLook up quick facts yourself when an answer needs facts you don't have or that change (prices, rates, \
               news, figures, opening hours): call web_search, and fetch_page when the snippets aren't enough. Then \
               answer, guide or draw with what you found; for \"chart the rupee against the dollar over 5 years\", \
               search for the rates, then show the chart. You can look things up between guidance steps too. Never \
@@ -382,7 +382,10 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
               be done, not to be shown how. You can't do tasks yourself, and describing the steps instead of \
               calling start_agents leaves the task undone. The user confirms a plan card before anything starts. \
               Answer ordinary questions directly; a chart, table or explanation is an answer, not an app, so make \
-              it yourself.";
+              it yourself. When the user asks you to research, compare or shortlist options (\"research the best \
+              racket under £150\", \"find me three laptops\"), or to build or make an app, site, page or game, call \
+              start_agents straight away, without searching first: agents do that work properly and the user \
+              approves the plan.";
         s += "\n\nA message can hold several requests (\"hi, what's the time, and what's on my GitHub?\"). Handle \
               every one in the same reply: answer what you can directly, use tools for the rest (independent tool \
               calls can go together), and start agents only for the parts that need them.";
@@ -1663,7 +1666,8 @@ mod tests {
     /// Kimi-K3 gets the whole conversation, Super's tool call included, with
     /// the screenshot at HELPY_SHOT (a 1280x800 JPEG), and gives a step.
     /// Web lookups go to Tavily with TAVILY_API_KEY; handing the question to
-    /// agents fails the test.
+    /// agents fails the test, unless HELPY_EXPECT_AGENTS is set, when it
+    /// passes it.
     #[tokio::test]
     #[ignore]
     async fn nebius_walkthrough_hands_the_screen_to_the_vision_model() {
@@ -1728,6 +1732,10 @@ mod tests {
                 if name == step::SHOW_STEP {
                     let step = step::validate(&input, 1280, 800).unwrap_or_else(|e| panic!("invalid step: {e}"));
                     println!("  valid step: {step:?}");
+                    return;
+                }
+                if name == START_AGENTS && std::env::var("HELPY_EXPECT_AGENTS").is_ok() {
+                    println!("  handed to agents, as expected");
                     return;
                 }
                 assert_ne!(name, START_AGENTS, "handed to agents");

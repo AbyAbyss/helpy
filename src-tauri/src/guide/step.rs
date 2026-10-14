@@ -311,7 +311,7 @@ fn actions_schema() -> Value {
                 "text": { "type": "string", "description": "For text: what to write (a few words, a number or a formula like a² + b² = c²; up to 60 characters). For speak: what to say aloud." },
                 "size": { "type": "string", "enum": ["small", "medium", "large"], "description": "For text: how big to write it. Default medium." },
                 "query": { "type": "string", "description": "For image: 2 to 4 plain words naming the subject, the way a picture file is named, e.g. \"heart diagram\", \"thalamus\", \"spinal cord cross section\". Longer searches usually find nothing." },
-                "chart": { "type": "string", "description": "For chart: Mermaid source for a chart of the numbers, e.g. \"pie title Spending\\n  \\\"Rent\\\" : 1200\\n  \\\"Food\\\" : 450\", or xychart-beta for bars and lines, or a flowchart." },
+                "chart": { "type": "string", "description": "For chart: Mermaid source for a chart of the numbers, e.g. \"pie title Spending\\n  \\\"Rent\\\" : 1200\\n  \\\"Food\\\" : 450\", or for bars and lines \"xychart-beta\\n  title \\\"Price\\\"\\n  x-axis [2021, 2022, 2023]\\n  y-axis \\\"GBP\\\" 0 --> 100\\n  line [40, 55, 70]\" (bar [...] for bars), or a flowchart." },
                 "caption": { "type": "string", "description": "For image or chart: a few words shown under it." },
                 "color": { "type": "string", "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink"], "description": "For highlight, point, arrow, line and text: its colour. Default: the user's colour." }
             },
