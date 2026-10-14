@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="#nvidia-nemotron-on-nebius">Nemotron on Nebius</a> ·
   <a href="#see-it">See it</a> ·
   <a href="#what-it-does">What it does</a> ·
   <a href="#run-it">Run it</a> ·
@@ -31,7 +32,44 @@
   <img src="docs/images/hero.jpg" alt="The agent panel and an agent's card beside the dock" width="100%">
 </p>
 
-Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first class, Linux X11 is supported, Linux Wayland is best effort. It works with Anthropic, OpenAI, Gemini, or a model on your own computer (Ollama, LM Studio, llama.cpp), with your own keys.
+Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first class, Linux X11 is supported, Linux Wayland is best effort. It works with NVIDIA Nemotron on Nebius Token Factory, Anthropic, OpenAI, Gemini, or a model on your own computer (Ollama, LM Studio, llama.cpp), with your own keys.
+
+## NVIDIA Nemotron on Nebius
+
+Helpy is entered in the [Nebius x NVIDIA Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com/) (Personal AI track). It was started on 24 September 2026, during the submission period. With one click it runs entirely on open models served by [Nebius Token Factory](https://tokenfactory.nebius.com), with NVIDIA Nemotron doing the reasoning:
+
+| Job | Model on Token Factory | Why |
+|---|---|---|
+| Answering questions (voice and text), agent workers | `nvidia/nemotron-3-super-120b-a12b` | Fast, reliable tool calls, low cost |
+| Planning agents, splitting work among helpers | `nvidia/Nemotron-3-Ultra-550b-a55b` | The strongest reasoning, used only where it pays off |
+| Anything that reads the screen: pointing, walkthroughs, circle to explain | `moonshotai/Kimi-K3` | No Nemotron model on Token Factory takes images yet, and Kimi-K3 pointed most accurately (below) |
+
+```mermaid
+flowchart LR
+  you([Voice or text]) --> super[Nemotron Super]
+  super -- needs the screen --> kimi[Kimi-K3]
+  kimi --> overlay[Highlights and arrows on your real apps]
+  super -- background work --> ultra[Nemotron Ultra plans]
+  ultra --> workers[Agents on Nemotron Super]
+  workers --> tavily[Tavily: search, page reading, deep research]
+```
+
+**Set it up:** add **Nebius Token Factory** under Settings → AI providers and paste a key. Loading its models fills in which ones read images and what they cost, from Token Factory's own model list. Then, under **Model routing**, click **Use for everything**.
+
+**Choosing the vision model.** Helpy's best features depend on a model pointing at the right pixel. `scripts/grounding-eval.mjs` renders 12 real web pages in headless Chrome, where every target's exact box is known, asks each model "where would you click to …", and scores the answers. On Token Factory in October 2026:
+
+| Model | Hits (of 12) | Median distance from the target's centre | Average time |
+|---|---|---|---|
+| `moonshotai/Kimi-K3` | **12** | 1 px | 3.7 s |
+| `zai-org/GLM-5.3-Flash` (about 20× cheaper) | 11 | 5 px | 2.2 s |
+| `Qwen/Qwen3.8-27B` | 6 | 28 px | 2.1 s |
+| `deepseek-ai/DeepSeek-V4.1-Flash` | 5 | 35 px | 5.7 s |
+| `moonshotai/Kimi-K2.6` | 2 | 55 px | 7.0 s |
+| Claude Sonnet 5, for comparison | 10 | 1 px | 2.0 s |
+
+Run it yourself with `node scripts/grounding-eval.mjs --list nebius`, then `node scripts/grounding-eval.mjs nebius:<model> …`; it writes a report with every answer drawn on its screenshot.
+
+**Tavily** gives agents their view of the web: [search](https://docs.tavily.com/documentation/api-reference/endpoint/search) with the relevant part of each page, page reading through [Extract](https://docs.tavily.com/documentation/api-reference/endpoint/extract) (which copes with pages that load their text by script), and a `deep_research` tool on [Tavily Research](https://docs.tavily.com/documentation/api-reference/endpoint/research) that returns a cited report. Research can use many credits, so an agent always asks before starting one. Add a key under Settings → Agents → Web search.
 
 ## See it
 
