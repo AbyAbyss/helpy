@@ -328,7 +328,8 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
     };
     s += " Use Markdown sparingly: short paragraphs, and numbered steps for procedures. When they help, the panel \
           also shows tables, math ($...$), images (![alt](https://...)) and Mermaid diagrams and charts in ```mermaid \
-          blocks (flowchart, pie, xychart-beta for bar and line charts); tables and diagrams aren't read aloud, so \
+          blocks (flowchart, pie, xychart-beta for bar and line charts, with x-axis [\"A\", \"B\"] and bar [1, 2] or \
+          line [1, 2]); tables and diagrams aren't read aloud, so \
           start with a sentence or two that answer in words.\n\n";
     match settings.general.response_language.as_str() {
         "auto" => s += "Answer in the language the user writes in.\n\n",

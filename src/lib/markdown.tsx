@@ -54,6 +54,19 @@ function themeVariables(d: boolean) {
 }
 
 /**
+ * Mends a mistake models often make in xychart-beta: categories listed
+ * without brackets and quotes ("x-axis Yonex A, Yonex B"), which Mermaid
+ * can't read.
+ */
+export function mendChart(source: string): string {
+  if (!/^\s*xychart-beta/.test(source)) return source;
+  return source.replace(/^(\s*x-axis\s+)([^["\n][^\n]*,[^\n]*)$/m, (_, head: string, list: string) => {
+    const items = list.split(",").map((s) => s.trim().replace(/^"|"$/g, "").replace(/"/g, "'"));
+    return `${head}[${items.map((s) => `"${s}"`).join(", ")}]`;
+  });
+}
+
+/**
  * A Mermaid diagram or chart. While a reply is still streaming the source is
  * often incomplete, so it's drawn a moment after it stops changing, and shown
  * as code if it doesn't parse. `light` draws it for a white card whatever the
@@ -69,7 +82,7 @@ export function Diagram({ source, light = false }: { source: string; light?: boo
       try {
         const { default: mermaid } = await import("mermaid");
         mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables: themeVariables(!light && dark()), fontFamily: "inherit" });
-        const { svg } = await mermaid.render(id, source.trim());
+        const { svg } = await mermaid.render(id, mendChart(source.trim()));
         if (live) {
           setSvg(svg);
           setFailed(false);
