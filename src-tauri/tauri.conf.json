@@ -170,6 +170,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
+      "minimumSystemVersion": "10.15",
       "dmg": {
         "background": "dmg/background.png",
         "windowSize": {
