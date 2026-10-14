@@ -446,6 +446,8 @@ pub struct Feed {
     /// user interrupts (a new question, Escape), it moves on and the rest of
     /// this answer stays silent.
     generation: AtomicU64,
+    /// Something of this answer was spoken.
+    said: std::sync::atomic::AtomicBool,
 }
 
 enum Reader {
@@ -499,6 +501,7 @@ impl Feed {
             app: app.clone(),
             reader: Mutex::new(reader),
             generation: AtomicU64::new(app.state::<VoiceState>().speaker.generation()),
+            said: Default::default(),
         }
     }
 
@@ -525,7 +528,16 @@ impl Feed {
             return;
         }
         for sentence in sentences {
+            self.said.store(true, Ordering::Relaxed);
             speaker.say(sentence);
+        }
+    }
+
+    /// Says `text` if nothing of the answer was spoken, so a spoken question
+    /// is never met with silence.
+    pub fn say_if_silent(&self, text: &str) {
+        if !self.said.load(Ordering::Relaxed) {
+            self.say(vec![text.to_string()]);
         }
     }
 

@@ -328,7 +328,8 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
     };
     s += " Use Markdown sparingly: short paragraphs, and numbered steps for procedures. When they help, the panel \
           also shows tables, math ($...$), images (![alt](https://...)) and Mermaid diagrams and charts in ```mermaid \
-          blocks (flowchart, pie, xychart-beta for bar and line charts); tables and diagrams aren't read aloud.\n\n";
+          blocks (flowchart, pie, xychart-beta for bar and line charts); tables and diagrams aren't read aloud, so \
+          start with a sentence or two that answer in words.\n\n";
     match settings.general.response_language.as_str() {
         "auto" => s += "Answer in the language the user writes in.\n\n",
         lang => s += &format!("Always answer in the language with code \"{lang}\".\n\n"),
@@ -1416,11 +1417,20 @@ async fn answer(app: &AppHandle, pending: Pending) {
             if offer_agents {
                 *state.offer.lock().unwrap() = Some(text);
             }
+            // A spoken question's table, code or diagram can't be heard and
+            // doesn't fit the pill, so the panel opens to show it.
+            let to_see = origin == Origin::Voice && !acted && crate::voice::text::has_visuals(&completion.text());
+            if to_see {
+                crate::voice::voice_expand(app.clone());
+            }
             turn.send(AskEvent::Done {
                 model: completion.model.clone(),
                 tokens: completion.usage.total().min(u32::MAX as u64) as u32,
                 offer_agents,
             });
+            if let (true, Some(feed)) = (to_see, &turn.feed) {
+                feed.say_if_silent("It's on your screen.");
+            }
         }
         Err(e) => {
             let message = if e.kind == ErrorKind::Cancelled {

@@ -26,6 +26,14 @@ pub fn speakable(markdown: &str) -> String {
     out.trim().to_string()
 }
 
+/// Whether an answer has parts meant to be seen, not heard: tables, code,
+/// diagrams, displayed math or pictures.
+pub fn has_visuals(markdown: &str) -> bool {
+    markdown.lines().map(str::trim_start).any(|l| {
+        l.starts_with('|') || l.starts_with("```") || l.starts_with("$$") || l.starts_with("![")
+    })
+}
+
 fn strip_inline(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let chars: Vec<char> = line.chars().collect();
@@ -267,6 +275,14 @@ mod tests {
             speakable(md),
             "Steps\n1. Open Junk Email in the folder list.\nSee the guide first\nDone."
         );
+    }
+
+    #[test]
+    fn answers_with_tables_code_or_pictures_are_meant_to_be_seen() {
+        assert!(has_visuals("RAM vs storage:\n| | RAM |\n|---|---|"));
+        assert!(has_visuals("```mermaid\npie\n```"));
+        assert!(has_visuals("Here:\n  ![heart](https://x.y/h.png)"));
+        assert!(!has_visuals("RAM is short-term memory. | is a pipe."));
     }
 
     #[test]
