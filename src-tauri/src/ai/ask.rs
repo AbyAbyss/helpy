@@ -1630,7 +1630,8 @@ mod tests {
         let plan = plan(&settings.ai, &settings.answer_style).unwrap();
         assert_eq!((plan.screen.clone(), plan.guide.clone()), (ScreenMode::Tool, GuideMode::Tool));
         let tools = vec![view_screen_tool(), step::tool(), open_link_tool(), start_agents_tool()];
-        let mut messages = vec![Message::user_text("How do I download Python from this website?")];
+        let question = std::env::var("HELPY_QUESTION").unwrap_or("How do I download Python from this website?".into());
+        let mut messages = vec![Message::user_text(question)];
         let http = reqwest::Client::new();
         let cancel = tokio_util::sync::CancellationToken::new();
         for _ in 0..4 {
@@ -1652,6 +1653,7 @@ mod tests {
             messages.push(Message { role: Role::Assistant, parts: done.parts.clone() });
             let calls: Vec<_> = done.tool_uses().map(|(i, n, v)| (i.to_string(), n.to_string(), v.clone())).collect();
             assert!(!calls.is_empty(), "{} answered without a tool", m.model);
+            println!("  {} tool calls in one reply", calls.len());
             let mut results = Vec::new();
             for (id, name, input) in calls {
                 println!("  {name} {input}");
