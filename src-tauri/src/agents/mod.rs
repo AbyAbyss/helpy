@@ -27,7 +27,7 @@ use crate::ai::call::{self, Progress};
 use crate::ai::error::ProviderError;
 use crate::ai::limits::Policy;
 use crate::ai::types::{ChatRequest, Completion, ToolDef};
-use crate::settings::schema::{Ai, ModelRef};
+use crate::settings::schema::{Ai, ModelRef, SearchEngine};
 use crate::settings::{Settings, SettingsStore};
 use model::*;
 use runner::{Env, Gate, ToolOutcome};
@@ -460,7 +460,10 @@ fn toolbox(app: &AppHandle, s: &Settings) -> Toolbox {
         settings: s.agents.clone(),
         files: tools::files::Files::new(&folders, state.backups.clone()),
         http: state.http.clone(),
-        search: tools::search::pick(s.agents.search_engine, tavily, brave, &s.agents.searxng_url),
+        search: tools::search::pick(s.agents.search_engine, tavily.clone(), brave, &s.agents.searxng_url),
+        tavily: matches!(s.agents.search_engine, SearchEngine::Tavily | SearchEngine::Auto)
+            .then_some(tavily)
+            .flatten(),
         projects,
         external: Some(crate::connectors::external(app, s)),
         browser: Some(state.browser.clone()),
