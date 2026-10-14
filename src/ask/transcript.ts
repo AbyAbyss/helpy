@@ -3,7 +3,7 @@ import type { AskEvent } from "../bindings/AskEvent";
 
 export type Item =
   /** `queued`: asked while another answer was running; it goes next. */
-  | { kind: "user"; text: string; voice: boolean; images?: string[]; queued?: boolean }
+  | { kind: "user"; text: string; voice: boolean; images?: string[]; documents?: string[]; queued?: boolean }
   /** The request looked like a task but got a plain answer. */
   | { kind: "offer"; text: string }
   /** `final` once its model call finished; a retry discards non-final text. */
@@ -14,6 +14,19 @@ export type Item =
   | { kind: "retry"; text: string }
   | { kind: "notice"; text: string }
   | { kind: "error"; text: string; action: AskAction | null };
+
+const DOCUMENT = /\n\n<document name="([^"]*)">\n[\s\S]*?\n<\/document>/g;
+
+/** A question with attached PDFs' text after it, as the model reads it. */
+export function withDocuments(question: string, documents: { name: string; text: string }[]) {
+  return question + documents.map((d) => `\n\n<document name="${d.name.replace(/"/g, "'")}">\n${d.text}\n</document>`).join("");
+}
+
+/** The question as shown: its text, and the names of PDFs that came with it. */
+function shown(text: string) {
+  const documents = [...text.matchAll(DOCUMENT)].map((m) => m[1]);
+  return { text: text.replace(DOCUMENT, ""), ...(documents.length ? { documents } : {}) };
+}
 
 const withoutRetry = (items: Item[]) => items.filter((i) => i.kind !== "retry");
 
@@ -27,15 +40,15 @@ function seconds(ms: number) {
 export function apply(items: Item[], e: AskEvent): Item[] {
   switch (e.type) {
     case "question": {
-      const user: Item = { kind: "user", text: e.text, voice: e.voice, ...(e.images.length ? { images: e.images } : {}) };
+      const user: Item = { kind: "user", ...shown(e.text), voice: e.voice, ...(e.images.length ? { images: e.images } : {}) };
       if (e.fresh) return [user];
       // A queued question starting: its waiting row becomes the real one.
-      const queued = items.findIndex((i) => i.kind === "user" && i.queued && i.text === e.text);
+      const queued = items.findIndex((i) => i.kind === "user" && i.queued && i.text === user.text);
       const rest = queued >= 0 ? items.filter((_, i) => i !== queued) : items;
       return [...rest.filter((i) => i.kind !== "offer"), user];
     }
     case "queued":
-      return [...items, { kind: "user", text: e.text, voice: e.voice, queued: true, ...(e.images.length ? { images: e.images } : {}) }];
+      return [...items, { kind: "user", ...shown(e.text), voice: e.voice, queued: true, ...(e.images.length ? { images: e.images } : {}) }];
     case "started":
       return items;
     case "text": {

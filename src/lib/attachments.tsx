@@ -1,7 +1,14 @@
 // Pictures attached to a question or an agent task: pasted from the
-// clipboard or picked from disk, sent as base64 JPEG.
+// clipboard or picked from disk, sent as base64 JPEG. Where `pdfs` is on,
+// PDFs come along too, as their text.
 import { useRef, useState, type ClipboardEvent } from "react";
+import { api } from "./ipc";
 import "./attachments.css";
+
+/** A PDF the user attached, read to text. */
+export type Doc = { name: string; text: string };
+
+const isPdf = (f: File) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
 
 /** Longest edge sent to a model; larger pictures are scaled down. */
 const MAX_EDGE = 1568;
@@ -22,14 +29,32 @@ async function toJpeg(file: Blob): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.85).split(",", 2)[1];
 }
 
-export function useAttachments(max: number) {
+export function useAttachments(max: number, pdfs = false) {
   const [images, setImages] = useState<string[]>([]);
+  const [documents, setDocuments] = useState<Doc[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const addPdfs = async (files: File[]) => {
+    const room = max - documents.length;
+    if (files.length > room) setError(`Up to ${max} PDFs`);
+    for (const f of files.slice(0, Math.max(0, room))) {
+      try {
+        const text = await api.pdfText(f);
+        setDocuments((prev) => [...prev, { name: f.name, text }].slice(0, max));
+      } catch (e) {
+        setError(String(e));
+      }
+    }
+  };
+
   const add = async (files: Iterable<File>) => {
-    const pictures = [...files].filter((f) => f.type.startsWith("image/"));
-    if (!pictures.length) return;
+    const all = [...files];
+    const pictures = all.filter((f) => f.type.startsWith("image/"));
+    const docs = pdfs ? all.filter(isPdf) : [];
+    if (!pictures.length && !docs.length) return;
     setError(null);
+    if (docs.length) await addPdfs(docs);
+    if (!pictures.length) return;
     const room = max - images.length;
     if (pictures.length > room) setError(max === 1 ? "One picture at a time" : `Up to ${max} pictures`);
     try {
@@ -40,9 +65,9 @@ export function useAttachments(max: number) {
     }
   };
 
-  /** For an input's onPaste: takes pictures, lets text paste as usual. */
+  /** For an input's onPaste: takes pictures (and PDFs), lets text paste as usual. */
   const onPaste = (e: ClipboardEvent) => {
-    const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+    const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/") || (pdfs && isPdf(f)));
     if (!files.length) return;
     e.preventDefault();
     void add(files);
@@ -50,22 +75,35 @@ export function useAttachments(max: number) {
 
   return {
     images,
+    documents,
     error,
     add,
     onPaste,
     remove: (i: number) => setImages((prev) => prev.filter((_, j) => j !== i)),
+    removeDocument: (i: number) => setDocuments((prev) => prev.filter((_, j) => j !== i)),
     clear: () => {
       setImages([]);
+      setDocuments([]);
       setError(null);
     },
   };
 }
 
-/** Thumbnails of attached pictures; removable while still a draft. */
-export function AttachmentStrip({ images, onRemove }: { images: string[]; onRemove?: (i: number) => void }) {
-  if (!images.length) return null;
+/** Thumbnails of attached pictures and names of PDFs; removable while still a draft. */
+export function AttachmentStrip({ images, onRemove, documents = [], onRemoveDocument }: { images: string[]; onRemove?: (i: number) => void; documents?: string[]; onRemoveDocument?: (i: number) => void }) {
+  if (!images.length && !documents.length) return null;
   return (
     <div className="attach-strip">
+      {documents.map((name, i) => (
+        <span key={`d${i}`} className="attach-doc" title={name}>
+          <span className="attach-doc__name">{name}</span>
+          {onRemoveDocument && (
+            <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemoveDocument(i)}>
+              ×
+            </button>
+          )}
+        </span>
+      ))}
       {images.map((data, i) => (
         <span key={i} className="attach-thumb">
           <img src={`data:image/jpeg;base64,${data}`} alt={`Picture ${i + 1}`} />
@@ -80,17 +118,17 @@ export function AttachmentStrip({ images, onRemove }: { images: string[]; onRemo
   );
 }
 
-/** Opens the file picker for pictures. `onOpen` runs first (a window that
- * closes on its own can stay open meanwhile). */
-export function AttachButton({ onFiles, onOpen, disabled, className }: { onFiles: (f: File[]) => void; onOpen?: () => void; disabled?: boolean; className?: string }) {
+/** Opens the file picker for pictures (and PDFs with `pdfs`). `onOpen` runs
+ * first (a window that closes on its own can stay open meanwhile). */
+export function AttachButton({ onFiles, onOpen, disabled, className, pdfs }: { onFiles: (f: File[]) => void; onOpen?: () => void; disabled?: boolean; className?: string; pdfs?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
       <button
         type="button"
         className={className ?? "attach-btn"}
-        aria-label="Attach a picture"
-        title={disabled ? "Pictures can be added once it has finished" : "Attach a picture (or paste one)"}
+        aria-label={pdfs ? "Attach a picture or PDF" : "Attach a picture"}
+        title={disabled ? "Pictures can be added once it has finished" : pdfs ? "Attach a picture or PDF (or paste one)" : "Attach a picture (or paste one)"}
         disabled={disabled}
         onClick={() => {
           onOpen?.();
@@ -104,7 +142,7 @@ export function AttachButton({ onFiles, onOpen, disabled, className }: { onFiles
       <input
         ref={input}
         type="file"
-        accept="image/*"
+        accept={pdfs ? "image/*,application/pdf,.pdf" : "image/*"}
         multiple
         hidden
         onChange={(e) => {

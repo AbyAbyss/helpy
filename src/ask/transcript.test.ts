@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AskEvent } from "../bindings/AskEvent";
-import { apply, waiting, type Item } from "./transcript";
+import { apply, waiting, withDocuments, type Item } from "./transcript";
 
 const run = (events: AskEvent[], start: Item[] = [{ kind: "user", text: "q", voice: false }]) => events.reduce(apply, start);
 
@@ -8,6 +8,13 @@ describe("ask transcript", () => {
   it("adds typed and spoken questions as user messages", () => {
     const items = run([{ type: "question", text: "Where is spam?", voice: true, fresh: false, images: [] }], []);
     expect(items).toEqual([{ kind: "user", text: "Where is spam?", voice: true }]);
+  });
+
+  it("shows attached PDFs by name, not their text", () => {
+    const text = withDocuments("Explain this", [{ name: 'Q3 "final".pdf', text: "Revenue rose.\n\nCosts fell." }]);
+    expect(text).toBe("Explain this\n\n<document name=\"Q3 'final'.pdf\">\nRevenue rose.\n\nCosts fell.\n</document>");
+    const items = run([{ type: "queued", text, voice: false, images: [] }, { type: "question", text, voice: false, fresh: false, images: [] }], []);
+    expect(items).toEqual([{ kind: "user", text: "Explain this", documents: ["Q3 'final'.pdf"], voice: false }]);
   });
 
   it("a fresh question clears the earlier conversation", () => {

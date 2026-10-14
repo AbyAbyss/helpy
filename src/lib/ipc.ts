@@ -121,6 +121,8 @@ export const api = {
 
   // The ask panel. Progress arrives as EVENTS.ask events.
   ask: (text: string, images: string[] = []) => invoke<void>("ask_send", { text, images }),
+  /** The text of a PDF; its bytes go as the raw request body. */
+  pdfText: async (file: Blob) => invoke<string>("pdf_text", new Uint8Array(await file.arrayBuffer())),
   askCancel: () => invoke<void>("ask_cancel"),
   askReset: () => invoke<void>("ask_reset"),
   askScreenAnswer: (id: number, allow: boolean) => invoke<void>("ask_screen_answer", { id, allow }),

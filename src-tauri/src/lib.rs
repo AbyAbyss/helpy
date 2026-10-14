@@ -182,6 +182,7 @@ pub fn run() {
             ai::ai_detect_local,
             ai::ai_usage_today,
             ai::ask::ask_send,
+            ai::ask::pdf_text,
             ai::ask::ask_cancel,
             ai::ask::ask_reset,
             ai::ask::ask_screen_answer,

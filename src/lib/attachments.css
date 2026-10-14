@@ -41,6 +41,37 @@
   cursor: pointer;
 }
 
+.attach-doc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.3));
+  font-size: 12px;
+  flex: none;
+}
+
+.attach-doc__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attach-doc button {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  font: 600 12px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+
 .attach-btn {
   flex: none;
   display: grid;

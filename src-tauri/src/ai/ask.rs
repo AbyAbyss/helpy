@@ -1454,6 +1454,37 @@ pub async fn ask_send(app: AppHandle, text: String, images: Option<Vec<String>>)
     ask(&app, text, Origin::Text, images.unwrap_or_default()).await
 }
 
+/// Longest text kept from one document, so a big PDF can't fill the context.
+const MAX_DOCUMENT_CHARS: usize = 200_000;
+
+/// The text of a PDF the user attached. Its bytes are the request body.
+#[tauri::command]
+pub async fn pdf_text(request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Couldn't read that PDF".into());
+    };
+    let bytes = bytes.clone();
+    tokio::task::spawn_blocking(move || document_text(&bytes))
+        .await
+        .map_err(|_| "Couldn't read that PDF".to_string())?
+}
+
+fn document_text(bytes: &[u8]) -> Result<String, String> {
+    // pdf-extract panics on some malformed files.
+    let text = std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(bytes))
+        .ok()
+        .and_then(Result::ok)
+        .ok_or("Couldn't read that PDF")?;
+    let text = text.trim();
+    if text.is_empty() {
+        return Err("That PDF has no text to read (it may be a scan)".into());
+    }
+    Ok(match text.char_indices().nth(MAX_DOCUMENT_CHARS) {
+        Some((cut, _)) => format!("{}\n[The rest of the document was left out.]", &text[..cut]),
+        None => text.to_string(),
+    })
+}
+
 /// Drops all but the last `questions` questions and what followed each. A
 /// question is a user message that isn't a tool result, so tool calls and
 /// their results always stay together.
@@ -1570,6 +1601,50 @@ pub fn ask_status(store: tauri::State<SettingsStore>) -> AskStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A one-page PDF that says `text` in Helvetica.
+    fn pdf(text: &str) -> Vec<u8> {
+        let stream = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET");
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{stream}\nendstream", stream.len()),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+        ];
+        let mut out = String::from("%PDF-1.4\n");
+        let mut offsets = Vec::new();
+        for (i, o) in objects.iter().enumerate() {
+            offsets.push(out.len());
+            out += &format!("{} 0 obj\n{o}\nendobj\n", i + 1);
+        }
+        let xref = out.len();
+        out += &format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1);
+        for o in offsets {
+            out += &format!("{o:010} 00000 n \n");
+        }
+        out += &format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        );
+        out.into_bytes()
+    }
+
+    #[test]
+    fn pdf_text_is_read_and_junk_is_refused() {
+        assert_eq!(
+            document_text(&pdf("Hello from Helpy")).unwrap(),
+            "Hello from Helpy"
+        );
+        assert_eq!(
+            document_text(&pdf("")).unwrap_err(),
+            "That PDF has no text to read (it may be a scan)"
+        );
+        assert_eq!(
+            document_text(b"not a pdf").unwrap_err(),
+            "Couldn't read that PDF"
+        );
+    }
 
     #[test]
     fn task_requests_are_told_from_questions_by_their_first_words() {

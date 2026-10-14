@@ -8,7 +8,7 @@ import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachment
 import { api, EVENTS } from "../lib/ipc";
 import { linkify, WebLink } from "../lib/links";
 import { useSettings, useTheme } from "../lib/useSettings";
-import { apply, waiting, type Item } from "./transcript";
+import { apply, waiting, withDocuments, type Item } from "./transcript";
 
 const EXAMPLES = ["How do I find my spam folder?", "What does this error mean?", "Summarize what's on my screen"];
 
@@ -20,7 +20,7 @@ export function Panel() {
   const [running, setRunning] = useState(false);
   const [meta, setMeta] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const attach = useAttachments(4);
+  const attach = useAttachments(4, true);
   const input = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -58,13 +58,13 @@ export function Panel() {
   }, [items]);
 
   const send = async (text: string) => {
-    const images = attach.images;
-    const q = text.trim() || (images.length ? "Look at this." : "");
+    const { images, documents } = attach;
+    const q = text.trim() || (documents.length ? "Explain this document." : images.length ? "Look at this." : "");
     if (!q) return;
     setDraft("");
     attach.clear();
     try {
-      await api.ask(q, images);
+      await api.ask(withDocuments(q, documents), images);
     } catch (e) {
       setItems((prev) => [...prev, { kind: "error", text: String(e), action: null }]);
     } finally {
@@ -146,9 +146,9 @@ export function Panel() {
       </div>
 
       <footer className="composer">
-        <AttachmentStrip images={attach.images} onRemove={attach.remove} />
+        <AttachmentStrip images={attach.images} onRemove={attach.remove} documents={attach.documents.map((d) => d.name)} onRemoveDocument={attach.removeDocument} />
         <div className="composer__box">
-          <AttachButton onFiles={(f) => attach.add(f)} disabled={!ready} />
+          <AttachButton onFiles={(f) => attach.add(f)} disabled={!ready} pdfs />
           <textarea
             ref={input}
             id="ask-input"
@@ -169,12 +169,12 @@ export function Panel() {
               }
             }}
           />
-          {running && !draft.trim() && !attach.images.length ? (
+          {running && !draft.trim() && !attach.images.length && !attach.documents.length ? (
             <button type="button" className="send send--stop" aria-label="Stop" title="Stop (Esc)" onClick={() => api.askCancel()}>
               <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" /></svg>
             </button>
           ) : (
-            <button type="button" className="send" aria-label={running ? "Ask next" : "Send"} title={running ? "Asked after this answer (Enter)" : "Send (Enter)"} disabled={(!draft.trim() && !attach.images.length) || !ready} onClick={() => send(draft)}>
+            <button type="button" className="send" aria-label={running ? "Ask next" : "Send"} title={running ? "Asked after this answer (Enter)" : "Send (Enter)"} disabled={(!draft.trim() && !attach.images.length && !attach.documents.length) || !ready} onClick={() => send(draft)}>
               <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M7 12V2M7 2 2.5 6.5M7 2l4.5 4.5" /></svg>
             </button>
           )}
@@ -183,7 +183,7 @@ export function Panel() {
           {attach.error ? (
             <span className="attach-error">{attach.error}</span>
           ) : (
-            <span>{running ? "Still answering · a new question is asked next, without stopping this one · Esc to stop" : (meta ?? "Enter to send · Shift+Enter for a new line · Paste a picture · Esc to close")}</span>
+            <span>{running ? "Still answering · a new question is asked next, without stopping this one · Esc to stop" : (meta ?? "Enter to send · Shift+Enter for a new line · Paste a picture or PDF · Esc to close")}</span>
           )}
         </div>
       </footer>
@@ -197,7 +197,7 @@ function ItemView({ item, onPermission, onAgents }: { item: Item; onPermission: 
     case "user":
       return (
         <div className={`msg msg--user${item.voice ? " msg--voice" : ""}${item.queued ? " msg--queued" : ""}`} title={item.queued ? "Asked after the current answer" : undefined}>
-          {item.images && <AttachmentStrip images={item.images} />}
+          {(item.images || item.documents) && <AttachmentStrip images={item.images ?? []} documents={item.documents} />}
           {item.voice && <MicIcon />}
           {item.text}
           {item.queued && <span className="msg__queued">next</span>}
