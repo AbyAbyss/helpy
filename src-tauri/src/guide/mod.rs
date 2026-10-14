@@ -601,6 +601,7 @@ pub async fn show(
                         x: (x - m.x as f64) / m.scale,
                         y: (y - m.y as f64) / m.scale,
                         label: Some("Helpy will click here".into()),
+                        color: None,
                         raw: String::new(),
                     });
                     emit_marks(app, &label, shown);

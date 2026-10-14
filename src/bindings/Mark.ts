@@ -6,12 +6,29 @@
 export type Mark = { "type": "highlight", x: number, y: number, width: number, height: number, label: string | null, 
 /**
  * The model's own numbers, for the debug view.
+ * Its own colour (CSS), else the user's.
  */
-raw: string, } | { "type": "point", x: number, y: number, label: string | null, raw: string, } | { "type": "arrow", fromX: number, fromY: number, toX: number, toY: number, label: string | null, raw: string, } | { "type": "line", points: Array<[number, number]>, closed: boolean, curved: boolean, label: string | null, raw: string, } | { "type": "text", x: number, y: number, text: string, 
+color?: string, raw: string, } | { "type": "point", x: number, y: number, label: string | null, 
+/**
+ * Its own colour (CSS), else the user's.
+ */
+color?: string, raw: string, } | { "type": "arrow", fromX: number, fromY: number, toX: number, toY: number, label: string | null, 
+/**
+ * Its own colour (CSS), else the user's.
+ */
+color?: string, raw: string, } | { "type": "line", points: Array<[number, number]>, closed: boolean, curved: boolean, label: string | null, 
+/**
+ * Its own colour (CSS), else the user's.
+ */
+color?: string, raw: string, } | { "type": "text", x: number, y: number, text: string, 
 /**
  * Font size in CSS pixels.
  */
-size: number, raw: string, } | { "type": "image", x: number, y: number, width: number, 
+size: number, 
+/**
+ * Its own colour (CSS), else the user's.
+ */
+color?: string, raw: string, } | { "type": "image", x: number, y: number, width: number, 
 /**
  * A data URL.
  */

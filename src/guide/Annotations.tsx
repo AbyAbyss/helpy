@@ -24,6 +24,13 @@ function timed(timing: Props["timing"], i: number): CSSProperties | undefined {
   return t && ({ "--d0": `${t.draw}ms`, "--dd": `${t.dur}ms`, "--ease": "cubic-bezier(0.42, 0, 0.58, 1)" } as CSSProperties);
 }
 
+/** A mark's timing, and its own colour when it has one. */
+function styled(m: Mark, timing: Props["timing"], i: number): CSSProperties | undefined {
+  const color = "color" in m ? m.color : null;
+  if (!color) return timed(timing, i);
+  return { ...timed(timing, i), "--mark": color, "--mark-ink": inkFor(color) } as CSSProperties;
+}
+
 /**
  * Highlights, pointers and arrows for one guidance step. Purely visual: it
  * never takes pointer events, so the app underneath stays usable.
@@ -76,7 +83,7 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
             const h = m.height + HIGHLIGHT_PAD * 2;
             const r = Math.min(10, w / 2, h / 2);
             return (
-              <g key={i} className="ann__stroke" style={timed(timing, i)}>
+              <g key={i} className="ann__stroke" style={styled(m, timing, i)}>
                 <rect className="ann__pulse" x={x} y={y} width={w} height={h} rx={r} />
                 <rect className="ann__box" x={x} y={y} width={w} height={h} rx={r} pathLength={1} />
               </g>
@@ -85,7 +92,7 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
           if (m.type === "arrow") {
             const a = arrow({ x: m.fromX, y: m.fromY }, { x: m.toX, y: m.toY }, look.arrowStyle === "curved", look.highlightThickness);
             return (
-              <g key={i} className="ann__stroke" style={timed(timing, i)}>
+              <g key={i} className="ann__stroke" style={styled(m, timing, i)}>
                 <path className="ann__shaft" d={a.shaft} pathLength={1} />
                 <polygon className="ann__head" points={a.head.map((p) => `${p.x},${p.y}`).join(" ")} />
               </g>
@@ -98,14 +105,14 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
               m.curved,
             );
             return (
-              <g key={i} className="ann__stroke" style={timed(timing, i)}>
+              <g key={i} className="ann__stroke" style={styled(m, timing, i)}>
                 <path className="ann__line" d={d} pathLength={1} />
               </g>
             );
           }
           if (m.type === "text" || m.type === "image" || m.type === "chart") return null;
           return (
-            <g key={i} className="ann__appear" style={timed(timing, i)}>
+            <g key={i} className="ann__appear" style={styled(m, timing, i)}>
               <circle className="ann__ring" cx={m.x} cy={m.y} r={14} />
               <circle className="ann__dot" cx={m.x} cy={m.y} r={4.5} />
             </g>
@@ -114,7 +121,7 @@ export function Annotations({ marks, width, height, look, timing }: Props) {
       </svg>
 
       {marks.map((m, i) => (
-        <div key={i} style={timed(timing, i)}>
+        <div key={i} style={styled(m, timing, i)}>
           <MarkLabels mark={m} debug={look.showCoordinates} />
         </div>
       ))}

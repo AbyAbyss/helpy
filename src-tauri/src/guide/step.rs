@@ -43,12 +43,16 @@ pub enum Action {
         height: f64,
         #[serde(default)]
         label: Option<String>,
+        #[serde(default)]
+        color: Option<String>,
     },
     Point {
         x: f64,
         y: f64,
         #[serde(default)]
         label: Option<String>,
+        #[serde(default)]
+        color: Option<String>,
     },
     Arrow {
         from_x: f64,
@@ -57,6 +61,8 @@ pub enum Action {
         to_y: f64,
         #[serde(default)]
         label: Option<String>,
+        #[serde(default)]
+        color: Option<String>,
     },
     /// A line through points: open, or closed into a shape, straight or
     /// smoothed into a curve.
@@ -68,6 +74,8 @@ pub enum Action {
         curved: bool,
         #[serde(default)]
         label: Option<String>,
+        #[serde(default)]
+        color: Option<String>,
     },
     /// Words, numbers or a formula written on the screen, centred on x, y.
     Text {
@@ -76,6 +84,8 @@ pub enum Action {
         text: String,
         #[serde(default)]
         size: Option<String>,
+        #[serde(default)]
+        color: Option<String>,
     },
     /// A reference picture from the web, top-left at x, y.
     Image {
@@ -160,12 +170,20 @@ pub enum Mark {
         height: f64,
         label: Option<String>,
         /// The model's own numbers, for the debug view.
+        /// Its own colour (CSS), else the user's.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        color: Option<String>,
         raw: String,
     },
     Point {
         x: f64,
         y: f64,
         label: Option<String>,
+        /// Its own colour (CSS), else the user's.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        color: Option<String>,
         raw: String,
     },
     Arrow {
@@ -174,6 +192,10 @@ pub enum Mark {
         to_x: f64,
         to_y: f64,
         label: Option<String>,
+        /// Its own colour (CSS), else the user's.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        color: Option<String>,
         raw: String,
     },
     Line {
@@ -181,6 +203,10 @@ pub enum Mark {
         closed: bool,
         curved: bool,
         label: Option<String>,
+        /// Its own colour (CSS), else the user's.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        color: Option<String>,
         raw: String,
     },
     Text {
@@ -189,6 +215,10 @@ pub enum Mark {
         text: String,
         /// Font size in CSS pixels.
         size: f64,
+        /// Its own colour (CSS), else the user's.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        color: Option<String>,
         raw: String,
     },
     Image {
@@ -282,7 +312,8 @@ fn actions_schema() -> Value {
                 "size": { "type": "string", "enum": ["small", "medium", "large"], "description": "For text: how big to write it. Default medium." },
                 "query": { "type": "string", "description": "For image: 2 to 4 plain words naming the subject, the way a picture file is named, e.g. \"heart diagram\", \"thalamus\", \"spinal cord cross section\". Longer searches usually find nothing." },
                 "chart": { "type": "string", "description": "For chart: Mermaid source for a chart of the numbers, e.g. \"pie title Spending\\n  \\\"Rent\\\" : 1200\\n  \\\"Food\\\" : 450\", or xychart-beta for bars and lines, or a flowchart." },
-                "caption": { "type": "string", "description": "For image or chart: a few words shown under it." }
+                "caption": { "type": "string", "description": "For image or chart: a few words shown under it." },
+                "color": { "type": "string", "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink"], "description": "For highlight, point, arrow, line and text: its colour. Default: the user's colour." }
             },
             "required": ["type"]
         },
@@ -297,7 +328,9 @@ fn actions_schema() -> Value {
             drawing, e.g. a labelled heart diagram next to a heart on screen; put it where it covers nothing \
             the user needs. chart: a chart of numbers (pie, bars, lines) or a diagram drawn from Mermaid source, \
             top-left at x, y with the given width, when the user wants data shown as a chart; put it in empty \
-            space, then explain it in the next steps with arrows, highlights and text on it. speak: say text aloud."
+            space, then explain it in the next steps with arrows, highlights and text on it. speak: say text aloud. \
+            When explaining, give each idea its own colour, write text in the colour of the arrow or line it goes \
+            with, and keep text clear of arrows and lines so each can be read."
     })
 }
 
@@ -385,6 +418,7 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                 width: bw,
                 height: bh,
                 label: l,
+                color,
             } => {
                 let (x0, y0) = (fit(x, w, "x")?, fit(y, h, "y")?);
                 let (x1, y1) = (fit(x + bw, w, "x + width")?, fit(y + bh, h, "y + height")?);
@@ -397,12 +431,14 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                     width: x1 - x0,
                     height: y1 - y0,
                     label: label(l),
+                    color: paint(color),
                 }
             }
-            Action::Point { x, y, label: l } => Action::Point {
+            Action::Point { x, y, label: l, color } => Action::Point {
                 x: fit(x, w, "x")?,
                 y: fit(y, h, "y")?,
                 label: label(l),
+                color: paint(color),
             },
             Action::Arrow {
                 from_x,
@@ -410,18 +446,21 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                 to_x,
                 to_y,
                 label: l,
+                color,
             } => Action::Arrow {
                 from_x: fit(from_x, w, "fromX")?,
                 from_y: fit(from_y, h, "fromY")?,
                 to_x: fit(to_x, w, "toX")?,
                 to_y: fit(to_y, h, "toY")?,
                 label: label(l),
+                color: paint(color),
             },
             Action::Line {
                 points,
                 closed,
                 curved,
                 label: l,
+                color,
             } => {
                 let least = if closed { 3 } else { 2 };
                 if points.len() < least || points.len() > MAX_POINTS {
@@ -439,9 +478,16 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                     closed,
                     curved,
                     label: label(l),
+                    color: paint(color),
                 }
             }
-            Action::Text { x, y, text, size } => {
+            Action::Text {
+                x,
+                y,
+                text,
+                size,
+                color,
+            } => {
                 let text = clean(&text, MAX_TEXT);
                 if text.is_empty() {
                     return Err("Text needs something to write.".into());
@@ -452,6 +498,7 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                     y: fit(y, h, "y")?,
                     text,
                     size,
+                    color: paint(color),
                 }
             }
             Action::Image {
@@ -526,6 +573,29 @@ fn raw(points: &[(f64, f64)]) -> String {
         .join(" → ")
 }
 
+/// Colours a mark can have, by the name the model gives, strong enough to
+/// read on light and dark screens.
+const COLORS: [(&str, &str); 7] = [
+    ("red", "#e5484d"),
+    ("orange", "#f76b15"),
+    ("yellow", "#ffc53d"),
+    ("green", "#30a46c"),
+    ("blue", "#3e8ef7"),
+    ("purple", "#8e4ec6"),
+    ("pink", "#e93d82"),
+];
+
+/// A colour name the palette has, else none (the user's colour).
+fn paint(color: Option<String>) -> Option<String> {
+    let c = color?.trim().to_lowercase();
+    COLORS.iter().any(|(n, _)| *n == c).then_some(c)
+}
+
+fn css(color: Option<String>) -> Option<String> {
+    let c = color?;
+    COLORS.iter().find(|(n, _)| *n == c).map(|(_, hex)| hex.to_string())
+}
+
 /// The step's shapes in the overlay's CSS pixels.
 pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
     // Screenshot pixels per overlay CSS pixel, for sizes.
@@ -540,6 +610,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                 width,
                 height,
                 label,
+                color,
             } => {
                 let (ox, oy) = meta.to_overlay(x, y);
                 Some(Mark::Highlight {
@@ -548,15 +619,17 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     width: width * kx,
                     height: height * ky,
                     label,
+                    color: css(color),
                     raw: format!("{} {width:.0}x{height:.0}", raw(&[(x, y)])),
                 })
             }
-            Action::Point { x, y, label } => {
+            Action::Point { x, y, label, color } => {
                 let (ox, oy) = meta.to_overlay(x, y);
                 Some(Mark::Point {
                     x: ox,
                     y: oy,
                     label,
+                    color: css(color),
                     raw: raw(&[(x, y)]),
                 })
             }
@@ -566,6 +639,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                 to_x,
                 to_y,
                 label,
+                color,
             } => {
                 let (fx, fy) = meta.to_overlay(from_x, from_y);
                 let (tx, ty) = meta.to_overlay(to_x, to_y);
@@ -575,6 +649,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     to_x: tx,
                     to_y: ty,
                     label,
+                    color: css(color),
                     raw: raw(&[(from_x, from_y), (to_x, to_y)]),
                 })
             }
@@ -583,6 +658,7 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                 closed,
                 curved,
                 label,
+                color,
             } => {
                 let pairs: Vec<(f64, f64)> = points.iter().map(|&[x, y]| (x, y)).collect();
                 Some(Mark::Line {
@@ -596,15 +672,23 @@ pub fn marks(step: &Step, meta: CaptureMeta) -> Vec<Mark> {
                     closed,
                     curved,
                     label,
+                    color: css(color),
                     raw: raw(&pairs),
                 })
             }
-            Action::Text { x, y, text, size } => {
+            Action::Text {
+                x,
+                y,
+                text,
+                size,
+                color,
+            } => {
                 let (ox, oy) = meta.to_overlay(x, y);
                 Some(Mark::Text {
                     x: ox,
                     y: oy,
                     text,
+                    color: css(color),
                     // Checked in validate.
                     size: text_size(size.as_deref()).unwrap_or(28.0),
                     raw: raw(&[(x, y)]),
@@ -897,7 +981,8 @@ mod tests {
                 y: 860.0,
                 width: 52.0,
                 height: 22.0,
-                label: None
+                label: None,
+                color: None
             }
         );
     }
@@ -1001,6 +1086,7 @@ mod tests {
             curved,
             label,
             raw,
+            ..
         } = &m[0]
         else {
             panic!()
@@ -1018,6 +1104,28 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn marks_take_a_palette_colour_or_the_users() {
+        let s = validate(
+            &json!({ "instruction": "Sides", "actions": [
+                { "type": "text", "x": 100, "y": 50, "text": "a = 3", "color": "Blue" },
+                { "type": "arrow", "fromX": 10, "fromY": 10, "toX": 90, "toY": 40, "color": "magenta" },
+                { "type": "point", "x": 60, "y": 40 }
+            ] }),
+            1568,
+            882,
+        )
+        .unwrap();
+        let colors: Vec<Option<String>> = marks(&s, meta())
+            .into_iter()
+            .map(|m| match m {
+                Mark::Text { color, .. } | Mark::Arrow { color, .. } | Mark::Point { color, .. } => color,
+                _ => unreachable!(),
+            })
+            .collect();
+        assert_eq!(colors, [Some("#3e8ef7".into()), None, None]);
     }
 
     #[test]
