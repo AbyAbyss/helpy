@@ -93,6 +93,7 @@ fn run(app: AppHandle) {
             continue;
         }
         last_pos = Some(pos);
+        crate::windows::pill_follow(&app, pos);
 
         let overlays = app.state::<Overlays>().snapshot();
         let Some((label, monitor)) = overlays.iter().find(|(_, m)| m.contains(pos.0, pos.1)) else {

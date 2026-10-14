@@ -123,25 +123,42 @@ pub fn show_pill(app: &AppHandle) {
         return;
     };
     if let Ok(cursor) = app.cursor_position() {
-        let monitors = app.state::<Overlays>().snapshot();
-        if let Some((_, m)) = monitors
-            .iter()
-            .find(|(_, m)| m.contains(cursor.x, cursor.y))
-        {
-            let size = (PILL_SIZE.0 * m.scale, PILL_SIZE.1 * m.scale);
-            // Sit level with the cursor, where the eye already is.
-            let at = (cursor.x, cursor.y - 22.0 * m.scale);
-            let (x, y) = place_near(
-                at,
-                (m.x as f64, m.y as f64, m.width as f64, m.height as f64),
-                size,
-                14.0 * m.scale,
-            );
-            let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
-        }
+        place_pill(app, &w, (cursor.x, cursor.y));
     }
     let _ = w.show();
     let _ = w.set_always_on_top(true);
+    PILL_FOLLOWS.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The pill is showing and keeps beside the cursor, like the buddy; not
+/// while it flies to the dock.
+static PILL_FOLLOWS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Moves the pill along with the cursor, global physical pixels.
+pub fn pill_follow(app: &AppHandle, cursor: (f64, f64)) {
+    if !PILL_FOLLOWS.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    if let Some(w) = app.get_webview_window(PILL) {
+        place_pill(app, &w, cursor);
+    }
+}
+
+fn place_pill(app: &AppHandle, w: &tauri::WebviewWindow, cursor: (f64, f64)) {
+    let monitors = app.state::<Overlays>().snapshot();
+    let Some((_, m)) = monitors.iter().find(|(_, m)| m.contains(cursor.0, cursor.1)) else {
+        return;
+    };
+    let size = (PILL_SIZE.0 * m.scale, PILL_SIZE.1 * m.scale);
+    // Sit level with the cursor, where the eye already is.
+    let at = (cursor.0, cursor.1 - 22.0 * m.scale);
+    let (x, y) = place_near(
+        at,
+        (m.x as f64, m.y as f64, m.width as f64, m.height as f64),
+        size,
+        14.0 * m.scale,
+    );
+    let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
 }
 
 /// Shows the plan card beside the cursor and focuses it, so Enter starts
@@ -447,6 +464,7 @@ pub fn fly_pill_to_dock(app: &AppHandle) {
     if !pill.is_visible().unwrap_or(false) {
         return;
     }
+    PILL_FOLLOWS.store(false, std::sync::atomic::Ordering::Relaxed);
     let (Ok(from), Ok(size)) = (pill.outer_position(), pill.outer_size()) else {
         hide_pill(app);
         return;
@@ -572,6 +590,7 @@ pub fn pill_shown(app: &AppHandle) -> bool {
 }
 
 pub fn hide_pill(app: &AppHandle) {
+    PILL_FOLLOWS.store(false, std::sync::atomic::Ordering::Relaxed);
     if let Some(w) = app.get_webview_window(PILL) {
         let _ = w.hide();
     }
