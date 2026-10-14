@@ -133,7 +133,7 @@ Accessibility snapping (UI Automation via `uiautomation`, macOS AX via `accessib
   - **Profiles**: Beginner, Expert, Quiet each keep values for nine settings, saved in `profiles.json` next to the settings (so the settings file keeps one row per setting). Beginner starts from the defaults.
   - **Usage**: the existing 90-day ledger now feeds a 30-day chart by day, feature (agents grouped) and model.
   - **Onboarding**: a welcome tour in the settings window on a fresh install (hello, model, profile, permissions, hotkeys). Settings files from before it existed count as onboarded.
-  - **Verified** on Linux (X11) end to end: snapping onto a GTK button, a blanked password field in the screenshot the model received, the Chromium address reaching the planner while the agent panel was in front, and "Do it" clicking a GTK button. The Windows and macOS code for these features is compile-checked only (both targets) and still needs a run on a real PC and Mac.
+  - **Verified** on Linux (X11) end to end: snapping onto a GTK button, a blanked password field in the screenshot the model received, the Chromium address reaching the planner while the agent panel was in front, and "Do it" clicking a GTK button. On macOS (Retina, one display), snapping was checked against System Settings with the overlay on screen: hit-testing passes through the click-through overlay, and a loose box over a control snaps to it (sidebar rows snap to the button inside them). Password blanking, the page address and "Do it" on macOS, multi-display coordinates, and all of Windows are still compile-checked only.
 
 ## Phase 10: harness (done)
 
