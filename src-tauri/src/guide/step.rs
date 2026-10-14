@@ -271,7 +271,7 @@ fn schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "instruction": { "type": "string", "description": "One short sentence telling the user what to do." },
+            "instruction": { "type": "string", "description": "One short sentence telling the user what to do. Don't number it; the step number is shown already." },
             "step": { "type": "integer", "description": "This step's number, starting at 1." },
             "total": { "type": "integer", "description": "Your best estimate of the number of steps." },
             "actions": actions_schema(),
@@ -388,7 +388,7 @@ fn clean(s: &str, max: usize) -> String {
 pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> {
     let s: StepInput = serde_json::from_value(input.clone())
         .map_err(|e| format!("The step isn't in the expected shape: {e}"))?;
-    let instruction = clean(&s.instruction, MAX_INSTRUCTION);
+    let instruction = unnumbered(&clean(&s.instruction, MAX_INSTRUCTION));
     if instruction.is_empty() {
         return Err("Give the step a short instruction.".into());
     }
@@ -553,7 +553,7 @@ pub fn validate(input: &Value, width: u32, height: u32) -> Result<Step, String> 
                 }
             }
             Action::Speak { text } => Action::Speak {
-                text: clean(&text, MAX_INSTRUCTION),
+                text: unnumbered(&clean(&text, MAX_INSTRUCTION)),
             },
         });
     }
@@ -788,6 +788,28 @@ pub fn visuals(step: &Step) -> Vec<Action> {
             _ => None,
         })
         .collect()
+}
+
+/// Text without a leading "Step 2:" or "Step 2 of 4 -", which models add
+/// though the card shows the number already, and which sounds odd read out.
+fn unnumbered(text: &str) -> String {
+    let Some(rest) = text.get(..5).filter(|w| w.eq_ignore_ascii_case("step ")).map(|_| &text[5..]) else {
+        return text.to_string();
+    };
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    if digits == 0 {
+        return text.to_string();
+    }
+    let mut rest = &rest[digits..];
+    if let Some(r) = rest.strip_prefix(" of ") {
+        rest = r.trim_start_matches(|c: char| c.is_ascii_digit());
+    }
+    let cut = rest.trim_start_matches(|c: char| matches!(c, ':' | '.' | '-' | '–' | '—' | ')' | ' '));
+    if cut.len() == rest.len() || cut.is_empty() {
+        return text.to_string();
+    }
+    let mut c = cut.chars();
+    c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
 }
 
 /// What to say aloud for a step: its speak actions, or the instruction.
@@ -1104,6 +1126,16 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn step_numbers_are_dropped_from_what_is_shown_and_said() {
+        assert_eq!(unnumbered("Step 1: here's the chart."), "Here's the chart.");
+        assert_eq!(unnumbered("step 2 of 4 – Look at 2024"), "Look at 2024");
+        assert_eq!(unnumbered("Step 3. The peak"), "The peak");
+        assert_eq!(unnumbered("Steps to follow"), "Steps to follow");
+        assert_eq!(unnumbered("Step 10"), "Step 10");
+        assert_eq!(unnumbered("Step inside"), "Step inside");
     }
 
     #[test]
