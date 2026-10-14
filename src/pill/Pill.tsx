@@ -27,7 +27,8 @@ export function Pill() {
   // The hand-off to the agent dock (R6): the waveform turns into a chip.
   const [handoff, setHandoff] = useState(false);
   // While the buddy is showing it carries the voice state, so only the
-  // words show here, beside it.
+  // words show here, beside it; except while listening, when the waveform
+  // follows the user's voice.
   const [buddy, setBuddy] = useState(false);
   const level = useRef(0);
   const voiceTurn = useRef(false);
@@ -133,7 +134,7 @@ export function Pill() {
   return (
     <div
       ref={root}
-      className={`pill pill--${tone} pill--${state.mode}${handoff ? " pill--handoff" : buddy ? " pill--buddy" : ""}`}
+      className={`pill pill--${tone} pill--${state.mode}${handoff ? " pill--handoff" : buddy && state.mode !== "listening" ? " pill--buddy" : ""}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => api.voiceExpand()}
