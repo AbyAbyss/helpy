@@ -32,6 +32,9 @@ export function StepCard() {
     const win = getCurrentWindow();
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
+      // With no card yet there's nothing to fit. A window shrunk to nothing
+      // isn't drawn, so it would never grow back when the first step arrives.
+      if (r.height < 1) return;
       win.setSize(new LogicalSize(Math.ceil(r.width), Math.ceil(r.height))).catch(() => {});
     });
     ro.observe(el);
