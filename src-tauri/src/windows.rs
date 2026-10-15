@@ -663,7 +663,11 @@ pub fn show_agents(app: &AppHandle, id: Option<String>) {
                 let (sw, sh) = (m.size().width as f64 / k, m.size().height as f64 / k);
                 let (width, height) = agents_size((sw, sh));
                 let _ = w.set_size(LogicalSize::new(width, height));
-                let _ = w.center();
+                // Centred by hand: center() can run before the new size lands.
+                let p = m.position();
+                let x = p.x as f64 + (m.size().width as f64 - width * k) / 2.0;
+                let y = p.y as f64 + (m.size().height as f64 - height * k) / 2.0;
+                let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
             }
         }
         // The panel shows everything the card did; the card would only sit on top.
