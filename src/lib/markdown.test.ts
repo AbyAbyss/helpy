@@ -19,6 +19,10 @@ describe("normalizeMath", () => {
     expect(normalizeMath("£250 is about $329.79 at $1.3191 to the pound")).toBe("£250 is about \\$329.79 at \\$1.3191 to the pound");
   });
 
+  it("drops leaked citation markers", () => {
+    expect(normalizeMath('workloads 【{"id":0,"cursor":0,"loc":0}】.')).toBe("workloads.");
+  });
+
   it("leaves math and display math alone", () => {
     expect(normalizeMath("so $x^2$ and")).toBe("so $x^2$ and");
     expect(normalizeMath("$$2x$$")).toBe("$$\n2x\n$$");

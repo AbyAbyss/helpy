@@ -128,6 +128,8 @@ function Picture({ src, alt, links }: { src?: string; alt?: string; links: boole
  */
 export const normalizeMath = (text: string) =>
   text
+    // Citation markers some models leak from their tools: 【{"id":0,…}】.
+    .replace(/\s?【[^】\n]*】/g, "")
     .replace(/(^|[^\\$])\$(?=\d)/g, "$1\\$")
     .replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => `\n$$\n${m.trim()}\n$$\n`)
     .replace(/\\\((.+?)\\\)/g, (_, m) => `$${m.trim()}$`)
