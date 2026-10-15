@@ -130,6 +130,8 @@ export const normalizeMath = (text: string) =>
   text
     // Citation markers some models leak from their tools: 【{"id":0,…}】.
     .replace(/\s?【[^】\n]*】/g, "")
+    // Line breaks models put in table cells; raw HTML isn't rendered.
+    .replace(/<br\s*\/?>/gi, " ")
     .replace(/(^|[^\\$])\$(?=\d)/g, "$1\\$")
     .replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => `\n$$\n${m.trim()}\n$$\n`)
     .replace(/\\\((.+?)\\\)/g, (_, m) => `$${m.trim()}$`)

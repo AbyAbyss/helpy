@@ -23,6 +23,10 @@ describe("normalizeMath", () => {
     expect(normalizeMath('workloads 【{"id":0,"cursor":0,"loc":0}】.')).toBe("workloads.");
   });
 
+  it("turns <br> in table cells into spaces", () => {
+    expect(normalizeMath("| • Solid<br>• Stable<br/> |")).toBe("| • Solid • Stable  |");
+  });
+
   it("leaves math and display math alone", () => {
     expect(normalizeMath("so $x^2$ and")).toBe("so $x^2$ and");
     expect(normalizeMath("$$2x$$")).toBe("$$\n2x\n$$");
