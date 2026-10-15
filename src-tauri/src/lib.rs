@@ -105,6 +105,12 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            if capture::recording() {
+                for w in app.webview_windows().values() {
+                    let _ = w.set_content_protected(false);
+                }
+            }
+
             let handle = app.handle().clone();
             let store = SettingsStore::load(app.path().app_config_dir()?.join("settings.json"));
             let s = store.get();

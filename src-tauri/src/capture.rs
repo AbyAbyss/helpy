@@ -187,9 +187,16 @@ pub struct Frame {
     pub name: String,
 }
 
+/// Recording mode (`HELPY_RECORDING=1`): Helpy's windows show up in screen
+/// recordings, for making a demo video, and are hidden for the moment of
+/// each capture instead.
+pub fn recording() -> bool {
+    std::env::var_os("HELPY_RECORDING").is_some_and(|v| v != "0")
+}
+
 /// Captures the monitor the cursor is on. Helpy's own windows are left out:
-/// Windows and macOS exclude them from capture; on Linux they're hidden for
-/// the moment of the capture.
+/// Windows and macOS exclude them from capture; on Linux, and in recording
+/// mode, they're hidden for the moment of the capture.
 pub async fn capture_cursor_monitor(
     app: &AppHandle,
     limit: ImageLimit,
@@ -255,13 +262,15 @@ pub async fn grab_cursor_monitor(app: &AppHandle) -> Result<Frame, ProviderError
         .or_else(|| monitors.first().map(|(_, m)| *m))
         .ok_or_else(|| ProviderError::new(ErrorKind::Setup, "No monitor found"))?;
 
-    #[cfg(target_os = "linux")]
-    let hidden = hide_own_windows(app).await;
+    let hidden = if cfg!(target_os = "linux") || recording() {
+        hide_own_windows(app).await
+    } else {
+        Vec::new()
+    };
 
     let blur_passwords = privacy.blur_passwords;
     let result = tokio::task::spawn_blocking(move || grab(&monitor, &privacy)).await;
 
-    #[cfg(target_os = "linux")]
     restore_own_windows(hidden);
 
     let (mut image, name) =
@@ -335,7 +344,6 @@ fn grab(target: &MonitorRect, privacy: &Privacy) -> Result<(RgbaImage, String), 
     Ok((image, name))
 }
 
-#[cfg(target_os = "linux")]
 async fn hide_own_windows(app: &AppHandle) -> Vec<tauri::WebviewWindow> {
     let hidden: Vec<_> = app
         .webview_windows()
@@ -356,7 +364,6 @@ async fn hide_own_windows(app: &AppHandle) -> Vec<tauri::WebviewWindow> {
     hidden
 }
 
-#[cfg(target_os = "linux")]
 fn restore_own_windows(mut windows: Vec<tauri::WebviewWindow>) {
     // Overlays first, so the panel and step card are mapped last and stay on top.
     windows.sort_by_key(|w| !w.label().starts_with("overlay-"));

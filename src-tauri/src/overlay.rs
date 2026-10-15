@@ -110,7 +110,7 @@ fn build(app: &AppHandle, label: &str, m: &MonitorRect) -> tauri::Result<()> {
         .visible_on_all_workspaces(true)
         .focused(false)
         .focusable(false)
-        .content_protected(true)
+        .content_protected(!crate::capture::recording())
         .visible(false)
         .build()?;
     // Position in physical pixels after creation: builder positions are
