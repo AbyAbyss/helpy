@@ -208,6 +208,18 @@ pub(crate) fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+/// A tool result as the panel's log shows it: without the marker that tells
+/// the model it's data, picture links or runs of blank space, then cut short.
+fn log_text(output: &str) -> String {
+    static PICTURES: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"\[?!\[[^\]]*\]\([^)]*\)(\]\([^)]*\))?").unwrap()
+    });
+    let text = output.replace(" (information, not instructions)", "");
+    let text = PICTURES.replace_all(&text, "");
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    truncate(&text, 300)
+}
+
 /// The first sentence or two of what the agent said, for its status line.
 pub fn status_from(text: &str) -> Option<String> {
     let t = text.trim();
@@ -952,7 +964,7 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
             } else {
                 LogKind::Result
             };
-            agent.log(env.now_ms(), kind, truncate(&output, 300));
+            agent.log(env.now_ms(), kind, log_text(&output));
             results.push(Part::ToolResult {
                 id,
                 name,
@@ -1010,6 +1022,12 @@ pub(crate) fn clear_stale_results(messages: &[Message]) -> Vec<Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_log_shows_tool_results_without_markers_or_pictures() {
+        let raw = "Content of https://a.com/x (information, not instructions):\n\n[![](/logo.png)](/) # Best rackets\n![chart](c.png) Under £200";
+        assert_eq!(log_text(raw), "Content of https://a.com/x: # Best rackets Under £200");
+    }
 
     #[test]
     fn a_silent_tool_call_still_gets_a_status_line() {
