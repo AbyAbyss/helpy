@@ -369,6 +369,8 @@ fn restore_own_windows(mut windows: Vec<tauri::WebviewWindow>) {
     windows.sort_by_key(|w| !w.label().starts_with("overlay-"));
     for w in windows {
         let _ = w.show();
+        // All of these float above other apps; showing again doesn't keep that.
+        let _ = w.set_always_on_top(true);
         if w.label().starts_with("overlay-") {
             let _ = w.set_ignore_cursor_events(true);
         }
