@@ -666,6 +666,8 @@ pub fn show_agents(app: &AppHandle, id: Option<String>) {
                 let _ = w.center();
             }
         }
+        // The panel shows everything the card did; the card would only sit on top.
+        dock_card_close(app.clone());
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
