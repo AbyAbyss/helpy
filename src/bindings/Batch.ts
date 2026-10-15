@@ -9,4 +9,8 @@ request: string, created: number,
 /**
  * The trigger that started it, if it started by itself.
  */
-trigger: string | null, };
+trigger: string | null, 
+/**
+ * The model that planned it, when a model did.
+ */
+plannedBy: string | null, };

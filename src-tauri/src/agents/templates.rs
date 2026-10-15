@@ -407,6 +407,7 @@ pub fn agents_template_plan(
         String::new(),
         None,
         false,
+        None,
     )
 }
 

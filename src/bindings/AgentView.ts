@@ -17,7 +17,7 @@ after: Array<string>,
 /**
  * The orchestrating agent, for a helper.
  */
-parent: string | null, status: Status, statusLine: string, plan: Array<PlanItem>, stop: Stop | null, result: string | null, suggestions: Array<string>, error: string | null, pending: Pending | null, unseen: boolean, dismissed: boolean, created: number, finished: number | null, activeMs: number, counters: Counters, maxSteps: number, log: Array<LogEntry>, 
+parent: string | null, status: Status, statusLine: string, plan: Array<PlanItem>, stop: Stop | null, result: string | null, suggestions: Array<string>, error: string | null, pending: Pending | null, unseen: boolean, dismissed: boolean, model: string | null, created: number, finished: number | null, activeMs: number, counters: Counters, maxSteps: number, log: Array<LogEntry>, 
 /**
  * File changes that can be undone.
  */

@@ -30,4 +30,8 @@ reply: string,
 /**
  * It started without the card (read-only work, settings allow it).
  */
-started: boolean, };
+started: boolean, 
+/**
+ * The model that planned it, when a model did.
+ */
+plannedBy: string | null, };

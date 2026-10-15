@@ -359,6 +359,7 @@ pub fn fire(app: &AppHandle, id: &str, files: &[PathBuf]) -> Result<(), String> 
         agents,
         None,
         Some(t.id.clone()),
+        None,
     );
     state.update(id, |r| {
         r.runs.push(now);

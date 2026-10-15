@@ -443,6 +443,8 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
           <Stat label="Tokens" value={tokens(a.counters.tokens)} />
           <Stat label="Cost" value={a.counters.costKnown ? `$${a.counters.cost.toFixed(3)}` : "Unknown"} />
           <Stat label="Time" value={duration(a.activeMs)} />
+          {batch?.plannedBy && <Stat label="Planned by" value={modelName(batch.plannedBy)} />}
+          {a.model && <Stat label="Model" value={modelName(a.model)} />}
           {a.changes > 0 && (
             <Stat label="File changes" value={String(a.changes)} className="stat--changes">
               {finished && (
@@ -486,6 +488,9 @@ const KIND: Record<LogKind, string> = {
   error: "Problem",
   note: "Note",
 };
+
+/** A model id without its maker: "nvidia/nemotron-3-super" → "nemotron-3-super". */
+const modelName = (id: string) => id.slice(id.lastIndexOf("/") + 1);
 
 function Stat({ label, value, className, children }: { label: string; value: string; className?: string; children?: React.ReactNode }) {
   return (

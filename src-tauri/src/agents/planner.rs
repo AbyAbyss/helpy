@@ -53,6 +53,8 @@ pub struct Plan {
     pub reply: String,
     /// It started without the card (read-only work, settings allow it).
     pub started: bool,
+    /// The model that planned it, when a model did.
+    pub planned_by: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -313,7 +315,8 @@ pub async fn plan(
         }
         None => parse(&text, &groups, s.agents.default_mode)?,
     };
-    offer(app, &s, request, mode, agents, folders, reply, image, voice)
+    let planned_by = Some(completion.model.clone()).filter(|m| !m.is_empty());
+    offer(app, &s, request, mode, agents, folders, reply, image, voice, planned_by)
 }
 
 /// A template the planner picked: {"template": id, "params": {...}}.
@@ -364,6 +367,7 @@ pub fn offer(
     reply: String,
     image: Option<String>,
     voice: bool,
+    planned_by: Option<String>,
 ) -> Result<Plan, String> {
     let mut groups = tools::groups(&s.agents);
     groups.extend(crate::connectors::external(app, s).groups());
@@ -392,6 +396,7 @@ pub fn offer(
             reply.trim().to_string()
         },
         started: false,
+        planned_by,
         agents,
     };
     let quiet = starts_quietly(s.agents.confirm_plans, &plan);
@@ -467,7 +472,7 @@ fn start(app: &AppHandle, id: &str, mode: RunMode) -> Result<(), String> {
         .collect();
     // Before the chips exist, so the dock holds them back for the flight.
     crate::windows::buddy_to_dock(app);
-    let ids = super::create(app, &plan.request, mode, agents, image);
+    let ids = super::create(app, &plan.request, mode, agents, image, plan.planned_by);
     let spoken = app
         .state::<AgentsState>()
         .voice_plans
@@ -716,6 +721,7 @@ mod tests {
             has_image: false,
             reply: String::new(),
             started: false,
+            planned_by: None,
             agents: Vec::new(),
         };
         assert!(starts_quietly(ConfirmPlans::SideEffectsOnly, &plan(Vec::new())));

@@ -1038,8 +1038,9 @@ pub fn create(
     mode: RunMode,
     agents: Vec<NewAgent>,
     image: Option<String>,
+    planned_by: Option<String>,
 ) -> Vec<String> {
-    let batch = create_batch(app, request, mode, agents, image, None);
+    let batch = create_batch(app, request, mode, agents, image, None, planned_by);
     let state = app.state::<AgentsState>();
     let mut ids: Vec<(u32, String)> = state
         .agents
@@ -1062,6 +1063,7 @@ pub fn create_batch(
     agents: Vec<NewAgent>,
     image: Option<String>,
     trigger: Option<String>,
+    planned_by: Option<String>,
 ) -> String {
     let state = app.state::<AgentsState>();
     let now = now_ms();
@@ -1071,6 +1073,7 @@ pub fn create_batch(
         request: request.to_string(),
         created: now,
         trigger,
+        planned_by,
     };
     state.store.save_batch(&batch);
     state
@@ -1429,13 +1432,14 @@ pub fn agents_duplicate(app: AppHandle, id: String) -> Result<(), String> {
         .state::<AgentsState>()
         .get(&id)
         .ok_or("That agent is gone")?;
-    let request = app
+    // The copy keeps the original's plan, and who planned it.
+    let (request, planned_by) = app
         .state::<AgentsState>()
         .batches
         .lock()
         .unwrap()
         .get(&a.batch)
-        .map(|b| b.request.clone())
+        .map(|b| (b.request.clone(), b.planned_by.clone()))
         .unwrap_or_default();
     create(
         &app,
@@ -1449,6 +1453,7 @@ pub fn agents_duplicate(app: AppHandle, id: String) -> Result<(), String> {
             after: Vec::new(),
         }],
         a.image,
+        planned_by,
     );
     Ok(())
 }

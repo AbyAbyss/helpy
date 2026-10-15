@@ -379,6 +379,9 @@ impl Run<'_> {
             r = self.env.call(agent, req, &on) => r,
             _ = self.env.sleep(left) => Err(ProviderError::new(ErrorKind::Timeout, "time limit")),
         };
+        if let Ok(c) = &result {
+            agent.model = Some(c.model.clone()).filter(|m| !m.is_empty());
+        }
         let (tokens, cost, known) = *spent.lock().unwrap();
         agent.counters.tokens += tokens;
         agent.counters.cost += cost;

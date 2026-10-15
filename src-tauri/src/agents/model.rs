@@ -287,6 +287,9 @@ pub struct Agent {
     /// Taken off the dock by the user; still in the panel.
     #[serde(default)]
     pub dismissed: bool,
+    /// The model that answered its last step.
+    #[serde(default)]
+    pub model: Option<String>,
 
     pub created: i64,
     pub finished: Option<i64>,
@@ -341,6 +344,7 @@ impl Agent {
             pending: None,
             unseen: false,
             dismissed: false,
+            model: None,
             created: now,
             finished: None,
             active_ms: 0,
@@ -418,6 +422,9 @@ pub struct Batch {
     /// The trigger that started it, if it started by itself.
     #[serde(default)]
     pub trigger: Option<String>,
+    /// The model that planned it, when a model did.
+    #[serde(default)]
+    pub planned_by: Option<String>,
 }
 
 /// What the dock, cards and panel show about an agent.
@@ -446,6 +453,7 @@ pub struct AgentView {
     pub pending: Option<Pending>,
     pub unseen: bool,
     pub dismissed: bool,
+    pub model: Option<String>,
     #[ts(type = "number")]
     pub created: i64,
     #[ts(type = "number | null")]
@@ -483,6 +491,7 @@ impl Agent {
             pending: self.pending.clone(),
             unseen: self.unseen,
             dismissed: self.dismissed,
+            model: self.model.clone(),
             created: self.created,
             finished: self.finished,
             active_ms: self.active_ms,

@@ -242,6 +242,7 @@ mod tests {
             request: "x".into(),
             created: 5,
             trigger: None,
+            planned_by: None,
         });
         let back = s.agents();
         assert_eq!(back.len(), 1);

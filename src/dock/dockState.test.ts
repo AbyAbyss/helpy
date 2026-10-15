@@ -23,6 +23,7 @@ const agent = (over: Partial<AgentView>): AgentView => ({
   pending: null,
   unseen: false,
   dismissed: false,
+  model: null,
   created: 0,
   finished: null,
   activeMs: 0,
