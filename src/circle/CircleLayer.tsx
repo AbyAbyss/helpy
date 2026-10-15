@@ -110,7 +110,8 @@ export function CircleLayer({ color, onOpen }: { color: string; onOpen: (open: b
       <svg className="circle__svg" width={bounds.w} height={bounds.h}>
         <path
           className="circle__scrim"
-          d={scrim(bounds, outline)}
+          // A loop still being drawn isn't cut out yet: its open end would show as a wedge.
+          d={scrim(bounds, shape === "freehand" && view.phase === "select" ? [] : outline)}
           fillRule="evenodd"
           // Outside the selection closes the result; the hole lets clicks through to the root.
           onClick={() => view.phase === "result" && api.circleClose()}
