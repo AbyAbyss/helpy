@@ -233,7 +233,8 @@ pub fn prompt(action: CircleAction, s: &Settings, crop: Crop) -> Option<String> 
     };
     Some(match action {
         CircleAction::Explain => format!(
-            "What is this? Explain it {length}. If it is a diagram, picture, chart or interface with distinct \
+            "What is this? Explain it {length}. It shows in a small card, so keep it easy to skim: \
+             short paragraphs or a few bullet points, with the key terms in **bold**. If it is a diagram, picture, chart or interface with distinct \
              parts worth naming, end your reply with a line containing only {MARKER} followed by a JSON array \
              of at most {MAX_PARTS} parts: [{{\"label\": short name, \"x\": number, \"y\": number{note}, \
              \"detail\": two or three sentences about it}}], where x and y are pixels in this \
