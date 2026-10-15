@@ -69,6 +69,13 @@ export function Pill() {
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
 
+  // A finished answer or a message stops following the cursor, so it can be
+  // clicked.
+  const settled = state.mode === "done" || state.mode === "message";
+  useEffect(() => {
+    if (settled) api.voicePillStay().catch(() => {});
+  }, [settled]);
+
   // Hide once there's nothing more to show; later while the pointer is on it.
   useEffect(() => {
     if (speaking) return;

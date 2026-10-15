@@ -284,6 +284,7 @@ pub fn run() {
             voice::voice_has_deepgram_key,
             voice::voice_expand,
             voice::voice_pill_hide,
+            voice::voice_pill_stay,
             voice::voice_cancel,
             voice::voice_support,
         ])

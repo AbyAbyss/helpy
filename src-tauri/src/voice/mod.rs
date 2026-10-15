@@ -788,6 +788,12 @@ pub fn voice_pill_hide(app: AppHandle) {
     crate::windows::hide_pill(&app);
 }
 
+/// The pill has a finished answer or a message: it stops following the cursor.
+#[tauri::command]
+pub fn voice_pill_stay() {
+    crate::windows::pill_stay();
+}
+
 #[tauri::command]
 pub fn voice_cancel(app: AppHandle) {
     cancel(&app);

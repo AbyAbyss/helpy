@@ -151,6 +151,7 @@ export const api = {
   hasDeepgramKey: () => invoke<boolean>("voice_has_deepgram_key"),
   voiceExpand: () => invoke<void>("voice_expand"),
   voicePillHide: () => invoke<void>("voice_pill_hide"),
+  voicePillStay: () => invoke<void>("voice_pill_stay"),
   voiceCancel: () => invoke<void>("voice_cancel"),
   voiceSupport: () => invoke<VoiceSupport>("voice_support"),
 

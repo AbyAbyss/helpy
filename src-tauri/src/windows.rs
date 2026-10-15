@@ -625,6 +625,11 @@ pub fn pill_shown(app: &AppHandle) -> bool {
         .is_some_and(|w| w.is_visible().unwrap_or(false))
 }
 
+/// The answer is finished: the pill stays where it is, so it can be clicked.
+pub fn pill_stay() {
+    PILL_FOLLOWS.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub fn hide_pill(app: &AppHandle) {
     PILL_FOLLOWS.store(false, std::sync::atomic::Ordering::Relaxed);
     if let Some(w) = app.get_webview_window(PILL) {
