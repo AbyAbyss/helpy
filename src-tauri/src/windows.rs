@@ -644,9 +644,28 @@ pub fn ask_hide(app: AppHandle) {
     }
 }
 
+/// The agent panel's size the first time it opens: most of the screen, so
+/// research reads comfortably, logical pixels.
+fn agents_size(monitor: (f64, f64)) -> (f64, f64) {
+    let (w, h) = monitor;
+    ((w * 0.86).clamp(760.0, 1500.0), (h * 0.86).clamp(480.0, 1050.0))
+}
+
+static AGENTS_SIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Opens the agent panel, at one agent if given.
 pub fn show_agents(app: &AppHandle, id: Option<String>) {
     if let Some(w) = app.get_webview_window(AGENTS) {
+        // Sized once per run; after that it keeps whatever size the user gives it.
+        if !AGENTS_SIZED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            if let Ok(Some(m)) = w.current_monitor() {
+                let k = m.scale_factor();
+                let (sw, sh) = (m.size().width as f64 / k, m.size().height as f64 / k);
+                let (width, height) = agents_size((sw, sh));
+                let _ = w.set_size(LogicalSize::new(width, height));
+                let _ = w.center();
+            }
+        }
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
@@ -684,6 +703,14 @@ pub fn open_settings_section(app: AppHandle, section: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_panel_takes_most_of_the_screen() {
+        assert_eq!(agents_size((1512.0, 982.0)), (1300.32, 844.52));
+        // Never bigger than reads well, never below its minimum.
+        assert_eq!(agents_size((3000.0, 2000.0)), (1500.0, 1050.0));
+        assert_eq!(agents_size((800.0, 500.0)), (760.0, 480.0));
+    }
 
     const MON: (f64, f64, f64, f64) = (0.0, 0.0, 1920.0, 1080.0);
 

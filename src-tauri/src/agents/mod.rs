@@ -1306,6 +1306,11 @@ pub async fn agents_show_on_screen(app: AppHandle, id: String) -> Result<(), Str
         .result
         .filter(|r| !r.trim().is_empty())
         .ok_or("This agent has no result to show yet")?;
+    // The result shows full size in the agent panel, not on the small card,
+    // so there's room to point at it.
+    crate::windows::dock_card_close(app.clone());
+    crate::windows::show_agents(&app, Some(id));
+    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
     crate::windows::show_ask(&app);
     let question = show_on_screen_question(&a.name, &result);
     crate::ai::ask::ask(&app, question, crate::ai::ask::Origin::Text, Vec::new()).await
