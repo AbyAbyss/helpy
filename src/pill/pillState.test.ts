@@ -11,6 +11,10 @@ describe("voice pill state", () => {
     expect(s.caption).toBe("“Where is my spam folder?”");
   });
 
+  it("says it's transcribing when there was no live transcript", () => {
+    expect(onVoice(initial, { phase: "transcribing" }).caption).toBe("Working out what you said…");
+  });
+
   it("streams the answer for voice questions only", () => {
     const working = onVoice(initial, { phase: "thinking", transcript: "q" });
     expect(onAsk(working, { type: "text", text: "Open" }, false)).toBe(working);

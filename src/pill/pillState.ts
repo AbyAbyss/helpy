@@ -18,7 +18,9 @@ export function onVoice(s: PillState, p: VoicePhase): PillState {
     case "listening":
       return initial;
     case "transcribing":
-      return { ...s, mode: "working" };
+      // Cloud speech-to-text gives no live words, and can take a few
+      // seconds; say what's happening rather than show nothing.
+      return { ...s, mode: "working", caption: s.caption || "Working out what you said…" };
     case "thinking":
       return { mode: "working", caption: `“${p.transcript}”`, tone: "normal" };
     case "idle":
