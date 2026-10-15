@@ -196,13 +196,17 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
         json!({ "text": { "type": "string" } }),
         &["text"],
     ));
-    out.push(def(
-        OPEN_LINK,
-        "Open a web link in the user's default browser, e.g. a page you made or updated, when the user asks to see it. \
-         The user approves it first. Never use it to read a page; use fetch_page for that.",
-        json!({ "url": { "type": "string", "description": "An http or https link" } }),
-        &["url"],
-    ));
+    // Only builders show the user something in their browser; given to
+    // researchers, models used it to "read" pages, opening tabs.
+    if has("build") {
+        out.push(def(
+            OPEN_LINK,
+            "Open a web link in the user's default browser, e.g. a page you made or updated, when the user asks to see it. \
+             The user approves it first. Never use it to read a page; use fetch_page for that.",
+            json!({ "url": { "type": "string", "description": "An http or https link" } }),
+            &["url"],
+        ));
+    }
     if has("team") {
         out.push(def(
             DELEGATE,
@@ -533,8 +537,12 @@ impl Toolbox {
         {
             return gate;
         }
-        // It acts on the user's own browser, so it waits for their OK.
+        // It acts on the user's own browser, so it waits for their OK; only
+        // builders have it.
         if tool == OPEN_LINK {
+            if !groups.iter().any(|g| g == "build") {
+                return Gate::Never("open_link isn't one of your tools; read pages with fetch_page.".into());
+            }
             return Gate::Ask {
                 kind: ActionKind::Browser,
                 source: "Web browser".into(),
@@ -959,9 +967,10 @@ mod tests {
         ));
         assert!(matches!(t.gate(&g, "web_search", &json!({})), Gate::Allow));
         assert!(matches!(
-            t.gate(&[], OPEN_LINK, &json!({"url": "https://a.example"})),
+            t.gate(&["build".into()], OPEN_LINK, &json!({"url": "https://a.example"})),
             Gate::Ask { ref detail, .. } if detail == "https://a.example"
         ));
+        assert!(matches!(t.gate(&g, OPEN_LINK, &json!({"url": "https://a.example"})), Gate::Never(_)));
         assert!(matches!(t.gate(&g, "grep_files", &json!({})), Gate::Allow));
         // Edits are changes: the same rule as writes, and the replacement can be edited.
         assert!(matches!(
@@ -1085,7 +1094,9 @@ mod tests {
         );
         assert!(names.contains(&ASK_USER.to_string()));
         assert!(names.contains(&PLAN.to_string()) && names.contains(&NOTE.to_string()));
-        assert!(names.contains(&OPEN_LINK.to_string()));
+        assert!(!names.contains(&OPEN_LINK.to_string()));
+        let build: Vec<_> = defs(&["build".into()]).into_iter().map(|d| d.name).collect();
+        assert!(build.contains(&OPEN_LINK.to_string()));
         let files: Vec<_> = defs(&["files".into()]).into_iter().map(|d| d.name).collect();
         for t in ["edit_file", "grep_files", "find_files"] {
             assert!(files.contains(&t.to_string()), "{t}");

@@ -134,7 +134,9 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          If agents must work in folders, list them in \"folders\" as full paths (~ for the home folder); the user's \
          Desktop is ~/Desktop. Builder agents use the projects folder and don't need it listed. Give an agent the \
          build tool only when the user asks for an app, site, game or program; a chart, table or report of facts is \
-         research (search and web), answered in the agent's reply.\n\n\
+         research (search and web), answered in the agent's reply. For research, give search and web, which read \
+         pages in the background; give a browser tool (browser, or a browser connector such as Playwright) only \
+         when a site must be clicked through, logged into or filled in, since it opens pages.\n\n\
          Reply with only a JSON object: {{\"mode\": \"single\", \"agents\": [{{\"name\": \"...\", \"goal\": \"...\", \
          \"tools\": [\"...\"], \"keepOpen\": false, \"after\": []}}], \"folders\": [], \"reply\": \"one short sentence telling the user \
          what you set up\"}}\n\n\
