@@ -123,10 +123,12 @@ function Picture({ src, alt, links }: { src?: string; alt?: string; links: boole
 
 /**
  * Math as models write it, in the form remark-math reads: "\( x \)" inline,
- * "\[ x \]" displayed, and "$$ x $$" alone on a line displayed too.
+ * "\[ x \]" displayed, and "$$ x $$" alone on a line displayed too. A "$"
+ * just before a digit is money ("$329.79"), not the start of math.
  */
-const normalizeMath = (text: string) =>
+export const normalizeMath = (text: string) =>
   text
+    .replace(/(^|[^\\$])\$(?=\d)/g, "$1\\$")
     .replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => `\n$$\n${m.trim()}\n$$\n`)
     .replace(/\\\((.+?)\\\)/g, (_, m) => `$${m.trim()}$`)
     .replace(/^[ \t]*\$\$(.+?)\$\$[ \t]*$/gm, (_, m) => `$$\n${m.trim()}\n$$`);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mendChart } from "./markdown";
+import { mendChart, normalizeMath } from "./markdown";
 
 describe("mendChart", () => {
   it("brackets and quotes bare x-axis categories", () => {
@@ -11,5 +11,16 @@ describe("mendChart", () => {
     for (const src of ['xychart-beta\n  x-axis ["A", "B"]\n  bar [1, 2]', 'xychart-beta\n  x-axis "Year" 2020 --> 2025', "pie\n  \"A, B\" : 1"]) {
       expect(mendChart(src)).toBe(src);
     }
+  });
+});
+
+describe("normalizeMath", () => {
+  it("keeps dollar amounts as money", () => {
+    expect(normalizeMath("£250 is about $329.79 at $1.3191 to the pound")).toBe("£250 is about \\$329.79 at \\$1.3191 to the pound");
+  });
+
+  it("leaves math and display math alone", () => {
+    expect(normalizeMath("so $x^2$ and")).toBe("so $x^2$ and");
+    expect(normalizeMath("$$2x$$")).toBe("$$\n2x\n$$");
   });
 });
