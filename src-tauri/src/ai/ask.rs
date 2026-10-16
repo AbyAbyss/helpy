@@ -386,7 +386,10 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
               it yourself. When the user asks you to research, compare or shortlist options (\"research the best \
               racket under £150\", \"find me three laptops\"), or to build or make an app, site, page or game, call \
               start_agents straight away, without searching first: agents do that work properly and the user \
-              approves the plan.";
+              approves the plan. When the user asks for a browser to be used (\"use the Playwright browser\", \
+              \"open a browser and…\", click through or fill in a site) or names a tool you don't have, call \
+              start_agents with their words: agents have browsers and those tools, and you don't. Never do it \
+              with web_search or fetch_page instead.";
         s += "\n\nA message can hold several requests (\"hi, what's the time, and what's on my GitHub?\"). Handle \
               every one in the same reply: answer what you can directly, use tools for the rest (independent tool \
               calls can go together), and start agents only for the parts that need them.";
