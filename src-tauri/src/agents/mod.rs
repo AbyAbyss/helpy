@@ -398,6 +398,14 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
             if list.is_empty() { "none yet".into() } else { list.join(", ") }
         );
     }
+    if a.tools.iter().any(|t| t == "browser" || t.starts_with("mcp_")) {
+        p += "- With a browser, read the page before you act on it: its text (a snapshot, or what browser_open \
+              returns) shows the listings, prices and buttons, with refs for clicking and typing. Take what you need \
+              from that text. Don't write scripts that guess a site's CSS class names; if you need one, read the \
+              page first. Close cookie banners when they're in the way. If a site won't show its content, read the \
+              page with fetch_page or find the same facts with web_search before you give up, and say which sites \
+              you couldn't read.\n";
+    }
     if a.tools.iter().any(|t| t == "shell" || t == "files") {
         p += &format!(
             "- New projects go in their own subfolder of {}; commands run there.\n",
@@ -595,6 +603,14 @@ impl Env for AppEnv {
             .lock()
             .unwrap()
             .remove(&agent.id)
+            .unwrap_or_default()
+    }
+
+    fn named_tools(&self, said: &str) -> Vec<String> {
+        self.toolbox
+            .external
+            .as_deref()
+            .map(|e| tools::named_groups(e, said))
             .unwrap_or_default()
     }
 
@@ -1341,6 +1357,13 @@ pub fn agents_follow_up(
             return Err("Follow-ups go to finished agents".into());
         }
         a.new_round();
+        // "Now add it to Notion": the agent gets the connector it names.
+        let external = crate::connectors::external(&app, &settings(&app));
+        for g in tools::named_groups(external.as_ref(), &text) {
+            if !a.tools.contains(&g) {
+                a.tools.push(g);
+            }
+        }
         let mut message = crate::ai::types::Message::user_text(text.clone());
         if let Some(data) = &image {
             message.parts.insert(

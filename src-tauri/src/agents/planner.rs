@@ -137,8 +137,10 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          Desktop is ~/Desktop. Builder agents use the projects folder and don't need it listed. Give an agent the \
          build tool only when the user asks for an app, site, game or program; a chart, table or report of facts is \
          research (search and web), answered in the agent's reply. For research, give search and web, which read \
-         pages in the background; give a browser tool (browser, or a browser connector such as Playwright) only \
-         when a site must be clicked through, logged into or filled in, since it opens pages.\n\n\
+         pages in the background; give a browser tool only when a site must be clicked through or filled in, \
+         since it opens pages, and then give search and web as well. Prefer Helpy's own \"browser\" tool to a \
+         browser connector such as Playwright when both are listed. Give a connector (Notion, GitHub, ...) to any \
+         agent whose task saves to or reads from it.\n\n\
          Reply with only a JSON object: {{\"mode\": \"single\", \"agents\": [{{\"name\": \"...\", \"goal\": \"...\", \
          \"tools\": [\"...\"], \"keepOpen\": false, \"after\": []}}], \"folders\": [], \"reply\": \"one short sentence telling the user \
          what you set up\"}}\n\n\
@@ -146,6 +148,29 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          {{\"blank\": \"value\"}}, \"reply\": \"one short sentence\"}}, filling the blanks from the request (leave out \
          ones it doesn't say):\n{templates}"
     )
+}
+
+/// A tool group that drives a browser: Helpy's own, or a connector such as
+/// Playwright's.
+fn is_browser(id: &str) -> bool {
+    id == "browser"
+        || id.contains("playwright")
+        || id.contains("puppeteer")
+        || (id.starts_with("mcp_") && id.contains("browser"))
+}
+
+/// An agent with a browser also gets web search and page reading, when
+/// they're on: most of what it needs can be found and read without clicking,
+/// and they're its way on when a site won't show its content to the browser.
+fn with_page_reading(tools: &mut Vec<String>, known: &[&str]) {
+    if !tools.iter().any(|t| is_browser(t)) {
+        return;
+    }
+    for g in ["search", "web"] {
+        if known.contains(&g) && !tools.iter().any(|t| t == g) {
+            tools.push(g.into());
+        }
+    }
 }
 
 /// Reads and checks the planner's JSON. Unknown tools are dropped; the mode
@@ -180,6 +205,7 @@ pub fn parse(
             .filter(|t| known.contains(&t.as_str()))
             .collect();
         tools.dedup();
+        with_page_reading(&mut tools, &known);
         // Only agents listed before it, so a plan can't wait on itself.
         let after: Vec<String> = a
             .after
@@ -623,6 +649,27 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_browser_comes_with_search_and_page_reading() {
+        let mut g = groups();
+        g.push(ToolGroup {
+            id: "mcp_playwright".into(),
+            label: "Playwright".into(),
+            about: String::new(),
+            asks: Vec::new(),
+            connected: true,
+        });
+        let (_, agents, _, _) = parse(
+            r#"{"agents": [{"name": "Jobs", "goal": "Find UK software jobs on Indeed", "tools": ["mcp_playwright"]},
+                           {"name": "Note", "goal": "Remind me", "tools": ["reminders"]}]}"#,
+            &g,
+            DefaultRunMode::Auto,
+        )
+        .unwrap();
+        assert_eq!(agents[0].tools, ["mcp_playwright", "search", "web"]);
+        assert_eq!(agents[1].tools, ["reminders"]);
     }
 
     #[test]

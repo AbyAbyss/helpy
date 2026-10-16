@@ -22,7 +22,7 @@ use crate::ai::types::{ChatRequest, Completion, Message, Part, Role, ToolDef};
 use crate::settings::schema::OnFailure;
 
 /// Tool output kept in the conversation, in characters.
-pub(crate) const MAX_TOOL_OUTPUT: usize = 8_000;
+pub(crate) const MAX_TOOL_OUTPUT: usize = 16_000;
 /// Status lines change at most this often.
 const STATUS_EVERY_MS: i64 = 3_000;
 /// Messages kept verbatim when older work is summarized.
@@ -119,6 +119,11 @@ pub trait Env: Sync {
     /// What the user said to the agent while it works (steering), oldest
     /// first. Each message is returned once.
     fn steering(&self, agent: &Agent) -> Vec<String>;
+    /// Tool groups the user names in what they said ("add it to Notion"),
+    /// so the agent can do it.
+    fn named_tools(&self, _said: &str) -> Vec<String> {
+        Vec::new()
+    }
     /// Starts helper agents for `tasks` (or picks up the ones this call
     /// already started) and waits for them. The text is their results.
     fn delegate<'a>(
@@ -266,13 +271,16 @@ pub fn split_suggestions(text: &str) -> (String, Vec<String>) {
     let t = text.trim_end();
     if let Some(i) = t.rfind("NEXT:") {
         if t[i..].lines().count() == 1 {
+            // Models sometimes bold the line: "**NEXT:** ** a | b**".
+            let bare = |s: &str| s.trim_matches(|c: char| c == '*' || c == '_' || c.is_whitespace()).to_string();
             let list = t[i + 5..]
                 .split('|')
-                .map(|s| s.trim().to_string())
+                .map(bare)
                 .filter(|s| !s.is_empty())
                 .take(3)
                 .collect();
-            return (t[..i].trim_end().to_string(), list);
+            let body = t[..i].trim_end().trim_end_matches(['*', '_']).trim_end();
+            return (body.to_string(), list);
         }
     }
     (t.to_string(), Vec::new())
@@ -857,6 +865,11 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
         }
         for said in env.steering(agent) {
             agent.log(env.now_ms(), LogKind::Note, format!("You said: {said}"));
+            for g in env.named_tools(&said) {
+                if !agent.tools.contains(&g) {
+                    agent.tools.push(g);
+                }
+            }
             push_user_text(
                 agent,
                 format!("The user says this while you work (follow it): {said}"),
@@ -1817,6 +1830,10 @@ mod tests {
             ("Done.".into(), vec!["a".into(), "b".into(), "c".into()])
         );
         assert_eq!(split_suggestions("No list"), ("No list".into(), vec![]));
+        assert_eq!(
+            split_suggestions("Done.\n\n**NEXT:** ** Try a demo | Check reviews**"),
+            ("Done.".into(), vec!["Try a demo".into(), "Check reviews".into()])
+        );
     }
 
     fn texts(a: &Agent) -> String {

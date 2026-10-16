@@ -58,6 +58,33 @@ pub trait External: Send + Sync {
     ) -> futures_util::future::BoxFuture<'a, Option<ToolOutcome>>;
 }
 
+/// Connected connector and MCP groups the user names in `text` ("also add
+/// it to Notion"), by their label as a whole word.
+pub fn named_groups(external: &dyn External, text: &str) -> Vec<String> {
+    let words: Vec<String> = text
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(String::from)
+        .collect();
+    external
+        .groups()
+        .into_iter()
+        .filter(|g| g.connected)
+        .filter(|g| {
+            let label: Vec<String> = g
+                .label
+                .to_lowercase()
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|w| !w.is_empty())
+                .map(String::from)
+                .collect();
+            !label.is_empty() && words.windows(label.len()).any(|w| w == label.as_slice())
+        })
+        .map(|g| g.id)
+        .collect()
+}
+
 fn rule_asks(rule: Rule, what: &str) -> Option<String> {
     (rule == Rule::Ask).then(|| what.to_string())
 }
@@ -916,6 +943,45 @@ impl Toolbox {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Named(Vec<(&'static str, &'static str, bool)>);
+    impl External for Named {
+        fn groups(&self) -> Vec<ToolGroup> {
+            self.0
+                .iter()
+                .map(|(id, label, connected)| ToolGroup {
+                    id: (*id).into(),
+                    label: (*label).into(),
+                    about: String::new(),
+                    asks: Vec::new(),
+                    connected: *connected,
+                })
+                .collect()
+        }
+        fn defs(&self, _: &[String]) -> Vec<ToolDef> {
+            Vec::new()
+        }
+        fn gate(&self, _: &[String], _: &str, _: &Value) -> Option<Gate> {
+            None
+        }
+        fn run<'a>(&'a self, _: &'a str, _: &'a Value) -> futures_util::future::BoxFuture<'a, Option<ToolOutcome>> {
+            Box::pin(async { None })
+        }
+    }
+
+    #[test]
+    fn follow_ups_bring_the_connectors_they_name() {
+        let e = Named(vec![
+            ("notion", "Notion", true),
+            ("gcal", "Google Calendar", true),
+            ("gmail", "Gmail", false),
+        ]);
+        assert_eq!(named_groups(&e, "After this, can you also add it to Notion?"), ["notion"]);
+        assert_eq!(named_groups(&e, "put it in my google calendar"), ["gcal"]);
+        // Not connected, or only part of a word: nothing.
+        assert!(named_groups(&e, "email it with Gmail").is_empty());
+        assert!(named_groups(&e, "notional value").is_empty());
+    }
     use crate::settings::schema::ShellPolicy;
 
     fn toolbox(a: &Agents) -> Toolbox {
