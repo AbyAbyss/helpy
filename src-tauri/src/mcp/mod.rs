@@ -348,6 +348,23 @@ fn working_dir(app: &AppHandle, m: &McpServer) -> PathBuf {
         .unwrap_or_else(|_| std::env::temp_dir().join("helpy-mcp"))
 }
 
+/// Pages and logs servers save in Helpy's own folder are kept this long.
+const OLD_FILES: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Deletes files older than `age` anywhere under `dir` (a browser server
+/// saves every page it looks at, and never removes them). Folders stay.
+fn clear_old_files(dir: &Path, age: std::time::Duration) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let Ok(meta) = e.metadata() else { continue };
+        if meta.is_dir() {
+            clear_old_files(&e.path(), age);
+        } else if meta.modified().ok().and_then(|m| m.elapsed().ok()).is_some_and(|a| a > age) {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+}
+
 async fn start(app: &AppHandle, m: &McpServer) -> Result<Session, String> {
     let state = app.state::<McpState>();
     let (env, headers) = resolved(m);
@@ -386,6 +403,9 @@ async fn start(app: &AppHandle, m: &McpServer) -> Result<Session, String> {
             // to run ("/" for the app), and browser servers save pages there.
             let dir = working_dir(app, m);
             let _ = std::fs::create_dir_all(&dir);
+            if m.cwd.trim().is_empty() {
+                clear_old_files(&dir, OLD_FILES);
+            }
             cmd.current_dir(dir);
             let (proc, stderr) = TokioChildProcess::builder(cmd)
                 .stderr(std::process::Stdio::piped())
@@ -1106,6 +1126,20 @@ mod tests {
         assert!(empty_script_hint("browser_evaluate", "### Result\n[]\n### Ran").contains("snapshot"));
         assert_eq!(empty_script_hint("browser_evaluate", "### Result\n[{\"title\": \"x\"}]"), "");
         assert_eq!(empty_script_hint("browser_navigate", "### Result\n[]"), "");
+    }
+
+    #[test]
+    fn old_saved_pages_are_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let pages = dir.path().join(".playwright-mcp");
+        std::fs::create_dir_all(&pages).unwrap();
+        std::fs::write(pages.join("page.yml"), "x").unwrap();
+        clear_old_files(dir.path(), std::time::Duration::from_secs(3600));
+        assert!(pages.join("page.yml").exists(), "a new page stays");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        clear_old_files(dir.path(), std::time::Duration::from_millis(1));
+        assert!(!pages.join("page.yml").exists(), "an old page goes");
+        assert!(pages.exists(), "folders stay");
     }
 
     #[test]
