@@ -399,12 +399,12 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
         );
     }
     if a.tools.iter().any(|t| t == "browser" || t.starts_with("mcp_")) {
-        p += "- With a browser, read the page before you act on it: its text (a snapshot, or what browser_open \
-              returns) shows the listings, prices and buttons, with refs for clicking and typing. Take what you need \
-              from that text. Don't write scripts that guess a site's CSS class names; if you need one, read the \
-              page first. Close cookie banners when they're in the way. If a site won't show its content, read the \
-              page with fetch_page or find the same facts with web_search before you give up, and say which sites \
-              you couldn't read.\n";
+        p += "- With a browser, every page you open comes back as text: the listings, names, prices and links on \
+              it, and the buttons and fields with their refs. That text is how you read the page: copy the details \
+              you need straight from it into your answer. Don't run scripts (evaluate) to pull data out; they guess \
+              a site's code and come back empty. To click or type, pass the ref shown (e.g. \"e19\"). Close cookie \
+              banners when they're in the way. If a site won't show its content, read it with fetch_page or find the \
+              same facts with web_search, and in your answer name only the sites you actually read.\n";
     }
     if a.tools.iter().any(|t| t == "shell" || t == "files") {
         p += &format!(
