@@ -161,7 +161,7 @@ export function Card(props: {
         {done && (
           <>
             <div className="card__result rise">
-              <RichText text={a.result ?? ""} links={false} />
+              <RichText text={a.result ?? ""} />
             </div>
             <AgentFiles agent={a.id} files={a.files} compact />
             {(a.result?.trim() || a.suggestions.length > 0) && (

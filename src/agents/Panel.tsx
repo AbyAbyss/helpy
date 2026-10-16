@@ -13,6 +13,7 @@ import { ApprovalBox, Inbox } from "./Approvals";
 import { Templates } from "./Templates";
 import { useSettings, useTheme } from "../lib/useSettings";
 import { RichText } from "../lib/markdown";
+import { Linked } from "../lib/links";
 
 type Filter = "active" | "finished" | "all";
 const FINISHED = ["done", "failed", "stopped", "cancelled"];
@@ -470,7 +471,7 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
               <i className="tl__dot" aria-hidden="true" />
               <time>{new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
               <span className="tl__kind">{KIND[l.kind]}</span>
-              <span className="tl__what">{l.kind === "tool" ? <code>{l.text}</code> : l.text}</span>
+              <span className="tl__what">{l.kind === "tool" ? <code>{l.text}</code> : <Linked text={l.text} />}</span>
             </li>
           ))}
         </ol>

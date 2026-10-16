@@ -32,3 +32,22 @@ export function WebLink({ href, children }: { href?: string; children?: ReactNod
     </a>
   );
 }
+
+const URL_IN_TEXT = /(https?:\/\/[^\s<>()"']*[^\s<>().,;:!?'"])/gi;
+
+/** Plain text with its web addresses as links that open in the browser. */
+export function Linked({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(URL_IN_TEXT).map((part, i) =>
+        i % 2 === 1 ? (
+          <WebLink key={i} href={part}>
+            {part}
+          </WebLink>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
