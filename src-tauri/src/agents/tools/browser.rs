@@ -269,6 +269,50 @@ fn summary(title: &str, url: &str, read: &PageRead, max: usize) -> String {
     out
 }
 
+/// The process holding Chrome's profile lock: "host-12345" → 12345.
+fn lock_owner(link_target: &str) -> Option<u32> {
+    link_target.rsplit('-').next()?.parse().ok()
+}
+
+/// A browser from an earlier run of Helpy (it quit or restarted without
+/// closing it) keeps the profile locked, and no new one can start. It's
+/// closed when it's Helpy's: running with this very profile.
+async fn close_leftover(profile: &Path) {
+    #[cfg(unix)]
+    {
+        let Some(pid) = std::fs::read_link(profile.join("SingletonLock"))
+            .ok()
+            .and_then(|t| lock_owner(&t.to_string_lossy()))
+        else {
+            return;
+        };
+        let command = std::process::Command::new("ps")
+            .args(["-o", "command=", "-p", &pid.to_string()])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        if !command.contains(&*profile.to_string_lossy()) {
+            return;
+        }
+        let _ = std::process::Command::new("kill").arg(pid.to_string()).status();
+        for _ in 0..30 {
+            let alive = std::process::Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .is_ok_and(|s| s.success());
+            if !alive {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        for f in ["SingletonLock", "SingletonSocket", "SingletonCookie"] {
+            let _ = std::fs::remove_file(profile.join(f));
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = profile;
+}
+
 impl BrowserPool {
     pub fn new(data: PathBuf) -> Arc<Self> {
         let pool = Arc::new(Self {
@@ -316,9 +360,11 @@ impl BrowserPool {
                 "There's no Chrome-type browser on this computer (Chrome, Edge, Chromium or Brave). The user can download \
                  one in Settings → Agents → Web browser.",
             )?;
+            let profile = self.data.join("browser-profile");
+            close_leftover(&profile).await;
             let mut cfg = BrowserConfig::builder()
                 .chrome_executable(exe)
-                .user_data_dir(self.data.join("browser-profile"))
+                .user_data_dir(&profile)
                 .window_size(1366, 900)
                 .new_headless_mode()
                 .launch_timeout(Duration::from_secs(30));
@@ -640,6 +686,13 @@ pub fn preview_csv(text: &str, max_rows: usize) -> Vec<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_who_holds_the_profile() {
+        assert_eq!(lock_owner("Mac.lan-89274"), Some(89274));
+        assert_eq!(lock_owner("my-host.local-12"), Some(12));
+        assert_eq!(lock_owner("nonsense"), None);
+    }
 
     #[test]
     fn csv_quotes_what_it_must_and_reads_back() {
