@@ -533,15 +533,106 @@ async fn refresh_tools(app: &AppHandle, m: &McpServer) -> Result<Vec<ToolInfo>, 
     Ok(tools)
 }
 
+/// Longest page snapshot handed to an agent, characters.
+const MAX_SNAPSHOT: usize = 14_000;
+
+/// Browser servers such as Playwright's save the page they see to a file and
+/// send only its link, which an agent can't open. The page is read here and
+/// put in the result instead, as compact text. Only files in the system's
+/// temporary folder are read.
+fn inline_snapshots(text: &str) -> String {
+    static LINK: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"\[[^\]]*\]\(([^)\s]+\.ya?ml)\)").unwrap());
+    let temp = std::env::temp_dir().canonicalize().unwrap_or_else(|_| std::env::temp_dir());
+    LINK.replace_all(text, |c: &regex::Captures| {
+        let raw = &c[1];
+        let path = if raw.starts_with('/') { raw.to_string() } else { format!("/{raw}") };
+        let page = std::fs::canonicalize(&path)
+            .ok()
+            .filter(|p| p.starts_with(&temp))
+            .and_then(|p| std::fs::read_to_string(p).ok());
+        match page {
+            Some(page) => format!(
+                "the page as text (ids in [brackets] are refs for clicking and typing):\n{}",
+                crate::agents::runner::truncate(&compact_snapshot(&page), MAX_SNAPSHOT)
+            ),
+            None => c[0].to_string(),
+        }
+    })
+    .into_owned()
+}
+
+/// An accessibility snapshot (YAML) as short lines: the text on the page,
+/// links with where they go, and the controls with their refs. Layout
+/// wrappers and pointer hints are left out.
+pub(crate) fn compact_snapshot(yaml: &str) -> String {
+    static LINE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r#"^([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*):?\s*(.*)$"#).unwrap()
+    });
+    static REF: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"\[ref=([^\]]+)\]").unwrap());
+    const CONTROLS: [&str; 13] = [
+        "button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "tab", "menuitem",
+        "option", "switch", "slider", "spinbutton",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    for line in yaml.lines() {
+        let l = line.trim();
+        let l = l.strip_prefix("- ").unwrap_or(l);
+        if let Some(url) = l.strip_prefix("/url:") {
+            let url = url.trim().trim_matches('"');
+            // Tracking parameters make links long without saying more.
+            let url = if url.len() > 100 { url.split('?').next().unwrap_or(url) } else { url };
+            if let Some(last) = out.last_mut() {
+                *last += &format!(" → {url}");
+            }
+            continue;
+        }
+        let Some(c) = LINE.captures(l) else {
+            out.push(l.to_string());
+            continue;
+        };
+        let role = &c[1];
+        let name = c.get(2).map_or("", |m| m.as_str());
+        let text = c.get(4).map_or("", |m| m.as_str()).trim().trim_matches('"');
+        let r = c.get(3).and_then(|a| REF.captures(a.as_str())).map(|r| r[1].to_string());
+        if CONTROLS.contains(&role) {
+            let label = if name.is_empty() { text } else { name };
+            out.push(match r {
+                Some(r) => format!("{role} \"{label}\" [{r}]"),
+                None => format!("{role} \"{label}\""),
+            });
+        } else if role == "heading" {
+            let t = if name.is_empty() { text } else { name };
+            if !t.is_empty() {
+                out.push(format!("# {t}"));
+            }
+        } else if role == "img" {
+            if !name.is_empty() {
+                out.push(format!("[image: {name}]"));
+            }
+        } else {
+            let t = if text.is_empty() { name } else { text };
+            if !t.is_empty() {
+                out.push(t.to_string());
+            }
+        }
+    }
+    out.join("\n")
+}
+
 /// A tool result as text for the agent.
 pub fn result_text(v: &Value) -> String {
     let mut parts: Vec<String> = Vec::new();
     for c in v["content"].as_array().into_iter().flatten() {
         match c["type"].as_str() {
-            Some("text") => parts.push(c["text"].as_str().unwrap_or("").to_string()),
-            Some("image") | Some("audio") => {
-                parts.push(format!("[{} content]", c["type"].as_str().unwrap_or("")))
-            }
+            Some("text") => parts.push(inline_snapshots(c["text"].as_str().unwrap_or(""))),
+            // Agents run on text models: a screenshot tells them nothing.
+            Some("image") => parts.push(
+                "[a screenshot, which you can't view; read the page as text instead, e.g. with a snapshot tool]"
+                    .into(),
+            ),
+            Some("audio") => parts.push("[audio content]".into()),
             Some("resource") => parts.push(
                 c["resource"]["text"]
                     .as_str()
@@ -921,10 +1012,49 @@ mod tests {
     }
 
     #[test]
+    fn page_snapshots_become_compact_text() {
+        let yaml = r#"- generic [active] [ref=e1]:
+  - main [ref=e3]:
+    - heading "software jobs in United Kingdom" [level=1] [ref=e10]
+    - button "full details of Associate Software Engineer" [ref=e158] [cursor=pointer]: Associate Software Engineer
+    - generic [ref=e170]: TBC Group
+    - generic [ref=e177]: £55,000 - £65,000 a year
+    - link "TBC Group jobs" [ref=e199] [cursor=pointer]:
+      - /url: /q-tbc-group-jobs.html
+    - img "Indeed logo" [ref=e2]
+    - textbox "What" [ref=e5]: software"#;
+        assert_eq!(
+            compact_snapshot(yaml),
+            "# software jobs in United Kingdom\n\
+             button \"full details of Associate Software Engineer\" [e158]\n\
+             TBC Group\n\
+             £55,000 - £65,000 a year\n\
+             link \"TBC Group jobs\" [e199] → /q-tbc-group-jobs.html\n\
+             [image: Indeed logo]\n\
+             textbox \"What\" [e5]"
+        );
+    }
+
+    #[test]
+    fn snapshot_links_in_the_temp_folder_are_read_into_the_result() {
+        let dir = std::env::temp_dir().join(".playwright-mcp-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("page.yml");
+        std::fs::write(&file, "- generic [ref=e1]: Hello jobs").unwrap();
+        let shown = file.canonicalize().unwrap().display().to_string();
+        let out = inline_snapshots(&format!("### Snapshot\n- [Snapshot]({})", &shown[1..]));
+        assert!(out.contains("the page as text") && out.contains("Hello jobs"), "{out}");
+        // Anything outside the temp folder stays a link.
+        assert_eq!(inline_snapshots("[x](/etc/hosts.yml)"), "[x](/etc/hosts.yml)");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn reads_tool_results() {
         let v = json!({"content": [{"type": "text", "text": "3 issues"}, {"type": "image", "data": "..", "mimeType": "image/png"},
                                    {"type": "resource", "resource": {"uri": "file:///a", "text": "hello"}}]});
-        assert_eq!(result_text(&v), "3 issues\n[image content]\nhello");
+        assert!(result_text(&v).starts_with("3 issues\n[a screenshot, which you can't view"));
+        assert!(result_text(&v).ends_with("\nhello"));
         let structured = json!({"content": [], "structuredContent": {"count": 3}});
         assert!(result_text(&structured).contains("\"count\": 3"));
     }
