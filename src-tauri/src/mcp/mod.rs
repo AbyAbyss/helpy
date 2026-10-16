@@ -1269,6 +1269,53 @@ mod tests {
         session.cancel().await.unwrap();
     }
 
+    /// Needs Node.js, a page served at http://127.0.0.1:8765 with an
+    /// "Accept all" button and a "Next page" link, and optionally
+    /// PLAYWRIGHT_CHROME pointing at a Chrome to drive. Proves the page
+    /// format a live Playwright MCP server sends is what agents are given
+    /// as text, and that a ref copied from it clicks.
+    #[cfg(unix)]
+    #[tokio::test]
+    #[ignore]
+    async fn drives_the_playwright_browser_server() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cmd = tokio::process::Command::new("npx");
+        cmd.args(["@playwright/mcp@latest", "--headless", "--no-sandbox"]);
+        if let Ok(chrome) = std::env::var("PLAYWRIGHT_CHROME") {
+            cmd.args(["--executable-path", &chrome]);
+        }
+        cmd.current_dir(dir.path());
+        let (proc, _) = TokioChildProcess::builder(cmd).spawn().unwrap();
+        let session = client_info().serve(proc).await.unwrap();
+        let call = |name: &str, args: Value| {
+            let params = CallToolRequestParams::new(name.to_string())
+                .with_arguments(bare_refs(args.as_object().cloned().unwrap_or_default()));
+            let (session, base) = (&session, dir.path());
+            async move {
+                let r = session.call_tool(params).await.unwrap();
+                result_text_in(&serde_json::to_value(&r).unwrap(), base)
+            }
+        };
+        // The page comes back as compact text, whether the server links to a
+        // saved snapshot (navigate) or sends it inline (snapshot).
+        let opened = call("browser_navigate", json!({"url": "http://127.0.0.1:8765/"})).await;
+        assert!(
+            opened.contains("the page as text") && opened.contains("button \"Accept all\" [ref=e"),
+            "{opened}"
+        );
+        let page = call("browser_snapshot", json!({})).await;
+        let link = page
+            .lines()
+            .find(|l| l.starts_with("link \"Next page\" [ref="))
+            .unwrap_or_else(|| panic!("{page}"));
+        let r = link.split("[ref=").nth(1).and_then(|r| r.split(']').next()).unwrap();
+        // A ref copied the way models copy it still clicks.
+        let args = json!({"element": "Next page", "target": format!("[ref={r}]")});
+        let after = call("browser_click", args).await;
+        assert!(after.contains("page 2") || after.contains("p2.html"), "{after}");
+        session.cancel().await.unwrap();
+    }
+
     /// Needs `npx @modelcontextprotocol/server-everything streamableHttp`
     /// running on port 3001.
     #[tokio::test]

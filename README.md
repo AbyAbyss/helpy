@@ -73,6 +73,8 @@ Run it yourself with `node scripts/grounding-eval.mjs --list nebius`, then `node
 
 ## See it
 
+A three-minute demo with narration is in [`docs/video/helpy-demo.mp4`](docs/video/helpy-demo.mp4), with its script in [`docs/video/narration.md`](docs/video/narration.md).
+
 <table>
   <tr>
     <td width="50%" align="center"><img src="docs/images/card-dark.png" alt="An agent's card in the dark theme"><br><sub><b>The dock.</b> One glowing chip per agent at the screen edge; hover it for its card.</sub></td>
@@ -136,7 +138,7 @@ Run it yourself with `node scripts/grounding-eval.mjs --list nebius`, then `node
   - **Teams of agents.** A plan can have agents that wait for others and get their results ("two researchers, then a writer"). An agent can also split its task among up to 5 helpers that work at the same time and report back; helpers show nested under it. While an agent works you can type or say a change ("skip the second shop") and it takes it into its next step.
   - **Templates.** Tasks to start again and again, with blanks to fill in: tidy a folder, research a shortlist, compare two options, pull data into a CSV, build an app, morning briefing, and your own (save any finished request as one). Start them from Templates in the panel, or just ask and Helpy picks one.
   - **Triggers.** Agents that start by themselves: on a schedule ("weekdays at 9:00") or when new files land in a folder ("sort new files in Downloads"). At most 10 runs an hour and never more often than every 10 minutes; a trigger pauses after 3 failures in a row. They run while Helpy is running.
-  - **Web browser and CSV.** For pages that need JavaScript, clicks or forms, agents use a headless Chrome, Edge, Chromium or Brave that's already installed (or a Chromium that settings downloads), with Helpy's own profile. They can read tables and save them as CSV files in the projects folder, previewed on the card and opened with one click. Typing into websites asks first.
+  - **Web browser and CSV.** For pages that need JavaScript, clicks or forms, agents use a headless Chrome, Edge, Chromium or Brave that's already installed (or a Chromium that settings downloads), with Helpy's own profile. They can read tables and save them as CSV files in the projects folder, previewed on the card and opened with one click; agents that read pages or drive a browser connector such as Playwright can save CSVs too. Typing into websites asks first.
   - **Builder agents.** "Build me a pomodoro timer" makes an app or site in its own folder under the projects folder and opens it. If Claude Code, Codex or opencode is installed, the agent hands it the coding (headless, with that tool's own sign-in), and you can pick one or your own command in settings; otherwise Helpy writes the code with your AI model. Follow up with changes and the same agent carries on in the same folder. Coding rounds, commands and launches ask first by default.
 
 </details>
