@@ -466,6 +466,17 @@ fn web_tools() -> Vec<ToolDef> {
         .collect()
 }
 
+/// The task for the planner: the model's summary, plus the user's own words
+/// when the summary dropped them, so details like "use the Playwright
+/// browser" aren't lost on the way.
+fn with_users_words(request: &str, said: &str) -> String {
+    let said = said.trim();
+    if said.is_empty() || request.contains(said) || said.len() > 2000 {
+        return request.to_string();
+    }
+    format!("{request}\n\n(The user's own words: \"{said}\")")
+}
+
 fn start_agents_tool() -> ToolDef {
     ToolDef {
         name: START_AGENTS.into(),
@@ -996,6 +1007,7 @@ impl Turn<'_> {
         images: Vec<String>,
     ) -> Result<(Vec<Message>, Completion, bool), ProviderError> {
         drop_unanswered_tool_calls(&mut messages);
+        let said = question.clone();
         let mut user = Message::user_text(question);
         for data in images.into_iter().rev() {
             user.parts.insert(
@@ -1124,8 +1136,10 @@ impl Turn<'_> {
                             }
                         }
                         START_AGENTS => {
-                            let request =
-                                input["request"].as_str().unwrap_or("").trim().to_string();
+                            let request = with_users_words(
+                                input["request"].as_str().unwrap_or("").trim(),
+                                &said,
+                            );
                             let image = input["include_screen"]
                                 .as_bool()
                                 .unwrap_or(false)
@@ -1661,6 +1675,14 @@ pub fn ask_status(store: tauri::State<SettingsStore>) -> AskStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_planner_gets_the_users_own_words() {
+        let said = "Use the Playwright browser, not web search: go to uk.indeed.com";
+        let out = with_users_words("Go to uk.indeed.com and list jobs", said);
+        assert!(out.contains("Use the Playwright browser"));
+        assert_eq!(with_users_words(said, said), said);
+    }
 
     /// Live, on Nebius with NEBIUS_API_KEY: a walkthrough as `run` drives it.
     /// Nemotron Super gets the question and asks for the screen; then
