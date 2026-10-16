@@ -724,6 +724,7 @@ fn empty_script_hint(tool: &str, text: &str) -> &'static str {
 }
 
 /// A tool result as text for the agent.
+#[cfg(test)]
 pub fn result_text(v: &Value) -> String {
     result_text_in(v, &std::env::temp_dir())
 }

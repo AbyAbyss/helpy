@@ -25,6 +25,82 @@ pub fn init(data_dir: PathBuf) {
     let _ = DATA_DIR.set(data_dir);
 }
 
+/// The keychain as Helpy uses it: one entry per account. (Debug builds keep
+/// keys in a file instead, so only release builds use these.)
+#[cfg_attr(debug_assertions, allow(dead_code))]
+trait Raw {
+    fn get(&self, account: &str) -> Result<Option<String>, ProviderError>;
+    fn set(&self, account: &str, value: &str) -> Result<(), ProviderError>;
+    fn delete(&self, account: &str) -> Result<(), ProviderError>;
+}
+
+/// Every key in one keychain entry, read once per launch. macOS asks for the
+/// keychain password per entry, so one entry means one prompt (none after
+/// "Always Allow"), however many keys and logins Helpy keeps. Keys saved the
+/// old way, an entry each, move in the first time they're read.
+#[cfg_attr(debug_assertions, allow(dead_code))]
+struct Bundle<R: Raw> {
+    raw: R,
+    keys: std::sync::Mutex<Option<HashMap<String, String>>>,
+}
+
+#[cfg_attr(debug_assertions, allow(dead_code))]
+impl<R: Raw> Bundle<R> {
+    const ACCOUNT: &'static str = "keys";
+
+    fn new(raw: R) -> Self {
+        Self { raw, keys: std::sync::Mutex::new(None) }
+    }
+
+    fn with<T>(&self, f: impl FnOnce(&mut HashMap<String, String>, &R) -> Result<T, ProviderError>) -> Result<T, ProviderError> {
+        let mut keys = self.keys.lock().unwrap();
+        if keys.is_none() {
+            let all = match self.raw.get(Self::ACCOUNT)? {
+                Some(text) => serde_json::from_str(&text).unwrap_or_default(),
+                None => HashMap::new(),
+            };
+            *keys = Some(all);
+        }
+        f(keys.as_mut().expect("loaded above"), &self.raw)
+    }
+
+    fn save(raw: &R, all: &HashMap<String, String>) -> Result<(), ProviderError> {
+        raw.set(Self::ACCOUNT, &serde_json::to_string(all).unwrap_or_default())
+    }
+
+    fn get(&self, account: &str) -> Result<Option<String>, ProviderError> {
+        self.with(|all, raw| {
+            if let Some(k) = all.get(account) {
+                return Ok(Some(k.clone()));
+            }
+            // Saved before keys were kept together: move it in.
+            let Some(k) = raw.get(account)? else { return Ok(None) };
+            all.insert(account.into(), k.clone());
+            Self::save(raw, all)?;
+            let _ = raw.delete(account);
+            Ok(Some(k))
+        })
+    }
+
+    fn set(&self, account: &str, value: &str) -> Result<(), ProviderError> {
+        self.with(|all, raw| {
+            all.insert(account.into(), value.into());
+            Self::save(raw, all)?;
+            let _ = raw.delete(account);
+            Ok(())
+        })
+    }
+
+    fn delete(&self, account: &str) -> Result<(), ProviderError> {
+        self.with(|all, raw| {
+            if all.remove(account).is_some() {
+                Self::save(raw, all)?;
+            }
+            raw.delete(account)
+        })
+    }
+}
+
 #[cfg(not(debug_assertions))]
 mod store {
     use super::{ErrorKind, ProviderError};
@@ -42,23 +118,59 @@ mod store {
         )
     }
 
-    pub fn get(account: &str) -> Result<Option<String>, ProviderError> {
-        match entry(account)?.get_password() {
-            Ok(k) => Ok(Some(k)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(keychain_error(e)),
+    /// One keychain entry per account.
+    pub struct Keychain;
+
+    impl super::Raw for Keychain {
+        fn get(&self, account: &str) -> Result<Option<String>, ProviderError> {
+            match entry(account)?.get_password() {
+                Ok(k) => Ok(Some(k)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(e) => Err(keychain_error(e)),
+            }
         }
+
+        fn set(&self, account: &str, key: &str) -> Result<(), ProviderError> {
+            entry(account)?.set_password(key).map_err(keychain_error)
+        }
+
+        fn delete(&self, account: &str) -> Result<(), ProviderError> {
+            match entry(account)?.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                Err(e) => Err(keychain_error(e)),
+            }
+        }
+    }
+
+    // macOS asks for the password per entry, so keys go together there.
+    // Windows caps an entry at a few KB, so each key keeps its own.
+    #[cfg(target_os = "macos")]
+    fn keys() -> &'static super::Bundle<Keychain> {
+        static KEYS: std::sync::OnceLock<super::Bundle<Keychain>> = std::sync::OnceLock::new();
+        KEYS.get_or_init(|| super::Bundle::new(Keychain))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn keys() -> &'static Keychain {
+        &Keychain
+    }
+
+    pub fn get(account: &str) -> Result<Option<String>, ProviderError> {
+        #[allow(unused_imports)]
+        use super::Raw;
+        keys().get(account)
     }
 
     pub fn set(account: &str, key: &str) -> Result<(), ProviderError> {
-        entry(account)?.set_password(key).map_err(keychain_error)
+        #[allow(unused_imports)]
+        use super::Raw;
+        keys().set(account, key)
     }
 
     pub fn delete(account: &str) -> Result<(), ProviderError> {
-        match entry(account)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(keychain_error(e)),
-        }
+        #[allow(unused_imports)]
+        use super::Raw;
+        keys().delete(account)
     }
 }
 
@@ -194,6 +306,66 @@ pub fn set_speech(service: &str, key: &str) -> Result<(), ProviderError> {
         return delete_account(&format!("speech:{service}"));
     }
     set_account(&format!("speech:{service}"), key)
+}
+
+#[cfg(test)]
+mod bundle_tests {
+    use super::*;
+
+    /// A keychain that counts its reads, like the prompts macOS would show.
+    #[derive(Default)]
+    struct Fake {
+        entries: std::sync::Mutex<HashMap<String, String>>,
+        reads: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Raw for &Fake {
+        fn get(&self, account: &str) -> Result<Option<String>, ProviderError> {
+            self.reads.lock().unwrap().push(account.into());
+            Ok(self.entries.lock().unwrap().get(account).cloned())
+        }
+        fn set(&self, account: &str, value: &str) -> Result<(), ProviderError> {
+            self.entries.lock().unwrap().insert(account.into(), value.into());
+            Ok(())
+        }
+        fn delete(&self, account: &str) -> Result<(), ProviderError> {
+            self.entries.lock().unwrap().remove(account);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn keys_live_in_one_entry_read_once() {
+        let fake = Fake::default();
+        let b = Bundle::new(&fake);
+        b.set("provider:nebius", "nb").unwrap();
+        b.set("tool:tavily", "tv").unwrap();
+        // A fresh launch: every key comes from one read of one entry.
+        let b = Bundle::new(&fake);
+        fake.reads.lock().unwrap().clear();
+        assert_eq!(b.get("provider:nebius").unwrap().as_deref(), Some("nb"));
+        assert_eq!(b.get("tool:tavily").unwrap().as_deref(), Some("tv"));
+        assert_eq!(*fake.reads.lock().unwrap(), ["keys"]);
+        assert_eq!(fake.entries.lock().unwrap().len(), 1);
+        b.delete("tool:tavily").unwrap();
+        assert_eq!(Bundle::new(&fake).get("tool:tavily").unwrap(), None);
+    }
+
+    #[test]
+    fn keys_saved_the_old_way_move_in() {
+        let fake = Fake::default();
+        fake.entries.lock().unwrap().insert("provider:openai".into(), "sk".into());
+        let b = Bundle::new(&fake);
+        assert_eq!(b.get("provider:openai").unwrap().as_deref(), Some("sk"));
+        let entries = fake.entries.lock().unwrap().clone();
+        assert!(!entries.contains_key("provider:openai"), "the old entry is gone");
+        assert!(entries["keys"].contains("\"provider:openai\":\"sk\""));
+        // Next launch it's read with the rest, not on its own.
+        let b = Bundle::new(&fake);
+        fake.reads.lock().unwrap().clear();
+        assert_eq!(b.get("provider:openai").unwrap().as_deref(), Some("sk"));
+        assert_eq!(*fake.reads.lock().unwrap(), ["keys"]);
+    }
 }
 
 #[cfg(all(test, debug_assertions))]
