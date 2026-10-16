@@ -139,7 +139,8 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          research (search and web), answered in the agent's reply. For research, give search and web, which read \
          pages in the background; give a browser tool only when a site must be clicked through or filled in, \
          since it opens pages, and then give search and web as well. Prefer Helpy's own \"browser\" tool to a \
-         browser connector such as Playwright when both are listed. Give a connector (Notion, GitHub, ...) to any \
+         browser connector such as Playwright when both are listed, unless the user names one: a tool the user \
+         names is the one to give. Give a connector (Notion, GitHub, ...) to any \
          agent whose task saves to or reads from it.\n\n\
          Reply with only a JSON object: {{\"mode\": \"single\", \"agents\": [{{\"name\": \"...\", \"goal\": \"...\", \
          \"tools\": [\"...\"], \"keepOpen\": false, \"after\": []}}], \"folders\": [], \"reply\": \"one short sentence telling the user \
@@ -171,6 +172,28 @@ fn with_page_reading(tools: &mut Vec<String>, known: &[&str]) {
             tools.push(g.into());
         }
     }
+}
+
+/// Connectors the user named in the request ("use Playwright") go to the
+/// agents: a named browser replaces the one the planner chose, and with a
+/// single agent every named connector is its.
+fn with_named_tools(mut agents: Vec<PlanAgent>, named: &[String]) -> Vec<PlanAgent> {
+    let browsers: Vec<&String> = named.iter().filter(|g| is_browser(g)).collect();
+    let single = agents.len() == 1;
+    for a in &mut agents {
+        if !browsers.is_empty() && a.tools.iter().any(|t| is_browser(t)) {
+            a.tools.retain(|t| !is_browser(t));
+            a.tools.extend(browsers.iter().map(|g| g.to_string()));
+        }
+        if single {
+            for g in named {
+                if !a.tools.contains(g) {
+                    a.tools.push(g.clone());
+                }
+            }
+        }
+    }
+    agents
 }
 
 /// Reads and checks the planner's JSON. Unknown tools are dropped; the mode
@@ -341,6 +364,8 @@ pub async fn plan(
         }
         None => parse(&text, &groups, s.agents.default_mode)?,
     };
+    let named = tools::named_groups(crate::connectors::external(app, &s).as_ref(), request);
+    let agents = with_named_tools(agents, &named);
     let planned_by = Some(completion.model.clone()).filter(|m| !m.is_empty());
     offer(app, &s, request, mode, agents, folders, reply, image, voice, planned_by)
 }
@@ -649,6 +674,24 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_browser_the_user_names_wins() {
+        let plan = |tools: &[&str]| PlanAgent {
+            name: "Jobs".into(),
+            goal: "g".into(),
+            tools: tools.iter().map(|t| t.to_string()).collect(),
+            keep_open: false,
+            after: Vec::new(),
+        };
+        let named = vec!["mcp_playwright".to_string()];
+        let out = with_named_tools(vec![plan(&["browser", "search", "web"])], &named);
+        assert_eq!(out[0].tools, ["search", "web", "mcp_playwright"]);
+        // Two agents: only the one with a browser changes.
+        let out = with_named_tools(vec![plan(&["browser"]), plan(&["reminders"])], &named);
+        assert_eq!(out[0].tools, ["mcp_playwright"]);
+        assert_eq!(out[1].tools, ["reminders"]);
     }
 
     #[test]

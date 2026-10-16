@@ -26,7 +26,9 @@ use crate::agents::runner::ToolOutcome;
 const NAV_TIMEOUT: Duration = Duration::from_secs(40);
 /// Time for scripts to fill the page after it loads.
 const SETTLE: Duration = Duration::from_millis(1200);
-const MAX_TEXT: usize = 15_000;
+/// Page text an agent gets; with up to 60 links the whole result stays
+/// within what an agent is given of one tool result.
+const MAX_TEXT: usize = 10_000;
 /// The browser closes after this long unused.
 const IDLE: Duration = Duration::from_secs(300);
 
@@ -170,9 +172,13 @@ struct PageRead {
 
 const READ_JS: &str = r#"(() => {
   const text = document.body ? document.body.innerText : "";
+  // The page's own links first: menus, headers and footers repeat on every page.
+  const chrome = "header,nav,footer,[role=navigation],[role=banner],[role=contentinfo]";
+  const seen = new Set();
   const links = [...document.querySelectorAll("a[href]")]
+    .filter(a => !a.closest(chrome))
     .map(a => [(a.innerText || a.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 80), a.href])
-    .filter(([t, h]) => t && /^https?:/.test(h)).slice(0, 40);
+    .filter(([t, h]) => t && /^https?:/.test(h) && !seen.has(h) && seen.add(h)).slice(0, 60);
   return { text: text.slice(0, 200000), links, forms: document.forms.length };
 })()"#;
 
@@ -221,7 +227,7 @@ fn type_js(field: &str, text: &str, submit: bool) -> String {
     const label = [...document.querySelectorAll("label")].find(l => l.innerText.trim().toLowerCase().includes(lower));
     if (label) el = label.control || label.querySelector("input,textarea,select");
   }}
-  if (!el) el = fields.find(e => [e.name, e.placeholder, e.getAttribute("aria-label")].some(x => x && x.toLowerCase().includes(lower)));
+  if (!el) el = fields.find(e => [e.name, e.id, e.placeholder, e.getAttribute("aria-label")].some(x => x && x.toLowerCase().includes(lower)));
   if (!el) return null;
   el.focus();
   const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;

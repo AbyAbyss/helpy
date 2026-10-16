@@ -72,14 +72,17 @@ pub fn named_groups(external: &dyn External, text: &str) -> Vec<String> {
         .into_iter()
         .filter(|g| g.connected)
         .filter(|g| {
-            let label: Vec<String> = g
-                .label
-                .to_lowercase()
-                .split(|c: char| !c.is_alphanumeric())
-                .filter(|w| !w.is_empty())
-                .map(String::from)
-                .collect();
-            !label.is_empty() && words.windows(label.len()).any(|w| w == label.as_slice())
+            // By its label ("Google Calendar") or its id ("mcp_playwright" → "playwright").
+            let id = g.id.strip_prefix("mcp_").unwrap_or(&g.id).to_string();
+            [g.label.as_str(), id.as_str()].iter().any(|name| {
+                let name: Vec<String> = name
+                    .to_lowercase()
+                    .split(|c: char| !c.is_alphanumeric())
+                    .filter(|w| !w.is_empty())
+                    .map(String::from)
+                    .collect();
+                !name.is_empty() && words.windows(name.len()).any(|w| w == name.as_slice())
+            })
         })
         .map(|g| g.id)
         .collect()
@@ -1005,6 +1008,8 @@ mod tests {
         ]);
         assert_eq!(named_groups(&e, "After this, can you also add it to Notion?"), ["notion"]);
         assert_eq!(named_groups(&e, "put it in my google calendar"), ["gcal"]);
+        let pw = Named(vec![("mcp_playwright", "Playwright browser", true)]);
+        assert_eq!(named_groups(&pw, "Use Playwright, not web search"), ["mcp_playwright"]);
         // Not connected, or only part of a word: nothing.
         assert!(named_groups(&e, "email it with Gmail").is_empty());
         assert!(named_groups(&e, "notional value").is_empty());
