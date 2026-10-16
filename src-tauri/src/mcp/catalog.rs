@@ -163,7 +163,7 @@ pub fn presets() -> Vec<Preset> {
             "Drives a web browser: opens pages, clicks, fills forms.",
             "Needs Node.js.",
             "https://github.com/microsoft/playwright-mcp",
-            local("npx", &["@playwright/mcp@latest"], vec![]),
+            local("npx", &["-y", "@playwright/mcp@latest"], vec![]),
         ),
     ]
 }

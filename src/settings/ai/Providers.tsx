@@ -8,6 +8,7 @@ import type { ProviderKind } from "../../bindings/ProviderKind";
 import { api } from "../../lib/ipc";
 import { Toggle } from "../controls";
 import { isLocal, modelFromInfo, newProvider, PRESETS, presetFor } from "./presets";
+import { withNebiusSetup } from "./routing";
 import { withoutProvider, withAutoRouting } from "./routing";
 
 type Props = {
@@ -22,7 +23,9 @@ export function ProvidersEditor({ ai, commit }: Props) {
   const [local, setLocal] = useState<LocalServer[] | "searching" | null>(null);
 
   const add = async (p: ProviderConfig) => {
-    const next = withAutoRouting({ ...ai, providers: [...ai.providers, p] });
+    // Nebius Token Factory comes with its routing: Nemotron thinks, Kimi-K3 sees.
+    const added = { ...ai, providers: [...ai.providers, p] };
+    const next = p.kind === "nebius" ? withNebiusSetup(added, p.id) : withAutoRouting(added);
     if (!(await commit(next))) {
       setAdding(false);
       setLocal(null);

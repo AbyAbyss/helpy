@@ -126,7 +126,7 @@ export function PlanCard() {
                 <li key={g.id}>
                   <Dot tone="connect" />
                   <span>
-                    <b>{g.label}</b> isn't connected yet; agents wait at that step until it is.{" "}
+                    <b>{g.label}</b> isn't connected yet; agents can't use it until you connect it.{" "}
                     <button type="button" className="linkbtn" onClick={() => api.openSettingsSection("connectors")}>
                       Connect
                     </button>

@@ -410,7 +410,18 @@ async fn start(app: &AppHandle, m: &McpServer) -> Result<Session, String> {
             let (proc, stderr) = TokioChildProcess::builder(cmd)
                 .stderr(std::process::Stdio::piped())
                 .spawn()
-                .map_err(|e| format!("Couldn't start \"{}\": {e}", m.command))?;
+                .map_err(|e| {
+                    let hint = match (e.kind(), m.command.as_str()) {
+                        (std::io::ErrorKind::NotFound, "npx" | "npm" | "node") => {
+                            " Install Node.js (nodejs.org) and try again."
+                        }
+                        (std::io::ErrorKind::NotFound, "uvx" | "uv") => {
+                            " Install uv (docs.astral.sh/uv) and try again."
+                        }
+                        _ => "",
+                    };
+                    format!("Couldn't start \"{}\": {e}.{hint}", m.command)
+                })?;
             // Keep the last lines the server printed, for error messages.
             if let Some(stderr) = stderr {
                 let app = app.clone();

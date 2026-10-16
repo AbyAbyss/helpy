@@ -10,7 +10,7 @@ import { api, EVENTS } from "../lib/ipc";
 type Metric = "tokens" | "cost";
 
 const shortTokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
-const money = (n: number) => `$${n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
+const money = (n: number) => `$${n < 0.1 ? n.toFixed(3) : n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
 const dayLabel = (date: string) => new Date(`${date}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
 /**
@@ -35,7 +35,7 @@ export function UsagePanel({ settings }: { settings: Settings }) {
     ["Input", shortTokens(usage.inputTokens), "tokens sent, not counting cached ones"],
     ["Output", shortTokens(usage.outputTokens), "tokens the models wrote"],
     ["Cached", shortTokens(cached), `${shortTokens(usage.cacheReadTokens)} read from the provider's cache (cheaper), ${shortTokens(usage.cacheWriteTokens)} written to it`],
-    ["Cost", usage.cost > 0 ? `$${usage.cost.toFixed(2)}` : "—", usage.cost > 0 ? "priced models only" : "no priced model used yet"],
+    ["Cost", usage.cost > 0 ? money(usage.cost) : "—", usage.cost > 0 ? "priced models only" : "no priced model used yet"],
   ];
   const withUse = (rows: Total[]) => rows.filter((r) => r.tokens > 0);
   return (

@@ -330,9 +330,14 @@ pub async fn plan(
             "\n\n(The agents will get a picture of what the user had on screen with their task.)";
     }
     parts.push(Part::Text(text));
+    let mut system = system_prompt(&s, &groups);
+    if let Some(notes) = crate::ai::memory::prompt_section(app) {
+        system += "\n\n";
+        system += &notes;
+    }
     let req = ChatRequest {
         model: String::new(),
-        system: system_prompt(&s, &groups),
+        system,
         messages: vec![Message {
             role: Role::User,
             parts,
@@ -365,7 +370,13 @@ pub async fn plan(
         None => parse(&text, &groups, s.agents.default_mode)?,
     };
     let named = tools::named_groups(crate::connectors::external(app, &s).as_ref(), request);
-    let agents = with_named_tools(agents, &named);
+    let mut agents = with_named_tools(agents, &named);
+    // Templates list a browser alone, and a named connector replaces it:
+    // either way the agent also gets to search and read pages.
+    let known: Vec<&str> = groups.iter().map(|g| g.id.as_str()).collect();
+    for a in &mut agents {
+        with_page_reading(&mut a.tools, &known);
+    }
     let planned_by = Some(completion.model.clone()).filter(|m| !m.is_empty());
     offer(app, &s, request, mode, agents, folders, reply, image, voice, planned_by)
 }

@@ -297,8 +297,12 @@ pub struct Agent {
     pub active_ms: u64,
 
     pub counters: Counters,
-    /// How often each tool+input was called this round.
+    /// How often each tool+input was called this round with the same result.
     pub repeats: HashMap<String, u32>,
+    /// What each tool+input last returned (hashed): the same call with a new
+    /// result (the next page) isn't a repeat.
+    #[serde(default)]
+    pub repeat_outputs: HashMap<String, u64>,
     /// The last few things the agent said, to spot it repeating itself.
     pub recent_outputs: Vec<String>,
     /// Hashes of every output and tool result seen, to spot no progress.
@@ -353,6 +357,7 @@ impl Agent {
                 ..Default::default()
             },
             repeats: HashMap::new(),
+            repeat_outputs: HashMap::new(),
             recent_outputs: Vec::new(),
             seen: HashSet::new(),
             no_progress: 0,
@@ -394,11 +399,13 @@ impl Agent {
     }
 
     /// A follow-up after the agent finished a round: the step and tool-call
-    /// counters start over, spending never does.
+    /// counters and the time limit start over, spending never does.
     pub fn new_round(&mut self) {
         self.counters.steps = 0;
         self.counters.tool_calls = 0;
+        self.active_ms = 0;
         self.repeats.clear();
+        self.repeat_outputs.clear();
         self.recent_outputs.clear();
         self.no_progress = 0;
         self.stop = None;

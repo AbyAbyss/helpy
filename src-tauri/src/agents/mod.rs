@@ -400,11 +400,17 @@ fn system_prompt(a: &Agent, s: &Settings, roots: &[PathBuf]) -> String {
     }
     if a.tools.iter().any(|t| t == "browser" || t.starts_with("mcp_")) {
         p += "- With a browser, every page you open comes back as text: the listings, names, prices and links on \
-              it, and the buttons and fields with their refs. That text is how you read the page: copy the details \
+              it, and the buttons and fields. That text is how you read the page: copy the details \
               you need straight from it into your answer. Don't run scripts (evaluate) to pull data out; they guess \
-              a site's code and come back empty. To click or type, pass the ref shown (e.g. \"e19\"). Close cookie \
+              a site's code and come back empty. Close cookie \
               banners when they're in the way. If a site won't show its content, read it with fetch_page or find the \
               same facts with web_search, and in your answer name only the sites you actually read.\n";
+        if a.tools.iter().any(|t| t.starts_with("mcp_")) {
+            p += "- To click or type with the browser connector, pass the ref shown next to the control (e.g. \"e19\").\n";
+        }
+        if a.tools.iter().any(|t| t == "browser") {
+            p += "- To click with browser_click, pass the link or button text as you see it; to type, name the field.\n";
+        }
     }
     if a.tools.iter().any(|t| t == "shell" || t == "files") {
         p += &format!(
@@ -567,7 +573,13 @@ impl Env for AppEnv {
     }
 
     fn system(&self, agent: &Agent) -> String {
-        system_prompt(agent, &self.settings, self.toolbox.files.roots())
+        let mut p = system_prompt(agent, &self.settings, self.toolbox.files.roots());
+        // What the user told Helpy about themselves ("I use Outlook desktop").
+        if let Some(notes) = crate::ai::memory::prompt_section(&self.app) {
+            p += "\n\n";
+            p += &notes;
+        }
+        p
     }
 
     fn tools(&self, agent: &Agent) -> Vec<ToolDef> {
