@@ -607,11 +607,16 @@ impl Env for AppEnv {
     }
 
     fn named_tools(&self, said: &str) -> Vec<String> {
-        self.toolbox
+        let mut out: Vec<String> = self
+            .toolbox
             .external
             .as_deref()
             .map(|e| tools::named_groups(e, said))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if tools::asks_to_open(said) {
+            out.push(tools::OPEN_GROUP.into());
+        }
+        out
     }
 
     fn delegate<'a>(
@@ -1359,7 +1364,11 @@ pub fn agents_follow_up(
         a.new_round();
         // "Now add it to Notion": the agent gets the connector it names.
         let external = crate::connectors::external(&app, &settings(&app));
-        for g in tools::named_groups(external.as_ref(), &text) {
+        let mut named = tools::named_groups(external.as_ref(), &text);
+        if tools::asks_to_open(&text) {
+            named.push(tools::OPEN_GROUP.into());
+        }
+        for g in named {
             if !a.tools.contains(&g) {
                 a.tools.push(g);
             }

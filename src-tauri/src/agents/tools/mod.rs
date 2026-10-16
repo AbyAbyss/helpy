@@ -223,9 +223,10 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
         json!({ "text": { "type": "string" } }),
         &["text"],
     ));
-    // Only builders show the user something in their browser; given to
-    // researchers, models used it to "read" pages, opening tabs.
-    if has("build") {
+    // Only builders show the user something in their browser, and agents the
+    // user asked to open a link; given to researchers, models used it to
+    // "read" pages, opening tabs.
+    if has("build") || has(OPEN_GROUP) {
         out.push(def(
             OPEN_LINK,
             "Open a web link in the user's default browser, e.g. a page you made or updated, when the user asks to see it. \
@@ -374,6 +375,17 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
 
 /// Opens a link in the user's browser. Every agent has it.
 pub const OPEN_LINK: &str = "open_link";
+/// Given to an agent when the user asks it to open a link; never planned.
+pub const OPEN_GROUP: &str = "open";
+
+/// "Open the link", "can you open that page": the user wants a link opened
+/// in their browser.
+pub fn asks_to_open(text: &str) -> bool {
+    let t = text.to_lowercase();
+    let words: Vec<&str> = t.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    words.contains(&"open")
+        && words.iter().any(|w| ["link", "links", "url", "page", "site", "website", "it", "that", "them", "job", "listing"].contains(w))
+}
 
 /// The build tools. With a coding tool installed the agent hands it the
 /// coding; without one it writes the files itself.
@@ -567,6 +579,10 @@ impl Toolbox {
         // It acts on the user's own browser, so it waits for their OK; only
         // builders have it.
         if tool == OPEN_LINK {
+            // The user asked for it in so many words.
+            if groups.iter().any(|g| g == OPEN_GROUP) {
+                return Gate::Allow;
+            }
             if !groups.iter().any(|g| g == "build") {
                 return Gate::Never("open_link isn't one of your tools; read pages with fetch_page.".into());
             }
@@ -967,6 +983,17 @@ mod tests {
         fn run<'a>(&'a self, _: &'a str, _: &'a Value) -> futures_util::future::BoxFuture<'a, Option<ToolOutcome>> {
             Box::pin(async { None })
         }
+    }
+
+    #[test]
+    fn asking_to_open_a_link_lets_the_agent_open_it() {
+        assert!(asks_to_open("Can you open the link?"));
+        assert!(asks_to_open("open the first job listing"));
+        assert!(!asks_to_open("What's on that page?"));
+        let t = toolbox(&Agents::default());
+        let g = vec!["search".to_string(), OPEN_GROUP.to_string()];
+        assert!(t.defs(&g).iter().any(|d| d.name == OPEN_LINK));
+        assert!(matches!(t.gate(&g, OPEN_LINK, &json!({"url": "https://a.example"})), Gate::Allow));
     }
 
     #[test]
