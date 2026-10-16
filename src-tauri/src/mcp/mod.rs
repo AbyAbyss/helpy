@@ -668,6 +668,27 @@ pub(crate) fn compact_snapshot(yaml: &str) -> String {
     out.join("\n")
 }
 
+/// Models copy refs as they appear in the page text ("[ref=e19]", "[e19]");
+/// browser servers want the bare "e19".
+fn bare_refs(mut args: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    static REF: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"^\[?(?:ref=)?([a-z]?\d*e\d+)\]?$").unwrap());
+    fn clean(v: &mut Value) {
+        match v {
+            Value::String(s) => {
+                if let Some(c) = REF.captures(s.trim()) {
+                    *s = c[1].to_string();
+                }
+            }
+            Value::Array(a) => a.iter_mut().for_each(clean),
+            Value::Object(o) => o.values_mut().for_each(clean),
+            _ => {}
+        }
+    }
+    args.values_mut().for_each(clean);
+    args
+}
+
 /// The server's current page as text, from its snapshot tool, to go with a
 /// script that found nothing.
 async fn page_now(app: &AppHandle, m: &McpServer, dir: &Path) -> String {
@@ -910,7 +931,7 @@ pub fn run<'a>(
 ) -> BoxFuture<'a, Option<ToolOutcome>> {
     Box::pin(async move {
         let (m, t) = find_tool(app, s, tool)?;
-        let arguments = args.as_object().cloned().unwrap_or_default();
+        let arguments = bare_refs(args.as_object().cloned().unwrap_or_default());
         let name = t.name.clone();
         let result = with_session(app, &m, move |session| {
             let params = CallToolRequestParams::new(name.clone()).with_arguments(arguments.clone());
@@ -1144,6 +1165,18 @@ mod tests {
         let inline = inline_snapshots("### Snapshot\n```yaml\n- generic [ref=e1]:\n  - button \"Accept\" [ref=e18] [cursor=pointer]\n```", none);
         assert!(inline.contains("button \"Accept\" [ref=e18]") && !inline.contains("cursor"), "{inline}");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn refs_reach_the_browser_bare() {
+        let args = json!({"target": "[f3e909]", "ref": "ref=e19", "fields": [{"target": "[ref=e65]", "value": "node.js"}],
+                          "text": "[e19] is a button"});
+        let out = Value::Object(bare_refs(args.as_object().unwrap().clone()));
+        assert_eq!(out["target"], "f3e909");
+        assert_eq!(out["ref"], "e19");
+        assert_eq!(out["fields"][0]["target"], "e65");
+        assert_eq!(out["fields"][0]["value"], "node.js");
+        assert_eq!(out["text"], "[e19] is a button");
     }
 
     #[test]
