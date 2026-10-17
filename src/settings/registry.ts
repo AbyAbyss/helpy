@@ -205,6 +205,12 @@ export const FIELDS: Field[] = [
     when: (s) => s.buddy.home === "notch",
   },
   {
+    path: "buddy.islandSize", section: "buddy", group: "Buddy", label: "Island scale",
+    keywords: "island bigger smaller zoom",
+    control: { kind: "slider", min: 0.75, max: 2, step: 0.05, format: pct },
+    when: (s) => s.buddy.home === "notch",
+  },
+  {
     path: "buddy.notchOffset", section: "buddy", group: "Buddy", label: "Where along the edge",
     help: "The middle sits under a MacBook's notch.", keywords: "notch island offset centre middle",
     control: { kind: "slider", min: 0, max: 1, step: 0.05, format: pct, ends: ["Start", "End"] },

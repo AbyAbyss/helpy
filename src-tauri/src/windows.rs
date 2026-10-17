@@ -95,6 +95,23 @@ pub fn beside_island(
 
 /// The island's size in physical pixels while it shows.
 static ISLAND_SIZE: std::sync::Mutex<(f64, f64)> = std::sync::Mutex::new((0.0, 0.0));
+/// A fullscreen app is in front and the island is out of the way.
+static ISLAND_COVERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Hides the island while a fullscreen app is in front (with "hide in
+/// fullscreen apps" on) and brings it back after, without forgetting where it is.
+pub fn island_covered(app: &AppHandle, covered: bool) {
+    ISLAND_COVERED.store(covered, std::sync::atomic::Ordering::Relaxed);
+    let Some(w) = app.get_webview_window(ISLAND) else {
+        return;
+    };
+    if covered {
+        let _ = w.hide();
+    } else if ISLAND_CENTRE.lock().unwrap().is_some() && !w.is_visible().unwrap_or(false) {
+        let _ = w.show();
+        let _ = w.set_always_on_top(true);
+    }
+}
 
 /// Where the island's top-left goes (physical pixels): flat against its
 /// edge, `offset` of the way along it.
@@ -137,7 +154,7 @@ pub fn island_layout(app: AppHandle, width: f64, height: f64) {
     );
     let _ = w.set_size(PhysicalSize::new(size.0.round() as u32, size.1.round() as u32));
     let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
-    if !w.is_visible().unwrap_or(false) {
+    if !w.is_visible().unwrap_or(false) && !ISLAND_COVERED.load(std::sync::atomic::Ordering::Relaxed) {
         let _ = w.show();
         let _ = w.set_always_on_top(true);
     }

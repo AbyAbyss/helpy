@@ -14,6 +14,10 @@ notchEdge: ScreenEdge,
  */
 notchOffset: number, islandLook: IslandLook, 
 /**
+ * The island's scale, 1 is its natural size.
+ */
+islandSize: number, 
+/**
  * Rendered size in logical pixels.
  */
 size: number, 

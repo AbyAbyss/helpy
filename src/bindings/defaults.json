@@ -18,6 +18,7 @@
     "notchEdge": "top",
     "notchOffset": 0.5,
     "islandLook": "face",
+    "islandSize": 1.0,
     "size": 36,
     "opacity": 1.0,
     "offsetX": 18,

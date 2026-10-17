@@ -59,6 +59,7 @@ fn run(app: AppHandle) {
     let mut fullscreen = false;
     let mut last_visible: Option<bool> = None;
     let mut last_sleepy = false;
+    let mut island_covered = false;
 
     loop {
         thread::sleep(POLL);
@@ -98,6 +99,12 @@ fn run(app: AppHandle) {
         }
         if resend {
             crate::windows::tell_notch(&app);
+        }
+        // The island steps aside for a fullscreen app too, when asked to.
+        let covered = at_home && buddy.hide_in_fullscreen && fullscreen;
+        if covered != island_covered || resend {
+            island_covered = covered;
+            crate::windows::island_covered(&app, covered);
         }
         let sleepy = last_move.elapsed() >= SLEEPY_AFTER && !busy(&app);
         if sleepy != last_sleepy || resend {

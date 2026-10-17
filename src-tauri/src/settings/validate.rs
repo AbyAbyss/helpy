@@ -22,6 +22,7 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
     range("buddy.offsetY", b.offset_y as f64, -200.0, 200.0);
     range("buddy.smoothness", b.smoothness, 0.0, 0.95);
     range("buddy.notchOffset", b.notch_offset, 0.0, 1.0);
+    range("buddy.islandSize", b.island_size, 0.75, 2.0);
     range("buddy.idleSeconds", b.idle_seconds as f64, 2.0, 3600.0);
 
     let g = &s.guidance;

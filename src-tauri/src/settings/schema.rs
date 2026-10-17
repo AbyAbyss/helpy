@@ -163,6 +163,8 @@ pub struct Buddy {
     /// How far along that edge, 0 (start) to 1 (end); 0.5 is the middle.
     pub notch_offset: f64,
     pub island_look: IslandLook,
+    /// The island's scale, 1 is its natural size.
+    pub island_size: f64,
     /// Rendered size in logical pixels.
     pub size: u32,
     /// 0.2 to 1.0.
@@ -187,6 +189,7 @@ impl Default for Buddy {
             notch_edge: ScreenEdge::Top,
             notch_offset: 0.5,
             island_look: IslandLook::Face,
+            island_size: 1.0,
             size: 36,
             opacity: 1.0,
             offset_x: 18,

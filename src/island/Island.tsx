@@ -159,7 +159,7 @@ export function Island() {
     ro.observe(el);
     report();
     return () => ro.disconnect();
-  }, [b?.home, b?.enabled, b?.notchEdge, b?.notchOffset]);
+  }, [b?.home, b?.enabled, b?.notchEdge, b?.notchOffset, b?.islandSize]);
 
   if (!b) return null;
   const mood: BuddyState =
@@ -176,6 +176,7 @@ export function Island() {
     <div
       ref={root}
       className={`island island--${b.notchEdge} island--${b.islandLook}${open ? " is-open" : ""}${busy ? " is-busy" : ""}${sleepy && !open ? " is-sleepy" : ""}`}
+      style={{ zoom: b.islandSize }}
       role="button"
       aria-label="Helpy. Click to ask"
       onMouseEnter={() => setHover(true)}

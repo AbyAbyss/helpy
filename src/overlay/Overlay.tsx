@@ -60,6 +60,8 @@ export function Overlay() {
   // The island at the screen edge, when that's the buddy's home: agents set
   // off from there instead of from beside the cursor.
   const notch = useRef<NotchPoint | null>(null);
+  // After a tour from the island, the buddy flies back into it.
+  const [homeTrip, setHomeTrip] = useState<{ id: number; from: Point; to: Point } | null>(null);
   const [splitting, setSplitting] = useState(0);
   // Read from event handlers, which are set up once.
   const live = useRef({ visible, inside, settings });
@@ -69,7 +71,10 @@ export function Overlay() {
   const startTour = (marks: Mark[]) => {
     const { visible, settings } = live.current;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const drawn = marks.length > 0 && !!settings && visible && !settings.guidance.reduceMotion && !reduced;
+    // From its island the buddy comes out for the tour, on the island's screen.
+    const n = notch.current;
+    const fromIsland = !visible && settings?.buddy.home === "notch" && !!n?.shown;
+    const drawn = marks.length > 0 && !!settings && (visible || fromIsland) && !settings.guidance.reduceMotion && !reduced;
     if (!drawn) {
       if (tour.current) returning.current = performance.now();
       tour.current = null;
@@ -81,9 +86,11 @@ export function Overlay() {
     const curved = settings.guidance.arrowStyle === "curved";
     // From the buddy's point where it is now, or from the first mark when
     // the cursor is on another monitor.
-    const from = pos.current
-      ? { x: pos.current.x + b.offsetX + tipOf(b.style, b.size), y: pos.current.y + b.offsetY + tipOf(b.style, b.size) }
-      : traceOf(marks[0], curved)[0];
+    const from = fromIsland && n
+      ? { x: n.x, y: n.y }
+      : pos.current
+        ? { x: pos.current.x + b.offsetX + tipOf(b.style, b.size), y: pos.current.y + b.offsetY + tipOf(b.style, b.size) }
+        : traceOf(marks[0], curved)[0];
     const plan = planTour(marks, from, 1 / settings.guidance.animationSpeed, curved);
     tour.current = { plan, start: performance.now() };
     setTouring(true);
@@ -182,11 +189,18 @@ export function Overlay() {
         const p = tourAt(t.plan, elapsed);
         el.current.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
         if (elapsed >= t.plan.end + TOUR_HOLD) {
-          // Glide back from here: the cursor position is the point minus the offset.
           const b = live.current.settings?.buddy;
-          pos.current = b ? { x: p.x - b.offsetX - tipOf(b.style, b.size), y: p.y - b.offsetY - tipOf(b.style, b.size) } : p;
+          const n = notch.current;
+          if (b && !live.current.visible && b.home === "notch" && n?.shown) {
+            // Back into the island: a copy flies there as the buddy itself goes.
+            const tip = tipOf(b.style, b.size);
+            setHomeTrip({ id: now, from: { x: p.x - tip + b.size / 2, y: p.y - tip + b.size / 2 }, to: { x: n.x, y: n.y } });
+          } else {
+            // Glide back from here: the cursor position is the point minus the offset.
+            pos.current = b ? { x: p.x - b.offsetX - tipOf(b.style, b.size), y: p.y - b.offsetY - tipOf(b.style, b.size) } : p;
+            returning.current = now;
+          }
           tour.current = null;
-          returning.current = now;
           setTouring(false);
         }
       } else if (target.current && pos.current && el.current) {
@@ -203,7 +217,7 @@ export function Overlay() {
   if (!settings) return null;
   const b = settings.buddy;
   // The buddy steps aside while a selection is being drawn over its spot.
-  const shown = visible && (inside || touring) && !circling;
+  const shown = (visible || (touring && b.home === "notch")) && (inside || touring) && !circling;
   const mood: BuddyState =
     voice === "listening" ? "listening" : speaking ? "speaking" : voice === "transcribing" || activity.running ? "thinking" : "idle";
   const tip = tipOf(b.style, b.size);
@@ -246,6 +260,7 @@ export function Overlay() {
           onDone={() => setHandoffs((l) => l.filter((x) => x.id !== h.id))}
         />
       ))}
+      {homeTrip && <Handoff key={homeTrip.id} from={homeTrip.from} to={homeTrip.to} style={b.style} size={b.size} customSrc={customSrc} plain onDone={() => setHomeTrip(null)} />}
     </>
   );
 }
@@ -254,7 +269,7 @@ export function Overlay() {
  * A copy of the buddy that turns the working colour, peels off and flies to
  * the dock, where it becomes the new agent's chip.
  */
-function Handoff({ from, to, style, size, customSrc, onDone }: { from: Point; to: Point; style: BuddyStyle; size: number; customSrc: string | null; onDone: () => void }) {
+function Handoff({ from, to, style, size, customSrc, plain, onDone }: { from: Point; to: Point; style: BuddyStyle; size: number; customSrc: string | null; plain?: boolean; onDone: () => void }) {
   const el = useRef<HTMLDivElement>(null);
   const done = useRef(onDone);
   done.current = onDone;
@@ -271,7 +286,7 @@ function Handoff({ from, to, style, size, customSrc, onDone }: { from: Point; to
     return () => a.cancel();
   }, [from, to, size]);
   return (
-    <div ref={el} className="overlay-handoff">
+    <div ref={el} className={`overlay-handoff${plain ? " overlay-handoff--plain" : ""}`}>
       <Buddy style={style} size={size} animate={false} customSrc={customSrc} />
     </div>
   );
