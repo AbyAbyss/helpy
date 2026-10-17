@@ -6,7 +6,7 @@ import type { LiveLine } from "../bindings/LiveLine";
 import { Buddy } from "../buddy/Buddy";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
-import { inDock, STATUS_LABEL, tone } from "./dockState";
+import { inDock, mood, STATUS_LABEL, tone } from "./dockState";
 
 const MAX_CHIPS = 8;
 /** A chip the buddy hands off drops in this long after it sets off, ms. */
@@ -162,7 +162,14 @@ export function Dock() {
               // Toggles the card; the card's ↗ button opens the panel.
               onClick={(e) => (open === a.id ? api.dockCardClose() : hover(a.id, e.currentTarget))}
             >
-              {faces ? <Buddy style={style} size={28} baby state={a.status === "running" ? "thinking" : "idle"} animate={settings?.buddy.showStateAnimations ?? true} /> : <Mark />}
+              {faces ? (
+                // Remounts on each status change, so a finished baby's cheer plays once.
+                <span key={a.status} className="chip__face">
+                  <Buddy style={style} size={28} baby state={a.status === "running" ? "thinking" : "idle"} mood={mood(a.status)} animate={settings?.buddy.showStateAnimations ?? true} />
+                </span>
+              ) : (
+                <Mark />
+              )}
               {/* Remounts on every status change, so each change ripples once. */}
               <span key={a.status} className="chip__ripple" aria-hidden="true" />
               {a.unseen && <span className="chip__dot" />}

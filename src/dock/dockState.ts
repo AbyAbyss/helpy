@@ -22,6 +22,22 @@ export function tone(s: Status): Tone {
   }
 }
 
+/** How a baby of the buddy feels about its job, by status. */
+export function mood(s: Status): "happy" | "curious" | "worried" | null {
+  switch (s) {
+    case "done":
+    case "ready":
+      return "happy";
+    case "question":
+      return "curious";
+    case "approval":
+    case "failed":
+      return "worried";
+    default:
+      return null;
+  }
+}
+
 export const STATUS_LABEL: Record<Status, string> = {
   queued: "Waiting",
   running: "Working",

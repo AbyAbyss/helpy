@@ -23,6 +23,9 @@ export function Island() {
   const [working, setWorking] = useState(0);
   // A little agent pushed off toward the dock as agents start.
   const [spawn, setSpawn] = useState(0);
+  // The last agent just finished: a moment of cheer.
+  const [cheer, setCheer] = useState(false);
+  const wasWorking = useRef(0);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,6 +40,15 @@ export function Island() {
     api.agents().then((l) => setWorking(l.agents.filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status)).length), () => {});
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
+
+  useEffect(() => {
+    const finished = wasWorking.current > 0 && working === 0;
+    wasWorking.current = working;
+    if (!finished) return;
+    setCheer(true);
+    const t = setTimeout(() => setCheer(false), 2600);
+    return () => clearTimeout(t);
+  }, [working]);
 
   // The window follows the content's size, and moves when the edge or the
   // spot along it changes.
@@ -58,15 +70,15 @@ export function Island() {
   const mood: BuddyState =
     voice === "listening" ? "listening" : speaking ? "speaking" : voice === "transcribing" || activity.running ? "thinking" : "idle";
   const busy = mood !== "idle";
-  const open = hover || busy || spawn > 0;
+  const open = hover || busy || spawn > 0 || cheer;
   const dockSide = settings?.agents.dockSide ?? "right";
   const line =
-    spawn > 0 ? "Starting agents…" : mood === "listening" ? "Listening…" : mood === "thinking" ? "Thinking…" : mood === "speaking" ? "Speaking" : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Ask me anything";
+    spawn > 0 ? "Starting agents…" : cheer ? "All done!" : mood === "listening" ? "Listening…" : mood === "thinking" ? "Thinking…" : mood === "speaking" ? "Speaking" : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Ask me anything";
 
   return (
     <div
       ref={root}
-      className={`island island--${b.notchEdge}${open ? " is-open" : ""}${busy ? " is-busy" : ""}`}
+      className={`island island--${b.notchEdge} island--${b.islandLook}${open ? " is-open" : ""}${busy ? " is-busy" : ""}`}
       role="button"
       aria-label="Helpy. Click to ask"
       onMouseEnter={() => setHover(true)}
@@ -76,7 +88,7 @@ export function Island() {
       {open ? (
         <>
           <span className={`island__face${spawn > 0 ? " is-pushing" : ""}`} key={spawn}>
-            <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
+            <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} mood={cheer ? "happy" : null} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
             {spawn > 0 && (
               <span className={`island__spawn island__spawn--${dockSide}`} onAnimationEnd={() => setSpawn(0)}>
                 <Buddy style={b.style === "custom" ? "pip" : b.style} size={16} baby state="idle" animate={false} />
@@ -85,6 +97,11 @@ export function Island() {
           </span>
           <span className="island__line">{line}</span>
         </>
+      ) : b.islandLook === "peek" ? (
+        <span className="island__peek" aria-hidden="true">
+          <Buddy style={b.style === "custom" ? "pip" : b.style} size={22} baby state="idle" animate={b.showStateAnimations} />
+          {working > 0 && <b className="island__dot" />}
+        </span>
       ) : (
         <span className="island__eyes" aria-hidden="true">
           <i />

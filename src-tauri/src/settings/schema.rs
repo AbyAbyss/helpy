@@ -129,6 +129,17 @@ pub enum BuddyHome {
     Notch,
 }
 
+/// What the island shows while it rests: a pair of eyes, or the buddy's
+/// baby peeking out.
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum IslandLook {
+    Eyes,
+    #[default]
+    Peek,
+}
+
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -151,6 +162,7 @@ pub struct Buddy {
     pub notch_edge: ScreenEdge,
     /// How far along that edge, 0 (start) to 1 (end); 0.5 is the middle.
     pub notch_offset: f64,
+    pub island_look: IslandLook,
     /// Rendered size in logical pixels.
     pub size: u32,
     /// 0.2 to 1.0.
@@ -174,6 +186,7 @@ impl Default for Buddy {
             home: BuddyHome::Cursor,
             notch_edge: ScreenEdge::Top,
             notch_offset: 0.5,
+            island_look: IslandLook::Peek,
             size: 36,
             opacity: 1.0,
             offset_x: 18,

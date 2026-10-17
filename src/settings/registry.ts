@@ -199,6 +199,12 @@ export const FIELDS: Field[] = [
     when: (s) => s.buddy.home === "notch",
   },
   {
+    path: "buddy.islandLook", section: "buddy", group: "Buddy", label: "While it rests",
+    help: "Peeking shows the buddy's baby looking out of the island, blinking and glancing about.", keywords: "island look eyes peek face cute",
+    control: { kind: "segmented", options: [{ value: "peek", label: "Peeking face" }, { value: "eyes", label: "Just eyes" }] },
+    when: (s) => s.buddy.home === "notch",
+  },
+  {
     path: "buddy.notchOffset", section: "buddy", group: "Buddy", label: "Where along the edge",
     help: "The middle sits under a MacBook's notch.", keywords: "notch island offset centre middle",
     control: { kind: "slider", min: 0, max: 1, step: 0.05, format: pct, ends: ["Start", "End"] },
