@@ -1,47 +1,57 @@
 # Demo video narration
 
-The script read over `helpy-demo.mp4`, scene by scene. The voice in the file is synthesized (espeak-ng with an MBROLA voice); re-record it in your own voice over the same picture if you prefer.
+Two cuts of the same picture: `helpy-demo.mp4` has this narration over a quiet music bed, `helpy-demo-music.mp4` has the music alone. Both run 2:58.
+
+The voice is synthesized (Kokoro, British English) and the music is a lo-fi bed rendered from a MIDI score with a General MIDI soundfont, so neither needs a licence. The agent run is staged with sample data and fictional shops.
 
 ## Title
 
-Meet Helpy: an AI companion that lives next to your cursor. Ask out loud, and it looks at your screen and points at the answer. It's our entry for the Nebius and NVIDIA hackathon, and with one click it runs entirely on open models from Nebius Token Factory, with Nemotron doing the reasoning.
+This is Helpy: an AI companion that lives next to your cursor. It looks at your screen, points at the answer, draws on your apps and runs agents in the background, all on open models from Nebius Token Factory, with NVIDIA Nemotron doing the thinking.
 
 ## Cursor buddy, voice and visual guidance
 
-Pip, the cursor buddy, follows your pointer on every monitor. Hold a hotkey and talk. Helpy screenshots the monitor under your cursor, never including its own windows, and highlights the right control on top of your real app. Walkthroughs go one step at a time, highlights snap onto the real button, and Do it clicks for you after you confirm that one click.
+Pip follows your pointer on every monitor. Ask out loud, and Helpy screenshots the monitor under your cursor, never its own windows, and highlights the real control. Walkthroughs go a step at a time, and Do it clicks for you after you confirm.
+
+## Explaining on screen: shapes, labels, a picture and a chart
+
+Ask it to explain something and it teaches on your screen: it draws shapes in any size and direction, writes labels and formulas, drops in a reference picture, and charts the numbers, all on a click-through overlay while Pip traces along.
 
 ## Circle to explain
 
-Circle to explain freezes the screen. Draw around anything, and Helpy explains it, labels the parts of a diagram, copies the text, or translates it.
+Circle to explain freezes the screen. Draw around anything and Helpy explains it, labels the parts, copies the text or translates it.
 
 ## Agents: the plan card
 
-Now the part we're proudest of: background agents. Just say what you want done. Helpy plans it with Nemotron Ultra and shows a plan card first: each agent, its tools, and what it will ask you before doing.
+Background agents. Say what you want done. Nemotron Ultra plans it and shows a card first: each agent, its tools, and what it will ask before acting.
 
-## Agents: the Playwright browser at work
+## Agents: Tavily and the Playwright browser at work
 
-Press Start, and a copy of the buddy flies to the dock. The agent drives a real browser through the Playwright MCP server. It opens pages, reads each one as text with every button and field, clicks through listings, fills in search boxes, and scrolls where it has to. Nemotron Super runs these steps, because its tool calls are fast and reliable.
+Press Start and a copy of the buddy flies to the dock. The agent searches with Tavily, drives a real browser through the Playwright MCP server, reads every page as text, clicks through listings and fills in forms. Nemotron Super runs each step.
 
 ## Agents: approvals
 
-Typing into a website waits for your OK. Approve it on the card, or reject it. A rejected action never runs.
+Typing into a website waits for your OK. Approve it, or reject it, and a rejected action never runs.
 
 ## Agents: the result
 
-When it's done, the card shows the result, the CSV it saved, and a few next steps. Follow up by text or voice, and every file change can be undone in one click.
+When it finishes you get the result, a chart, the CSV it saved and next steps. Follow up by text or voice, and undo every file change in one click.
 
-## Limits and privacy
+## The agent panel and the approval inbox
 
-Limits live in Rust, not in the prompt: steps, tool calls, time, and token and cost budgets per agent, per batch and per day, checked before every call. Agents are saved after every step, so they come back after a restart. Password managers are blanked out of every screenshot, and offline mode keeps everything on your own machine.
+The agent panel shows every agent with its timeline, tokens and cost, and the approval inbox gathers everything waiting for you, editable before you approve.
+
+## Settings
+
+Settings are searchable and instant. Add Nebius Token Factory, load its models, and press Use for everything. Agents search with Tavily, work only in folders you approve, and connect to Gmail, Notion, Slack, GitHub and any MCP server, each action set to allow, ask or never. Privacy blanks password managers out of every screenshot, and the memory page shows what Helpy remembers.
+
+## Limits
+
+Limits live in Rust, not in the prompt: steps, tool calls, time, and token and cost budgets. Agents are saved after every step, so they survive a restart.
 
 ## Nemotron on Nebius
 
-Under the hood: Nemotron 3 Super answers questions and runs the agents. Nemotron 3 Ultra plans and splits the work, where the strongest reasoning pays off. Kimi K3 reads the screen, because in our grounding benchmark on Token Factory it hit all twelve targets with a median error of one pixel. And Tavily gives agents search, page extraction and deep research.
-
-## And more
-
-There's more: an agent panel with timelines, spending and undo. Templates and triggers for work that repeats. Connectors for Gmail, Calendar, Notion, Slack and GitHub, plus any MCP server, each action with its own Allow, Ask or Never rule.
+Under the hood, Nemotron 3 Super answers and runs the agents, Nemotron 3 Ultra plans and splits the work, and Kimi K3 reads the screen: the most accurate pointer in our grounding benchmark, twelve targets out of twelve.
 
 ## Outro
 
-Helpy is open source under the MIT license, built with Tauri, Rust and React, for Windows, macOS and Linux. Thanks for watching.
+Helpy is open source under the MIT license, built with Tauri, Rust and React for Windows, macOS and Linux.
