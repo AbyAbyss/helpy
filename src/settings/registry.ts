@@ -776,8 +776,8 @@ FIELDS.push(
   },
   {
     path: "agents.dockStyle", section: "agents", group: "Dock and notifications", label: "Chips look like",
-    help: "Little faces are the buddy itself, one per agent, thinking while it works.", keywords: "dock chips faces mascot buddy look",
-    control: { kind: "segmented", options: [{ value: "chips", label: "Marks" }, { value: "faces", label: "Little faces" }] },
+    help: "Babies of the buddy, one per agent, thinking while it works.", keywords: "dock chips faces babies mascot buddy look",
+    control: { kind: "segmented", options: [{ value: "chips", label: "Marks" }, { value: "faces", label: "Buddy babies" }] },
     when: (s) => s.agents.dock,
   },
   {

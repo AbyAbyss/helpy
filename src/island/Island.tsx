@@ -79,7 +79,7 @@ export function Island() {
             <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
             {spawn > 0 && (
               <span className={`island__spawn island__spawn--${dockSide}`} onAnimationEnd={() => setSpawn(0)}>
-                <Buddy style={b.style === "custom" ? "pip" : b.style} size={16} state="idle" animate={false} />
+                <Buddy style={b.style === "custom" ? "pip" : b.style} size={16} baby state="idle" animate={false} />
               </span>
             )}
           </span>

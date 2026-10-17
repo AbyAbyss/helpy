@@ -162,7 +162,7 @@ export function Dock() {
               // Toggles the card; the card's ↗ button opens the panel.
               onClick={(e) => (open === a.id ? api.dockCardClose() : hover(a.id, e.currentTarget))}
             >
-              {faces ? <Buddy style={style} size={26} state={a.status === "running" ? "thinking" : "idle"} animate={settings?.buddy.showStateAnimations ?? true} /> : <Mark />}
+              {faces ? <Buddy style={style} size={28} baby state={a.status === "running" ? "thinking" : "idle"} animate={settings?.buddy.showStateAnimations ?? true} /> : <Mark />}
               {/* Remounts on every status change, so each change ripples once. */}
               <span key={a.status} className="chip__ripple" aria-hidden="true" />
               {a.unseen && <span className="chip__dot" />}
