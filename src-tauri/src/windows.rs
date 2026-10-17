@@ -19,6 +19,10 @@ pub const DOCK: &str = "dock";
 pub const DOCK_CARD: &str = "dockcard";
 /// Which agent the dock card shows (None: it's closed).
 pub const DOCK_CARD_EVENT: &str = "dock://card";
+/// The buddy's island at the screen edge (its home when not beside the cursor).
+pub const ISLAND: &str = "island";
+/// Where the island is, in one overlay's own logical pixels.
+pub const NOTCH_EVENT: &str = "buddy://notch";
 /// The agent panel.
 pub const AGENTS: &str = "agents";
 pub const AGENTS_FOCUS_EVENT: &str = "agents://focus";
@@ -44,6 +48,105 @@ pub struct BuddyHandoff {
     pub x: f64,
     pub y: f64,
 }
+/// The island's centre in global physical pixels while it shows.
+static ISLAND_CENTRE: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
+
+#[derive(Serialize, TS, Clone, Copy, Debug)]
+#[ts(export)]
+pub struct NotchPoint {
+    pub x: f64,
+    pub y: f64,
+    /// False when the island isn't showing (the buddy lives by the cursor).
+    pub shown: bool,
+}
+
+/// Where the island's top-left goes (physical pixels): flat against its
+/// edge, `offset` of the way along it.
+pub fn island_origin(
+    m: (f64, f64, f64, f64),
+    size: (f64, f64),
+    edge: crate::settings::schema::ScreenEdge,
+    offset: f64,
+) -> (f64, f64) {
+    use crate::settings::schema::ScreenEdge::*;
+    let (mx, my, mw, mh) = m;
+    let t = offset.clamp(0.0, 1.0);
+    match edge {
+        Top => (mx + (mw - size.0) * t, my),
+        Bottom => (mx + (mw - size.0) * t, my + mh - size.1),
+        Left => (mx, my + (mh - size.1) * t),
+        Right => (mx + mw - size.0, my + (mh - size.1) * t),
+    }
+}
+
+/// The island page reports its size; it shows only while the buddy's home
+/// is the screen edge.
+#[tauri::command]
+pub fn island_layout(app: AppHandle, width: f64, height: f64) {
+    let Some(w) = app.get_webview_window(ISLAND) else {
+        return;
+    };
+    let b = app.state::<crate::settings::SettingsStore>().get().buddy;
+    if width <= 0.0 || height <= 0.0 || !b.enabled || b.home != crate::settings::schema::BuddyHome::Notch {
+        hide_island(&app);
+        return;
+    }
+    let Some(m) = dock_monitor(&app) else { return };
+    let size = (width * m.scale, height * m.scale);
+    let (x, y) = island_origin(
+        (m.x as f64, m.y as f64, m.width as f64, m.height as f64),
+        size,
+        b.notch_edge,
+        b.notch_offset,
+    );
+    let _ = w.set_size(PhysicalSize::new(size.0.round() as u32, size.1.round() as u32));
+    let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+    if !w.is_visible().unwrap_or(false) {
+        let _ = w.show();
+        let _ = w.set_always_on_top(true);
+    }
+    *ISLAND_CENTRE.lock().unwrap() = Some((x + size.0 / 2.0, y + size.1 / 2.0));
+    tell_notch(&app);
+}
+
+fn hide_island(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(ISLAND) {
+        let _ = w.hide();
+    }
+    *ISLAND_CENTRE.lock().unwrap() = None;
+    tell_notch(app);
+}
+
+/// Every overlay learns where the island is, in its own pixels, so the buddy
+/// can fly between it and the cursor.
+pub fn tell_notch(app: &AppHandle) {
+    let centre = *ISLAND_CENTRE.lock().unwrap();
+    for (label, m) in app.state::<Overlays>().snapshot() {
+        let point = match centre {
+            Some((x, y)) => {
+                let (lx, ly) = m.to_local_logical(x, y);
+                NotchPoint { x: lx, y: ly, shown: true }
+            }
+            None => NotchPoint { x: 0.0, y: 0.0, shown: false },
+        };
+        let _ = app.emit_to(label.as_str(), NOTCH_EVENT, point);
+    }
+}
+
+/// The buddy settings changed: the island hides when it's no longer the
+/// home; when it is, the page reports its size again and it shows.
+pub fn island_sync(app: &AppHandle, s: &crate::settings::Settings) {
+    if !(s.buddy.enabled && s.buddy.home == crate::settings::schema::BuddyHome::Notch) {
+        hide_island(app);
+    }
+}
+
+/// A click on the island opens the text chat beside it.
+#[tauri::command]
+pub fn island_open(app: AppHandle) {
+    show_ask(&app);
+}
+
 /// Plan card size in logical pixels (matches tauri.conf.json).
 const PLAN_SIZE: (f64, f64) = (460.0, 520.0);
 
@@ -709,6 +812,18 @@ pub fn open_settings_section(app: AppHandle, section: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn island_hugs_its_edge_at_the_offset() {
+        use crate::settings::schema::ScreenEdge::*;
+        let m = (0.0, 0.0, 1000.0, 600.0);
+        assert_eq!(island_origin(m, (100.0, 40.0), Top, 0.5), (450.0, 0.0));
+        assert_eq!(island_origin(m, (100.0, 40.0), Bottom, 0.0), (0.0, 560.0));
+        assert_eq!(island_origin(m, (100.0, 40.0), Left, 1.0), (0.0, 560.0));
+        assert_eq!(island_origin(m, (100.0, 40.0), Right, 0.5), (900.0, 280.0));
+        // Off-screen offsets are pulled back, and a second monitor keeps its origin.
+        assert_eq!(island_origin((2000.0, 100.0, 1000.0, 600.0), (100.0, 40.0), Top, 7.0), (2900.0, 100.0));
+    }
 
     #[test]
     fn agent_panel_takes_most_of_the_screen() {

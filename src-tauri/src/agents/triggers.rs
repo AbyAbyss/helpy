@@ -266,6 +266,44 @@ fn glob(pat: &str, text: &str) -> bool {
     )
 }
 
+/// A plan the user asked for again and again becomes a trigger: one agent
+/// is kept as its goal and tools, several are saved as a template first.
+pub fn add_for_plan(app: &AppHandle, request: &str, cron: &str, agents: &[PlanAgent]) -> Result<(), String> {
+    let name = super::templates::title_for(request, "Scheduled task");
+    let mut t = Trigger {
+        id: super::new_id("tr"),
+        name: name.clone(),
+        enabled: true,
+        when: TriggerWhen::Schedule { cron: cron.to_string() },
+        ..Trigger::default()
+    };
+    match agents {
+        [a] => {
+            t.goal = a.goal.clone();
+            t.tools = a.tools.clone();
+        }
+        _ => {
+            let list = agents
+                .iter()
+                .map(|a| crate::settings::schema::TemplateAgent {
+                    name: a.name.clone(),
+                    goal: a.goal.clone(),
+                    tools: a.tools.clone(),
+                    keep_open: a.keep_open,
+                    after: a.after.clone(),
+                })
+                .collect();
+            t.template = super::templates::save(app, request, list)?.id;
+        }
+    }
+    let mut s = app.state::<SettingsStore>().get();
+    s.agents.triggers.push(t);
+    let value = serde_json::to_value(&s.agents.triggers).unwrap_or_default();
+    crate::settings::settings_set(app.clone(), "agents.triggers".into(), value)
+        .map(|_| ())
+        .map_err(|e| format!("Couldn't save the schedule: {}", e.first().map(|e| e.message.clone()).unwrap_or_default()))
+}
+
 // ---------- Running ----------
 
 /// The agents a trigger starts, with the folders they need.

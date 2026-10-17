@@ -1620,6 +1620,25 @@ select {
   font-size: 13px;
 }
 
+.notes__row > span {
+  flex: 1;
+}
+
+.notes__row > .text-input {
+  flex: 1;
+  margin: -4px -6px;
+}
+
+.notes__add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.notes__add .text-input {
+  flex: 1;
+}
+
 /* Today's numbers */
 .ustats {
   display: grid;

@@ -83,11 +83,17 @@ fn run(app: AppHandle) {
         let idle = buddy.hide_when_idle
             && last_move.elapsed() >= Duration::from_secs(buddy.idle_seconds as u64)
             && !busy(&app);
-        let visible = buddy.enabled && !(buddy.hide_in_fullscreen && fullscreen) && !idle;
+        // From its island at the screen edge, the buddy only comes over while
+        // Helpy listens, answers or speaks.
+        let at_home = buddy.home == crate::settings::schema::BuddyHome::Notch && !busy(&app);
+        let visible = buddy.enabled && !(buddy.hide_in_fullscreen && fullscreen) && !idle && !at_home;
         if last_visible != Some(visible) || resend {
             last_visible = Some(visible);
             shared.visible.store(visible, Ordering::Relaxed);
             let _ = app.emit(VISIBLE_EVENT, visible);
+        }
+        if resend {
+            crate::windows::tell_notch(&app);
         }
 
         if !moved && !resend {

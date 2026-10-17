@@ -14,6 +14,9 @@
   "buddy": {
     "enabled": true,
     "style": "pip",
+    "home": "cursor",
+    "notchEdge": "top",
+    "notchOffset": 0.5,
     "size": 36,
     "opacity": 1.0,
     "offsetX": 18,

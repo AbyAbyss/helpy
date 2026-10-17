@@ -18,7 +18,7 @@ const KINDS: { value: ParamKind; label: string }[] = [
 
 const newId = () => `t${Date.now()}`;
 
-/** The user's templates, editable; built-in ones can be copied to edit. */
+/** The user's skills, editable; built-in ones can be copied to edit. */
 export function TemplateEditor({ value, onChange }: { value: Template[]; onChange: (v: Template[]) => void }) {
   const [builtins, setBuiltins] = useState<TemplateInfo[]>([]);
   const [groups, setGroups] = useState<ToolGroup[]>([]);
@@ -34,7 +34,7 @@ export function TemplateEditor({ value, onChange }: { value: Template[]; onChang
   };
   const blank = (): Template => ({
     id: newId(),
-    name: "My template",
+    name: "My skill",
     description: "",
     params: [{ key: "topic", label: "Topic", kind: "text", default: "", options: [], required: true }],
     agents: [{ name: "Agent", goal: "Do something about {topic}.", tools: ["search", "web"], keepOpen: false, after: [] }],
@@ -46,7 +46,7 @@ export function TemplateEditor({ value, onChange }: { value: Template[]; onChang
       {value.length === 0 && (
         <div className="providers__empty">
           <p>
-            <strong>No templates of your own yet.</strong> Make one here, copy a built-in one, or use "Save as template" on any agent
+            <strong>No skills of your own yet.</strong> Make one here, copy a built-in one, or use "Save as skill" on any agent
             in the agent panel.
           </p>
         </div>
@@ -77,7 +77,7 @@ export function TemplateEditor({ value, onChange }: { value: Template[]; onChang
       ))}
       <div className="pform__foot">
         <button type="button" className="btn btn--ghost add-btn" onClick={() => add(blank())}>
-          + New template
+          + New skill
         </button>
         {builtins.length > 0 && (
           <select

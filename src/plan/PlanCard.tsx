@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Plan } from "../bindings/Plan";
 import type { RunMode } from "../bindings/RunMode";
 import { api, EVENTS } from "../lib/ipc";
+import { describe } from "../lib/schedule";
 
 /**
  * The plan card: what Helpy is about to start, and the only way it starts.
@@ -80,6 +81,7 @@ export function PlanCard() {
               <p className="pcard__request" title={plan.request}>
                 “{plan.request}”
               </p>
+              {plan.skill && <span className="pcard__skill">Skill · {plan.skill}</span>}
             </div>
           </header>
 
@@ -120,8 +122,16 @@ export function PlanCard() {
             ))}
           </ol>
 
-          {(plan.asks.length > 0 || plan.newFolders.length > 0 || plan.hasImage || unconnected.length > 0) && (
+          {(plan.asks.length > 0 || plan.newFolders.length > 0 || plan.hasImage || unconnected.length > 0 || plan.schedule) && (
             <ul className="pnotes">
+              {plan.schedule && (
+                <li>
+                  <Dot tone="schedule" />
+                  <span>
+                    Runs now, then <b>{describe(plan.schedule).replace(/^\w/, (c) => c.toLowerCase())}</b>. Change or stop it under Settings → Agents.
+                  </span>
+                </li>
+              )}
               {unconnected.map((g) => (
                 <li key={g.id}>
                   <Dot tone="connect" />
@@ -177,7 +187,7 @@ export function PlanCard() {
   );
 }
 
-function Dot({ tone }: { tone: "ask" | "folder" | "image" | "connect" }) {
+function Dot({ tone }: { tone: "ask" | "folder" | "image" | "connect" | "schedule" }) {
   return <span className={`dot dot--${tone}`} aria-hidden="true" />;
 }
 

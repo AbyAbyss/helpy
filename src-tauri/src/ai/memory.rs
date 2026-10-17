@@ -100,6 +100,26 @@ pub fn ai_notes(app: AppHandle) -> Vec<Note> {
     list(&app)
 }
 
+/// A note typed by hand in Settings; same rules as one the model saves.
+#[tauri::command]
+pub fn ai_note_add(app: AppHandle, text: String) -> Result<Note, String> {
+    remember(&app, &text)
+}
+
+#[tauri::command]
+pub fn ai_note_update(app: AppHandle, id: i64, text: String) -> Result<(), String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err("Nothing to remember.".into());
+    }
+    if text.chars().count() > MAX_NOTE_CHARS {
+        return Err(format!("Keep a note under {MAX_NOTE_CHARS} characters."));
+    }
+    app.state::<AgentsState>().store().update_note(id, text);
+    let _ = app.emit(CHANGED_EVENT, ());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn ai_note_delete(app: AppHandle, id: i64) {
     app.state::<AgentsState>().store().delete_note(id);

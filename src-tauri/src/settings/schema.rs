@@ -118,12 +118,39 @@ pub enum BuddyStyle {
     Custom,
 }
 
+/// Where the buddy lives: beside the pointer, or in a small island at the
+/// screen edge that it leaves to come to the pointer when spoken to.
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum BuddyHome {
+    #[default]
+    Cursor,
+    Notch,
+}
+
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ScreenEdge {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
 #[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 #[ts(export)]
 pub struct Buddy {
     pub enabled: bool,
     pub style: BuddyStyle,
+    pub home: BuddyHome,
+    /// With `home` at the edge: which edge of the main screen.
+    pub notch_edge: ScreenEdge,
+    /// How far along that edge, 0 (start) to 1 (end); 0.5 is the middle.
+    pub notch_offset: f64,
     /// Rendered size in logical pixels.
     pub size: u32,
     /// 0.2 to 1.0.
@@ -144,6 +171,9 @@ impl Default for Buddy {
         Self {
             enabled: true,
             style: BuddyStyle::Pip,
+            home: BuddyHome::Cursor,
+            notch_edge: ScreenEdge::Top,
+            notch_offset: 0.5,
             size: 36,
             opacity: 1.0,
             offset_x: 18,

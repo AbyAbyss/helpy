@@ -8,12 +8,14 @@ import type { Settings } from "../bindings/Settings";
 import { api } from "../lib/ipc";
 import { ProvidersEditor } from "./ai/Providers";
 import { Keycaps } from "./controls";
+import { WhisperModels } from "./VoiceControls";
 
 type Props = {
   settings: Settings;
   platform: PlatformInfo | null;
   commitAi: (ai: Ai) => Promise<string | null>;
   setProfile: (p: BuiltinProfile) => void;
+  setWhisperModel: (name: string) => void;
   onDone: () => void;
 };
 
@@ -26,7 +28,7 @@ const PROFILES: { id: BuiltinProfile; title: string; text: string }[] = [
 ];
 
 /** The welcome tour, shown once in the settings window on a fresh install. */
-export function Onboarding({ settings, platform, commitAi, setProfile, onDone }: Props) {
+export function Onboarding({ settings, platform, commitAi, setProfile, setWhisperModel, onDone }: Props) {
   const [step, setStep] = useState(0);
   const [perms, setPerms] = useState<Permissions | null>(null);
   const [install, setInstall] = useState<InstallInfo | null>(null);
@@ -235,6 +237,12 @@ export function Onboarding({ settings, platform, commitAi, setProfile, onDone }:
               </dt>
               <dd>Agents</dd>
             </dl>
+            {settings.voiceInput.engine === "whisper" && (
+              <>
+                <p className="welcome__lead">Speech is understood on this computer with Whisper. Download a model once so the voice hotkey works offline; <b>base</b> is a good start.</p>
+                <WhisperModels value={settings.voiceInput.whisperModel} onChange={setWhisperModel} />
+              </>
+            )}
             <p className="welcome__small">I'll wait in the tray. Settings are there too.</p>
           </section>
         )}

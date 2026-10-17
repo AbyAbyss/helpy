@@ -35,6 +35,9 @@ pub(crate) fn on_settings_changed(app: &AppHandle, prev: &Settings, next: &Setti
     if prev.hotkeys != next.hotkeys {
         hotkeys::sync(app, next);
     }
+    if prev.buddy != next.buddy {
+        windows::island_sync(app, next);
+    }
     if prev.voice_input != next.voice_input {
         if prev.voice_input.whisper_model != next.voice_input.whisper_model {
             app.state::<voice::VoiceState>().whisper.forget();
@@ -195,6 +198,8 @@ pub fn run() {
             ai::ask::ask_status,
             ai::ask::ask_activity,
             ai::memory::ai_notes,
+            ai::memory::ai_note_add,
+            ai::memory::ai_note_update,
             ai::memory::ai_note_delete,
             ai::memory::ai_notes_clear,
             windows::ask_hide,
@@ -227,6 +232,8 @@ pub fn run() {
             agents::planner::agents_plan,
             agents::agents_voice_follow_up,
             windows::dock_layout,
+            windows::island_layout,
+            windows::island_open,
             windows::agents_open_panel,
             windows::open_link,
             agents::agents_export,
