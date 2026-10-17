@@ -46,6 +46,7 @@ export const EVENTS = {
   buddyHandoff: "buddy://handoff",
   notch: "buddy://notch",
   islandSpawn: "island://spawn",
+  sleepy: "buddy://sleepy",
   openSection: "settings://open-section",
   askShown: "ask://shown",
   ask: "ask://event",

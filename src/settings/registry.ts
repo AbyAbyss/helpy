@@ -199,9 +199,9 @@ export const FIELDS: Field[] = [
     when: (s) => s.buddy.home === "notch",
   },
   {
-    path: "buddy.islandLook", section: "buddy", group: "Buddy", label: "While it rests",
-    help: "The buddy's baby looking out of the island, or a pair of big sparkly eyes. Both blink and glance about.", keywords: "island look eyes sparkle anime peek face cute",
-    control: { kind: "segmented", options: [{ value: "peek", label: "Peeking face" }, { value: "eyes", label: "Sparkly eyes" }] },
+    path: "buddy.islandLook", section: "buddy", group: "Buddy", label: "Island look",
+    help: "The buddy's baby peeking out of the island, or the island itself as a little character with eyes, a mouth and hands that shows how it feels: listening, thinking, working, cheering, dozing off.", keywords: "island look eyes face character mascot peek cute",
+    control: { kind: "segmented", options: [{ value: "peek", label: "Peeking baby" }, { value: "face", label: "Island face" }] },
     when: (s) => s.buddy.home === "notch",
   },
   {

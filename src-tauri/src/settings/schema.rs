@@ -129,15 +129,15 @@ pub enum BuddyHome {
     Notch,
 }
 
-/// What the island shows while it rests: a pair of eyes, or the buddy's
-/// baby peeking out.
+/// What the island looks like: the buddy's baby peeking out of a dark
+/// capsule, or the capsule itself as a face with eyes, a mouth and hands.
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum IslandLook {
-    Eyes,
     #[default]
     Peek,
+    Face,
 }
 
 #[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]

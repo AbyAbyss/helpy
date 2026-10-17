@@ -16,6 +16,9 @@ use crate::settings::SettingsStore;
 
 pub const CURSOR_EVENT: &str = "overlay://cursor";
 pub const VISIBLE_EVENT: &str = "buddy://visible";
+/// The mouse has rested this long: the island may doze off.
+pub const SLEEPY_EVENT: &str = "buddy://sleepy";
+const SLEEPY_AFTER: Duration = Duration::from_secs(90);
 
 const POLL: Duration = Duration::from_millis(8);
 const FULLSCREEN_CHECK: Duration = Duration::from_millis(500);
@@ -55,6 +58,7 @@ fn run(app: AppHandle) {
     let mut last_monitor_check = Instant::now();
     let mut fullscreen = false;
     let mut last_visible: Option<bool> = None;
+    let mut last_sleepy = false;
 
     loop {
         thread::sleep(POLL);
@@ -94,6 +98,11 @@ fn run(app: AppHandle) {
         }
         if resend {
             crate::windows::tell_notch(&app);
+        }
+        let sleepy = last_move.elapsed() >= SLEEPY_AFTER && !busy(&app);
+        if sleepy != last_sleepy || resend {
+            last_sleepy = sleepy;
+            let _ = app.emit(SLEEPY_EVENT, sleepy);
         }
 
         if !moved && !resend {

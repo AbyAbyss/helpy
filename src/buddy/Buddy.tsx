@@ -3,7 +3,7 @@ import "./buddy.css";
 
 export type BuddyState = "idle" | "listening" | "thinking" | "speaking";
 /** A feeling on top of the state: how a job is going. */
-export type BuddyMood = "happy" | "curious" | "worried";
+export type BuddyMood = "happy" | "curious" | "worried" | "sleepy";
 
 type Props = {
   style: BuddyStyle;
@@ -63,6 +63,11 @@ export function Buddy({ style, size, state = "idle", animate = true, badge, queu
                     <path className="buddy__arc" d={`M${eyeX[0] - 3.5} ${eyeY + 1} q3.5 -5 7 0`} />
                     <path className="buddy__arc" d={`M${eyeX[1] - 3.5} ${eyeY + 1} q3.5 -5 7 0`} />
                   </>
+                ) : mood === "sleepy" ? (
+                  <>
+                    <path className="buddy__arc" d={`M${eyeX[0] - 3.5} ${eyeY - 1} q3.5 4 7 0`} />
+                    <path className="buddy__arc" d={`M${eyeX[1] - 3.5} ${eyeY - 1} q3.5 4 7 0`} />
+                  </>
                 ) : (
                   <>
                     <ellipse cx={eyeX[0]} cy={eyeY} rx={baby ? 3.6 : 2.9} ry={baby ? 4.8 : 4} />
@@ -80,6 +85,7 @@ export function Buddy({ style, size, state = "idle", animate = true, badge, queu
               </g>
               {mood === "worried" && <path className="buddy__sweat" d="M53 24 q4 6 0 9 q-4 -3 0 -9 Z" />}
               {mood === "curious" && <text className="buddy__mark" x="52" y="22">?</text>}
+              {mood === "sleepy" && <text className="buddy__mark buddy__zzz" x="50" y="20">z</text>}
               {baby ? (
                 <path className="buddy__smile" d="M31 45 Q34.5 48 38 45" />
               ) : (

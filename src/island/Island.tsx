@@ -7,30 +7,94 @@ import { Buddy, type BuddyState } from "../buddy/Buddy";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings } from "../lib/useSettings";
 
-/** Two big glossy eyes with a blush, blinking and glancing about. */
-function SparklyEyes() {
-  const eye = (cx: number) => (
-    <g className="island__eye">
-      <ellipse cx={cx} cy={10} rx={6.2} ry={7.6} fill="url(#island-iris)" />
-      <ellipse cx={cx} cy={13.5} rx={3.2} ry={2.6} fill="#1b3a9a" opacity={0.55} />
-      <ellipse className="island__shine" cx={cx - 2.1} cy={7} rx={2.3} ry={2.9} fill="#fff" />
-      <circle className="island__twinkle" cx={cx + 2.4} cy={13} r={1.2} fill="#fff" />
-      <ellipse cx={cx} cy={10} rx={6.2} ry={7.6} fill="none" stroke="#fff" strokeOpacity={0.35} strokeWidth={0.8} />
+export type Expression = "happy" | "listening" | "thinking" | "speaking" | "working" | "excited" | "sleepy";
+
+/**
+ * The island as a character: white eyes with dark pupils, a small mouth and
+ * two hands on the rim, drawn in a 60 by 30 box. Each expression changes
+ * the eyes and mouth; the extras (a question mark, sparks, sound waves,
+ * a progress bar, z's) sit around them.
+ */
+function PillFace({ expr }: { expr: Expression }) {
+  const closed = expr === "excited" || expr === "sleepy";
+  const eye = (cx: number, squint: boolean) => (
+    <g className="pf__eye" style={squint ? { transform: "scaleY(0.55)" } : undefined}>
+      <ellipse cx={cx} cy={13} rx={expr === "listening" ? 7 : 6.2} ry={expr === "listening" ? 8.2 : 7.4} fill="#fff" />
+      <ellipse className="pf__pupil" cx={cx + (expr === "thinking" ? 1.6 : 0)} cy={13 + (expr === "thinking" ? -1.8 : 0.6)} rx={expr === "listening" ? 3.8 : 3.3} ry={expr === "listening" ? 4.6 : 4.1} fill="#0b0d14" />
+      <circle cx={cx - 1.4 + (expr === "thinking" ? 1.6 : 0)} cy={10.6 + (expr === "thinking" ? -1.8 : 0)} r={1.25} fill="#fff" />
     </g>
   );
   return (
-    <svg viewBox="0 0 46 20" width="46" height="20">
+    <svg className={`pf pf--${expr}`} viewBox="0 0 60 30" width="60" height="30" aria-hidden="true">
+      {/* Hands on the rim. */}
+      <circle cx={9} cy={27.5} r={4} fill="#1c2030" />
+      <circle cx={51} cy={27.5} r={4} fill="#1c2030" />
+      <circle cx={9} cy={26.5} r={3} fill="#262b3b" />
+      <circle cx={51} cy={26.5} r={3} fill="#262b3b" />
+      {closed ? (
+        <g className="pf__closed">
+          {expr === "excited" ? (
+            <>
+              <path d="M12 15 q6 -8 12 0" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
+              <path d="M36 15 q6 -8 12 0" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
+            </>
+          ) : (
+            <>
+              <path d="M12 12 q6 6 12 0" fill="none" stroke="#8fc6ff" strokeWidth={2.4} strokeLinecap="round" />
+              <path d="M36 12 q6 6 12 0" fill="none" stroke="#8fc6ff" strokeWidth={2.4} strokeLinecap="round" />
+            </>
+          )}
+        </g>
+      ) : (
+        <g className="pf__eyes">
+          {eye(18, expr === "thinking")}
+          {eye(42, false)}
+        </g>
+      )}
+      {/* Brows: focused while working, one raised while thinking. */}
+      {expr === "working" && (
+        <>
+          <path d="M11 4.5 l10 2.5" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+          <path d="M49 4.5 l-10 2.5" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+        </>
+      )}
+      {expr === "thinking" && <path d="M36 4 l11 -1.5" stroke="#8fc6ff" strokeWidth={1.8} strokeLinecap="round" />}
+      {/* Mouth. */}
+      {expr === "excited" ? (
+        <ellipse className="pf__mouth" cx={30} cy={22.5} rx={4.2} ry={3.4} fill="#ff6f91" />
+      ) : expr === "thinking" ? (
+        <path d="M27 23 l6 -1.5" stroke="#8fc6ff" strokeWidth={1.8} strokeLinecap="round" />
+      ) : expr === "sleepy" ? (
+        <path d="M27.5 21.5 q2.5 2.4 5 0" fill="none" stroke="#8fc6ff" strokeWidth={1.6} strokeLinecap="round" />
+      ) : expr === "working" ? (
+        <rect className="pf__bar" x={14} y={22} width={32} height={3.6} rx={1.8} fill="url(#pf-bar)" />
+      ) : (
+        <path className="pf__mouth" d="M26.5 20.5 q3.5 4.5 7 0 z" fill="#ff6f91" />
+      )}
+      {/* Extras. */}
+      {expr === "thinking" && <text className="pf__q" x="52" y="9">?</text>}
+      {expr === "sleepy" && (
+        <g className="pf__zzz">
+          <text x="50" y="10">z</text>
+          <text x="54" y="6">z</text>
+        </g>
+      )}
+      {expr === "excited" && (
+        <g className="pf__sparks" stroke="#ffd166" strokeWidth={1.8} strokeLinecap="round">
+          <path d="M3 7 l2 4" /><path d="M8 5 l0.5 4" /><path d="M57 7 l-2 4" /><path d="M52 5 l-0.5 4" />
+        </g>
+      )}
+      {expr === "listening" && (
+        <g className="pf__waves" fill="none" stroke="#7fb3ff" strokeWidth={1.6} strokeLinecap="round">
+          <path d="M4 9 q-3 4 0 8" /><path d="M1 7 q-5 6 0 12" />
+          <path d="M56 9 q3 4 0 8" /><path d="M59 7 q5 6 0 12" />
+        </g>
+      )}
       <defs>
-        <linearGradient id="island-iris" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#a9e4ff" />
-          <stop offset="0.55" stopColor="#4d8dff" />
-          <stop offset="1" stopColor="#2a4fd6" />
+        <linearGradient id="pf-bar" x1="0" x2="1">
+          <stop offset="0" stopColor="#2f6bff" /><stop offset="0.5" stopColor="#8fb6ff" /><stop offset="1" stopColor="#2f6bff" />
         </linearGradient>
       </defs>
-      <ellipse cx={4} cy={16.5} rx={3} ry={1.5} fill="#ff8fa3" opacity={0.7} />
-      <ellipse cx={42} cy={16.5} rx={3} ry={1.5} fill="#ff8fa3" opacity={0.7} />
-      {eye(13)}
-      {eye(33)}
     </svg>
   );
 }
@@ -53,6 +117,8 @@ export function Island() {
   const [spawn, setSpawn] = useState(0);
   // The last agent just finished: a moment of cheer.
   const [cheer, setCheer] = useState(false);
+  // The mouse has rested a while: it dozes off.
+  const [sleepy, setSleepy] = useState(false);
   const wasWorking = useRef(0);
   const root = useRef<HTMLDivElement>(null);
 
@@ -63,6 +129,7 @@ export function Island() {
       listen<AskActivity>(EVENTS.askActivity, (e) => setActivity(e.payload)),
       listen<number>(EVENTS.agentCount, (e) => setWorking(e.payload)),
       getCurrentWindow().listen(EVENTS.islandSpawn, () => setSpawn((n) => n + 1)),
+      listen<boolean>(EVENTS.sleepy, (e) => setSleepy(e.payload)),
     ];
     api.askActivity().then(setActivity, () => {});
     api.agents().then((l) => setWorking(l.agents.filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status)).length), () => {});
@@ -100,13 +167,15 @@ export function Island() {
   const busy = mood !== "idle";
   const open = hover || busy || spawn > 0 || cheer;
   const dockSide = settings?.agents.dockSide ?? "right";
+  const expr: Expression =
+    mood === "listening" ? "listening" : mood === "speaking" ? "speaking" : mood === "thinking" ? "thinking" : cheer ? "excited" : spawn > 0 ? "excited" : working > 0 ? "working" : sleepy && !hover ? "sleepy" : "happy";
   const line =
     spawn > 0 ? "Starting agents…" : cheer ? "All done!" : mood === "listening" ? "Listening…" : mood === "thinking" ? "Thinking…" : mood === "speaking" ? "Speaking" : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Ask me anything";
 
   return (
     <div
       ref={root}
-      className={`island island--${b.notchEdge} island--${b.islandLook}${open ? " is-open" : ""}${busy ? " is-busy" : ""}`}
+      className={`island island--${b.notchEdge} island--${b.islandLook}${open ? " is-open" : ""}${busy ? " is-busy" : ""}${sleepy && !open ? " is-sleepy" : ""}`}
       role="button"
       aria-label="Helpy. Click to ask"
       onMouseEnter={() => setHover(true)}
@@ -116,7 +185,11 @@ export function Island() {
       {open ? (
         <>
           <span className={`island__face${spawn > 0 ? " is-pushing" : ""}`} key={spawn}>
-            <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} mood={cheer ? "happy" : null} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
+            {b.islandLook === "face" ? (
+              <PillFace expr={expr} />
+            ) : (
+              <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} mood={cheer ? "happy" : sleepy && !hover ? "sleepy" : null} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
+            )}
             {spawn > 0 && (
               <span className={`island__spawn island__spawn--${dockSide}`} onAnimationEnd={() => setSpawn(0)}>
                 <Buddy style={b.style === "custom" ? "pip" : b.style} size={16} baby state="idle" animate={false} />
@@ -127,13 +200,12 @@ export function Island() {
         </>
       ) : b.islandLook === "peek" ? (
         <span className="island__peek" aria-hidden="true">
-          <Buddy style={b.style === "custom" ? "pip" : b.style} size={22} baby state="idle" animate={b.showStateAnimations} />
+          <Buddy style={b.style === "custom" ? "pip" : b.style} size={22} baby state="idle" mood={sleepy ? "sleepy" : null} animate={b.showStateAnimations} />
           {working > 0 && <b className="island__dot" />}
         </span>
       ) : (
-        <span className="island__eyes" aria-hidden="true">
-          <SparklyEyes />
-          {working > 0 && <b className="island__dot" />}
+        <span className="island__rest" aria-hidden="true">
+          <PillFace expr={expr} />
         </span>
       )}
     </div>

@@ -84,6 +84,16 @@ body,
 .island__peek .buddy__eyes {
   animation: island-glance 7s ease-in-out infinite !important;
 }
+.island__dot {
+  position: absolute;
+  right: -12px;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4d8dff;
+  box-shadow: 0 0 6px rgba(77, 141, 255, 0.8);
+}
 .island__peek .island__dot {
   right: -10px;
   top: -2px;
@@ -145,45 +155,52 @@ body,
   100% { transform: translate(-150px, -2px) scale(0.6); opacity: 0; }
 }
 
-/* Two big glossy eyes when the island rests: they glance about and blink,
-   and the small highlight twinkles. */
-.island__eyes {
-  position: relative;
+/* The island as a face. Resting it's a little wider than the eyes look,
+   with the hands on the rim; open, the face sits left of the line. */
+.island--face:not(.is-open) {
+  height: 32px;
+  min-width: 72px;
+  padding: 0 6px;
+}
+.island__rest {
   display: inline-flex;
   line-height: 0;
-  transform-origin: center;
-  animation: island-glance 9s ease-in-out infinite;
 }
-.island__eyes svg {
+.pf {
   overflow: visible;
-  filter: drop-shadow(0 0 4px rgba(77, 141, 255, 0.45));
+  display: block;
 }
-.island__eye {
+.pf__eye, .pf__closed {
   transform-box: fill-box;
   transform-origin: center;
 }
-.island__twinkle {
+.pf__eyes {
   transform-box: fill-box;
   transform-origin: center;
-  animation: island-twinkle 2.6s ease-in-out infinite;
+  animation: island-glance 8s ease-in-out infinite;
 }
-.island__eye:nth-of-type(2) .island__twinkle { animation-delay: 1.1s; }
-@keyframes island-twinkle {
-  0%, 100% { transform: scale(0.6); opacity: 0.5; }
-  50% { transform: scale(1.5); opacity: 1; }
-}
-.island__dot {
-  position: absolute;
-  right: -12px;
-  top: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #4d8dff;
-  box-shadow: 0 0 6px rgba(77, 141, 255, 0.8);
-}
+.pf__pupil { transition: transform 300ms ease; }
+.pf__mouth { transform-box: fill-box; transform-origin: center; }
+.pf--speaking .pf__mouth { animation: pf-talk 0.3s ease-in-out infinite alternate; }
+.pf--excited .pf__mouth { animation: pf-talk 0.5s ease-in-out infinite alternate; }
+.pf__q { fill: #a7c8ff; font: 700 11px var(--font-ui); animation: pf-float 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pf__zzz text { fill: #a7c8ff; font: 700 8px var(--font-ui); transform-box: fill-box; transform-origin: center; animation: pf-zzz 2.4s ease-in-out infinite; }
+.pf__zzz text:nth-child(2) { font-size: 10px; animation-delay: 0.8s; }
+.pf__sparks path { transform-box: fill-box; transform-origin: center; animation: pf-spark 0.9s ease-out infinite; }
+.pf__sparks path:nth-child(2), .pf__sparks path:nth-child(4) { animation-delay: 0.3s; }
+.pf__waves path { animation: pf-wave 1.1s ease-in-out infinite; }
+.pf__waves path:nth-child(2), .pf__waves path:nth-child(4) { animation-delay: 0.25s; }
+.pf__bar { animation: pf-bar 1.4s linear infinite; }
+.pf--sleepy .pf__closed { animation: island-bob 3.4s ease-in-out infinite; }
+.island.is-sleepy { opacity: 0.85; }
 
+@keyframes pf-talk { from { transform: scaleY(0.6); } to { transform: scaleY(1.25); } }
+@keyframes pf-float { 0%, 100% { transform: translateY(0); opacity: 0.7; } 50% { transform: translateY(-2px); opacity: 1; } }
+@keyframes pf-zzz { 0% { transform: translate(0, 2px); opacity: 0; } 30%, 70% { opacity: 1; } 100% { transform: translate(3px, -5px); opacity: 0; } }
+@keyframes pf-spark { 0% { transform: scale(0.4); opacity: 0; } 40% { opacity: 1; } 100% { transform: scale(1.2); opacity: 0; } }
+@keyframes pf-wave { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes pf-bar { from { transform: translateX(-32px); } to { transform: translateX(32px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .island, .island__eyes, .island__twinkle, .island__face > .buddy, .island__spawn, .island__peek, .island__peek .buddy__eyes { transition: none; animation: none !important; }
+  .island, .island__face > .buddy, .island__spawn, .island__peek, .island__peek .buddy__eyes, .pf *, .pf__eyes { transition: none; animation: none !important; }
 }

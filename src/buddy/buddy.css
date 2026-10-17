@@ -37,6 +37,10 @@
 .buddy__sweat { fill: #7fc4ff; stroke: var(--buddy-rim); stroke-width: 1; }
 .buddy__mark { fill: var(--buddy-rim); font: 700 13px var(--font-ui); paint-order: stroke; stroke: var(--buddy-eye); stroke-width: 2.5px; }
 .buddy--happy .buddy__smile { stroke-width: 2; }
+.buddy--sleepy .buddy__smile { opacity: 0.5; }
+.buddy--animate .buddy__zzz { animation: buddy-zzz 2.2s ease-in-out infinite; }
+@keyframes buddy-zzz { 0% { transform: translate(0, 2px); opacity: 0; } 30%, 70% { opacity: 1; } 100% { transform: translate(3px, -6px); opacity: 0; } }
+.buddy__zzz { transform-box: fill-box; transform-origin: center; }
 .buddy--curious .buddy__body { transform: rotate(-10deg); }
 .buddy--animate.buddy--worried .buddy__sweat { animation: buddy-sweat 1.6s ease-in infinite; }
 .buddy--animate.buddy--worried .buddy__body { animation: buddy-shiver 0.9s ease-in-out infinite; }
