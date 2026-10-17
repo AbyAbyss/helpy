@@ -1148,6 +1148,11 @@ impl Turn<'_> {
                                 .unwrap_or(false)
                                 .then(|| latest_image(&messages))
                                 .flatten();
+                            // Planning is a second round trip; say so instead of
+                            // leaving the dots.
+                            self.send(AskEvent::Notice {
+                                message: "Planning agents…".into(),
+                            });
                             match crate::agents::planner::plan(self.app, &request, image, self.feed.is_some()).await {
                                 Ok(plan) => {
                                     started_agents = true;
