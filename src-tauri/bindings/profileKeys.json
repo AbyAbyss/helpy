@@ -1,0 +1,11 @@
+[
+  "answerStyle.detail",
+  "voiceOutput.voiceGuidance",
+  "voiceOutput.readAloud",
+  "voiceOutput.announceAgents",
+  "circle.labelDetail",
+  "guidance.reduceMotion",
+  "buddy.showStateAnimations",
+  "agents.speakStatus",
+  "agents.notifications"
+]

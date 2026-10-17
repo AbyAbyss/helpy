@@ -159,9 +159,11 @@ fn place_pill_by_island(app: &AppHandle, w: &tauri::WebviewWindow) -> bool {
     };
     let Some(m) = dock_monitor(app) else { return false };
     let edge = app.state::<crate::settings::SettingsStore>().get().buddy.notch_edge;
-    let size = w
-        .outer_size()
-        .map_or((PILL_SIZE.0 * m.scale, PILL_SIZE.1 * m.scale), |s| (s.width as f64, s.height as f64));
+    // Before its first show the window can still report no size (X11).
+    let size = match w.outer_size() {
+        Ok(s) if s.width > 0 && s.height > 0 => (s.width as f64, s.height as f64),
+        _ => (PILL_SIZE.0 * m.scale, PILL_SIZE.1 * m.scale),
+    };
     let (x, y) = beside_island(
         centre,
         *ISLAND_SIZE.lock().unwrap(),
