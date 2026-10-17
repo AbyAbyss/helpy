@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Plan } from "../bindings/Plan";
 import type { RunMode } from "../bindings/RunMode";
 import { api, EVENTS } from "../lib/ipc";
-import { describe } from "../lib/schedule";
+import { describe, describeOnce } from "../lib/schedule";
 
 /**
  * The plan card: what Helpy is about to start, and the only way it starts.
@@ -122,8 +122,16 @@ export function PlanCard() {
             ))}
           </ol>
 
-          {(plan.asks.length > 0 || plan.newFolders.length > 0 || plan.hasImage || unconnected.length > 0 || plan.schedule) && (
+          {(plan.asks.length > 0 || plan.newFolders.length > 0 || plan.hasImage || unconnected.length > 0 || plan.schedule || plan.once) && (
             <ul className="pnotes">
+              {plan.once && (
+                <li>
+                  <Dot tone="schedule" />
+                  <span>
+                    Runs <b>{describeOnce(plan.once).replace(/^\w/, (c) => c.toLowerCase())}</b>, not now. Change or stop it under Settings → Agents.
+                  </span>
+                </li>
+              )}
               {plan.schedule && (
                 <li>
                   <Dot tone="schedule" />

@@ -60,6 +60,10 @@ pub struct Plan {
     /// The request asked for this again and again: a cron schedule (local
     /// time) that becomes a trigger when the plan starts.
     pub schedule: Option<String>,
+    /// The request named one later moment ("in 5 minutes", "at 3 pm"): Unix
+    /// milliseconds when the task runs, instead of now.
+    #[ts(type = "number | null")]
+    pub once: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -124,9 +128,10 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
         DefaultRunMode::Parallel => "Prefer \"parallel\" unless agents depend on each other",
         DefaultRunMode::Sequential => "Prefer \"sequential\"",
     };
+    let now = chrono::Local::now().format("%A %-d %B %Y, %H:%M");
     format!(
-        "You plan background agents for Helpy, a desktop assistant. Turn the user's request into 1 to {MAX_AGENTS} \
-         agents. Give each independent task in the request its own agent (\"check my GitHub issues and draft a \
+        "You plan background agents for Helpy, a desktop assistant. It is {now} (the user's local time). Turn the \
+         user's request into 1 to {MAX_AGENTS} agents. Give each independent task in the request its own agent (\"check my GitHub issues and draft a \
          Notion page about them\" is two, the second after the first); one task is one agent however many steps it \
          takes.\n\n\
          Tools agents can have (give each agent only what it needs):\n{list}\n\
@@ -156,7 +161,10 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          When the user wants this to happen again and again (\"every morning at 8\", \"each Friday\", \"every 2 hours\"), \
          add \"schedule\": a 5-field cron expression in their local time (minute hour day-of-month month weekday, e.g. \
          \"0 8 * * *\"; weekdays are 1-5) to either reply and say so in \"reply\"; the goals describe one run, and the \
-         task also runs now. Leave \"schedule\" out otherwise."
+         task also runs now. Leave \"schedule\" out otherwise.\n\
+         When the user wants it done once at a later moment (\"in 5 minutes\", \"at 3 pm\", \"tomorrow at 9\"), add \
+         \"once\": that moment in their local time as \"YYYY-MM-DDTHH:MM\", worked out from the time now, and say so in \
+         \"reply\"; the task then runs at that moment, not now. Leave \"once\" out otherwise."
     )
 }
 
@@ -391,7 +399,22 @@ pub async fn plan(
     }
     let planned_by = Some(completion.model.clone()).filter(|m| !m.is_empty());
     let schedule = schedule_choice(&text);
-    offer(app, &s, request, mode, agents, folders, reply, image, voice, planned_by, skill, schedule)
+    let once = once_choice(&text);
+    offer(app, &s, request, mode, agents, folders, reply, image, voice, planned_by, skill, schedule, once)
+}
+
+/// A later moment the planner read from the request, as Unix milliseconds.
+/// A moment already passed is dropped: the task simply runs now.
+fn once_choice(text: &str) -> Option<i64> {
+    let t = text.trim();
+    let v: Value = serde_json::from_str(&t[t.find('{')?..=t.rfind('}')?]).ok()?;
+    let when = v["once"].as_str()?.trim();
+    let naive = chrono::NaiveDateTime::parse_from_str(when, "%Y-%m-%dT%H:%M")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(when, "%Y-%m-%dT%H:%M:%S"))
+        .ok()?;
+    use chrono::TimeZone;
+    let at = chrono::Local.from_local_datetime(&naive).single()?.timestamp_millis();
+    (at > chrono::Local::now().timestamp_millis()).then_some(at)
 }
 
 /// A repeat the planner read from the request, as a cron expression that
@@ -455,6 +478,7 @@ pub fn offer(
     planned_by: Option<String>,
     skill: Option<String>,
     schedule: Option<String>,
+    once: Option<i64>,
 ) -> Result<Plan, String> {
     let mut groups = tools::groups(&s.agents);
     groups.extend(crate::connectors::external(app, s).groups());
@@ -486,6 +510,7 @@ pub fn offer(
         planned_by,
         skill,
         schedule,
+        once,
         agents,
     };
     let quiet = starts_quietly(s.agents.confirm_plans, &plan);
@@ -543,8 +568,17 @@ fn start(app: &AppHandle, id: &str, mode: RunMode) -> Result<(), String> {
     } else {
         mode
     };
+    if let Some(at) = plan.once {
+        // Later, not now: the trigger holds the plan until its moment.
+        let when = crate::settings::schema::TriggerWhen::Once { at };
+        super::triggers::add_for_plan(app, &plan.request, when, &plan.agents)?;
+        app.state::<AgentsState>().voice_plans.lock().unwrap().remove(&plan.id);
+        close_card(app);
+        return Ok(());
+    }
     if let Some(cron) = &plan.schedule {
-        super::triggers::add_for_plan(app, &plan.request, cron, &plan.agents)?;
+        let when = crate::settings::schema::TriggerWhen::Schedule { cron: cron.clone() };
+        super::triggers::add_for_plan(app, &plan.request, when, &plan.agents)?;
     }
     let names: Vec<String> = plan.agents.iter().map(|a| a.name.clone()).collect();
     let agents = plan
@@ -780,6 +814,16 @@ mod tests {
     }
 
     #[test]
+    fn a_later_moment_is_kept_only_when_it_is_still_ahead() {
+        let soon = (chrono::Local::now() + chrono::Duration::hours(1)).format("%Y-%m-%dT%H:%M").to_string();
+        let at = once_choice(&format!(r#"{{"agents": [], "once": "{soon}"}}"#)).expect("an hour ahead");
+        assert!(at > chrono::Local::now().timestamp_millis());
+        assert_eq!(once_choice(r#"{"agents": [], "once": "2020-01-01T09:00"}"#), None);
+        assert_eq!(once_choice(r#"{"agents": [], "once": "tomorrow"}"#), None);
+        assert_eq!(once_choice(r#"{"agents": []}"#), None);
+    }
+
+    #[test]
     fn a_schedule_is_kept_only_when_it_is_a_sane_cron() {
         assert_eq!(
             schedule_choice(r#"{"agents": [], "schedule": "0 8 * * 1-5"}"#),
@@ -868,6 +912,7 @@ mod tests {
             planned_by: None,
             skill: None,
             schedule: None,
+            once: None,
             agents: Vec::new(),
         };
         assert!(starts_quietly(ConfirmPlans::SideEffectsOnly, &plan(Vec::new())));

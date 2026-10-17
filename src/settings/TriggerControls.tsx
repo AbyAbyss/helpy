@@ -6,7 +6,7 @@ import type { ToolGroup } from "../bindings/ToolGroup";
 import type { Trigger } from "../bindings/Trigger";
 import type { TriggerStatus } from "../bindings/TriggerStatus";
 import { api } from "../lib/ipc";
-import { DAY_NAMES, describe, fromCron, toCron, type Repeat } from "../lib/schedule";
+import { DAY_NAMES, describe, describeOnce, fromCron, fromLocalInput, toCron, toLocalInput, type Repeat } from "../lib/schedule";
 import { FolderPicker } from "./AgentControls";
 import { Segmented, Toggle } from "./controls";
 
@@ -61,9 +61,9 @@ export function TriggerEditor({ settings, value, onChange }: { settings: Setting
       {value.length === 0 && (
         <div className="providers__empty">
           <p>
-            <strong>Nothing starts by itself yet.</strong> A trigger starts agents on a schedule ("weekdays at 8:45") or when new files
-            land in a folder ("sort new downloads"). Each runs at most 10 times an hour and pauses itself after 3 failures in a row.
-            Triggers only run while Helpy is running.
+            <strong>Nothing starts by itself yet.</strong> A trigger starts agents on a schedule ("weekdays at 8:45"), once at a set
+            time ("in 20 minutes, check whether the build passed"), or when new files land in a folder ("sort new downloads"). Each
+            runs at most 10 times an hour and pauses itself after 3 failures in a row. Triggers only run while Helpy is running.
           </p>
         </div>
       )}
@@ -71,7 +71,11 @@ export function TriggerEditor({ settings, value, onChange }: { settings: Setting
         const st = status.find((s) => s.id === t.id);
         const rt = st?.runtime;
         const summary =
-          t.when.type === "schedule" ? describe(t.when.cron) : `When files arrive in ${shortPath(t.when.path) || "a folder"}${t.when.pattern ? ` (${t.when.pattern})` : ""}`;
+          t.when.type === "schedule"
+            ? describe(t.when.cron)
+            : t.when.type === "once"
+              ? `Once, ${describeOnce(t.when.at).replace(/^\w/, (c) => c.toLowerCase())}`
+              : `When files arrive in ${shortPath(t.when.path) || "a folder"}${t.when.pattern ? ` (${t.when.pattern})` : ""}`;
         const state = rt?.paused
           ? { cls: "pill--err", text: "Paused" }
           : !t.enabled
@@ -83,7 +87,7 @@ export function TriggerEditor({ settings, value, onChange }: { settings: Setting
           <div key={t.id} className={`pcard${open === t.id ? " is-open" : ""}`}>
             <div className="pcard__head">
               <span className="pmark" aria-hidden="true">
-                {t.when.type === "schedule" ? "⏱" : "⌂"}
+                {t.when.type === "schedule" ? "⏱" : t.when.type === "once" ? "⌛" : "⌂"}
               </span>
               <div className="pcard__title">
                 <strong>{t.name}</strong>
@@ -183,10 +187,19 @@ function TriggerForm(props: {
           value={t.when.type}
           options={[
             { value: "schedule", label: "On a schedule" },
+            { value: "once", label: "Once, at a time" },
             { value: "folder", label: "When files arrive" },
           ]}
           onChange={(v) =>
-            onChange({ ...t, when: v === "schedule" ? { type: "schedule", cron: "0 9 * * *" } : { type: "folder", path: "", pattern: "" } })
+            onChange({
+              ...t,
+              when:
+                v === "schedule"
+                  ? { type: "schedule", cron: "0 9 * * *" }
+                  : v === "once"
+                    ? { type: "once", at: Date.now() + 3_600_000 }
+                    : { type: "folder", path: "", pattern: "" },
+            })
           }
         />
       </div>
@@ -267,6 +280,20 @@ function TriggerForm(props: {
               onBlur={() => cron !== toCron(repeat) && setRepeat({ kind: "custom", cron: cron.trim() })}
             />
           )}
+        </div>
+      )}
+
+      {t.when.type === "once" && (
+        <div className="trig-when">
+          <input
+            type="datetime-local"
+            value={toLocalInput(t.when.at)}
+            onChange={(e) => {
+              const at = fromLocalInput(e.target.value);
+              if (at) onChange({ ...t, when: { type: "once", at } });
+            }}
+          />
+          <span className="muted">Runs once at that time, then the trigger is removed. A time already passed runs straight away.</span>
         </div>
       )}
 

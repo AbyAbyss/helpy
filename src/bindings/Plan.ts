@@ -43,4 +43,9 @@ skill: string | null,
  * The request asked for this again and again: a cron schedule (local
  * time) that becomes a trigger when the plan starts.
  */
-schedule: string | null, };
+schedule: string | null, 
+/**
+ * The request named one later moment ("in 5 minutes", "at 3 pm"): Unix
+ * milliseconds when the task runs, instead of now.
+ */
+once: number | null, };

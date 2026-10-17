@@ -719,8 +719,8 @@ FIELDS.push(
   },
   {
     path: "agents.triggers", section: "agents", group: "Automatic runs", label: "Triggers",
-    help: "Agents that start by themselves, on a schedule or when new files arrive in a folder.",
-    keywords: "trigger schedule cron automatic recurring every day weekdays folder watch downloads new files",
+    help: "Agents that start by themselves: on a schedule, once at a set time, or when new files arrive in a folder.",
+    keywords: "trigger schedule cron automatic recurring every day weekdays once later at a time delay folder watch downloads new files",
     control: { kind: "triggers" },
   },
   {

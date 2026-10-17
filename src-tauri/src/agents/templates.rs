@@ -410,6 +410,7 @@ pub fn agents_template_plan(
         None,
         Some(t.name.clone()),
         None,
+        None,
     )
 }
 
