@@ -440,6 +440,9 @@ export function McpServers({ value, onChange }: { value: McpServer[]; onChange: 
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState<"menu" | "json" | null>(null);
   const [exported, setExported] = useState<string | null>(null);
+  // What a preset still needs from the user, shown on its card until it connects.
+  const [presets, setPresets] = useState<Preset[]>([]);
+  useEffect(() => void api.mcpCatalog().then(setPresets, () => {}), []);
 
   useEffect(() => {
     const load = () => void api.mcpStatus().then(setStatus, () => {});
@@ -471,6 +474,7 @@ export function McpServers({ value, onChange }: { value: McpServer[]; onChange: 
           key={s.id}
           server={s}
           status={status.find((x) => x.id === s.id)}
+          setup={presets.find((p) => p.id === s.preset)?.setup}
           expanded={open === s.id}
           onToggle={() => setOpen(open === s.id ? null : s.id)}
           onChange={update}
@@ -575,7 +579,7 @@ function ImportJson({ onDone }: { onDone: () => void }) {
   );
 }
 
-function ServerCard(props: { server: McpServer; status?: ServerStatus; expanded: boolean; onToggle: () => void; onChange: (s: McpServer) => void; onRemove: () => void }) {
+function ServerCard(props: { server: McpServer; status?: ServerStatus; setup?: string; expanded: boolean; onToggle: () => void; onChange: (s: McpServer) => void; onRemove: () => void }) {
   const { server: s, status, expanded, onToggle, onChange, onRemove } = props;
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -632,6 +636,7 @@ function ServerCard(props: { server: McpServer; status?: ServerStatus; expanded:
       {!s.enabled && !(s.transport === "stdio" ? s.command : s.url) && (
         <p className="pcard__note">Fill in {s.transport === "stdio" ? "the command" : "the address"} under Edit, then turn it on.</p>
       )}
+      {props.setup && tools.length === 0 && s.enabled && <p className="pcard__note">{props.setup} Click Connect to load its tools.</p>}
       {status?.message && !message && <p className="pcard__test is-err">{status.message}</p>}
       {message && <p className={`pcard__test ${message.ok ? "is-ok" : "is-err"}`}>{message.text}</p>}
       {expanded && <ServerForm server={s} status={status} onChange={onChange} onRemove={onRemove} />}

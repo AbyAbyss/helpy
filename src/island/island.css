@@ -1,0 +1,206 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Laid out at its natural size; Rust sizes the window to match. */
+.island {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: max-content;
+  min-width: 64px;
+  height: 24px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #171a24, #0b0d14 70%);
+  color: #f1f3f8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* A glass rim: a thin light line inside the top edge. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.35);
+  border-radius: 0 0 16px 16px;
+  cursor: pointer;
+  font: 500 13px/1 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  white-space: nowrap;
+  transition:
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    min-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 220ms ease;
+}
+
+/* It slides out of its edge when it first appears. */
+.island { animation: island-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.island--bottom { animation-name: island-enter-up; }
+.island--left { animation-name: island-enter-right; }
+.island--right { animation-name: island-enter-left; }
+@keyframes island-enter { from { transform: translateY(-100%); } }
+@keyframes island-enter-up { from { transform: translateY(100%); } }
+@keyframes island-enter-right { from { transform: translateX(-100%); } }
+@keyframes island-enter-left { from { transform: translateX(100%); } }
+
+/* The flat side sits against the edge it lives on. */
+.island--top { border-top: 0; border-radius: 0 0 16px 16px; }
+.island--bottom { border-bottom: 0; border-radius: 16px 16px 0 0; }
+.island--left { border-left: 0; border-radius: 0 16px 16px 0; }
+.island--right { border-right: 0; border-radius: 16px 0 0 16px; }
+
+.island.is-open {
+  height: 44px;
+  min-width: 176px;
+}
+
+.island.is-busy {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(77, 141, 255, 0.35), 0 0 22px rgba(77, 141, 255, 0.35);
+}
+
+/* Resting with the baby peeking out: a touch taller, and it bobs and
+   glances about now and then. */
+.island--peek:not(.is-open),
+.island--eyes:not(.is-open) {
+  height: 30px;
+  min-width: 56px;
+  padding: 0 12px;
+}
+.island__peek {
+  position: relative;
+  display: inline-flex;
+  line-height: 0;
+  animation: island-bob 3.4s ease-in-out infinite;
+}
+.island__peek .buddy__eyes {
+  animation: island-glance 7s ease-in-out infinite !important;
+}
+.island__dot {
+  position: absolute;
+  right: -12px;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4d8dff;
+  box-shadow: 0 0 6px rgba(77, 141, 255, 0.8);
+}
+.island__peek .island__dot {
+  right: -10px;
+  top: -2px;
+}
+@keyframes island-bob {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-1.5px) rotate(-3deg); }
+}
+/* Looks left, looks right, blinks on the way back. */
+@keyframes island-glance {
+  0%, 28%, 100% { transform: translateX(0) scaleY(1); }
+  12%, 20% { transform: translateX(-2px) scaleY(1); }
+  44%, 52% { transform: translateX(2px) scaleY(1); }
+  60% { transform: translateX(0) scaleY(0.1); }
+  64% { transform: translateX(0) scaleY(1); }
+}
+
+.island__line {
+  padding-right: 2px;
+  color: #d9dde8;
+}
+
+/* Agents starting: the face gives a little push and a small one pops out
+   and slides off toward the dock. */
+.island__face {
+  position: relative;
+  display: inline-flex;
+  line-height: 0;
+}
+.island__face.is-pushing > .buddy {
+  animation: island-push 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.island__spawn {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  line-height: 0;
+  pointer-events: none;
+  animation: island-spawn-right 680ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+.island__spawn--left {
+  animation-name: island-spawn-left;
+}
+
+@keyframes island-push {
+  0% { transform: none; }
+  30% { transform: scale(1.18, 0.86); }
+  60% { transform: scale(0.94, 1.08) translateX(2px); }
+  100% { transform: none; }
+}
+@keyframes island-spawn-right {
+  0% { transform: translate(0, 0) scale(0.3); opacity: 0; }
+  25% { transform: translate(10px, -4px) scale(1); opacity: 1; }
+  100% { transform: translate(150px, -2px) scale(0.6); opacity: 0; }
+}
+@keyframes island-spawn-left {
+  0% { transform: translate(0, 0) scale(0.3); opacity: 0; }
+  25% { transform: translate(-10px, -4px) scale(1); opacity: 1; }
+  100% { transform: translate(-150px, -2px) scale(0.6); opacity: 0; }
+}
+
+/* The island as a face. Resting it's a little wider than the eyes look,
+   with the hands on the rim; open, the face sits left of the line. */
+.island--face:not(.is-open) {
+  height: 32px;
+  min-width: 72px;
+  padding: 0 6px;
+}
+.island__rest {
+  display: inline-flex;
+  line-height: 0;
+}
+.pf {
+  overflow: visible;
+  display: block;
+}
+.pf__eye, .pf__closed {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.pf__eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: island-glance 8s ease-in-out infinite;
+}
+.pf__pupil { transition: transform 300ms ease; }
+.pf__mouth { transform-box: fill-box; transform-origin: center; }
+.pf--speaking .pf__mouth { animation: pf-talk 0.3s ease-in-out infinite alternate; }
+.pf--excited .pf__mouth { animation: pf-talk 0.5s ease-in-out infinite alternate; }
+.pf__q { fill: #a7c8ff; font: 700 11px var(--font-ui); animation: pf-float 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pf__zzz text { fill: #a7c8ff; font: 700 8px var(--font-ui); transform-box: fill-box; transform-origin: center; animation: pf-zzz 2.4s ease-in-out infinite; }
+.pf__zzz text:nth-child(2) { font-size: 10px; animation-delay: 0.8s; }
+.pf__sparks path { transform-box: fill-box; transform-origin: center; animation: pf-spark 0.9s ease-out infinite; }
+.pf__sparks path:nth-child(2), .pf__sparks path:nth-child(4) { animation-delay: 0.3s; }
+.pf__waves path { animation: pf-wave 1.1s ease-in-out infinite; }
+.pf__waves path:nth-child(2), .pf__waves path:nth-child(4) { animation-delay: 0.25s; }
+.pf__bar { animation: pf-bar 1.4s linear infinite; }
+.pf--sleepy .pf__closed { animation: island-bob 3.4s ease-in-out infinite; }
+.island.is-sleepy { opacity: 0.85; }
+
+@keyframes pf-talk { from { transform: scaleY(0.6); } to { transform: scaleY(1.25); } }
+@keyframes pf-float { 0%, 100% { transform: translateY(0); opacity: 0.7; } 50% { transform: translateY(-2px); opacity: 1; } }
+@keyframes pf-zzz { 0% { transform: translate(0, 2px); opacity: 0; } 30%, 70% { opacity: 1; } 100% { transform: translate(3px, -5px); opacity: 0; } }
+@keyframes pf-spark { 0% { transform: scale(0.4); opacity: 0; } 40% { opacity: 1; } 100% { transform: scale(1.2); opacity: 0; } }
+@keyframes pf-wave { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes pf-bar { from { transform: translateX(-32px); } to { transform: translateX(32px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .island, .island__face > .buddy, .island__spawn, .island__peek, .island__peek .buddy__eyes, .pf *, .pf__eyes { transition: none; animation: none !important; }
+}

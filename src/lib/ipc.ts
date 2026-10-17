@@ -44,6 +44,9 @@ export const EVENTS = {
   buddyVisible: "buddy://visible",
   buddyImageChanged: "buddy://image-changed",
   buddyHandoff: "buddy://handoff",
+  notch: "buddy://notch",
+  islandSpawn: "island://spawn",
+  sleepy: "buddy://sleepy",
   openSection: "settings://open-section",
   askShown: "ask://shown",
   ask: "ask://event",
@@ -129,6 +132,8 @@ export const api = {
   askStatus: () => invoke<AskStatus>("ask_status"),
   askActivity: () => invoke<AskActivity>("ask_activity"),
   notes: () => invoke<Note[]>("ai_notes"),
+  noteAdd: (text: string) => invoke<Note>("ai_note_add", { text }),
+  noteUpdate: (id: number, text: string) => invoke<void>("ai_note_update", { id, text }),
   noteDelete: (id: number) => invoke<void>("ai_note_delete", { id }),
   notesClear: () => invoke<void>("ai_notes_clear"),
   askHide: () => invoke<void>("ask_hide"),
@@ -228,6 +233,9 @@ export const api = {
   dockCardPin: (on: boolean) => invoke<void>("dock_card_pin", { on }),
   dockCardClose: () => invoke<void>("dock_card_close"),
   dockCardCurrent: () => invoke<string | null>("dock_card_current"),
+  islandLayout: (width: number, height: number) => invoke<void>("island_layout", { width, height }),
+  /** A click on the island: opens the text chat. */
+  islandOpen: () => invoke<void>("island_open"),
   windowGlass: () => invoke<string | null>("window_glass"),
   /** Opens an https page in the browser. */
   openLink: (url: string) => invoke<void>("open_link", { url }),

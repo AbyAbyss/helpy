@@ -80,6 +80,19 @@ pub async fn stream_chat(
             )
             .await
         }
+        ProviderKind::Nebius => {
+            openai::stream(
+                http,
+                &p.base_url,
+                Some(require_key(p, key)?),
+                Dialect::Compatible,
+                req,
+                idle,
+                cancel,
+                on_text,
+            )
+            .await
+        }
         _ => {
             openai::stream(
                 http,

@@ -87,7 +87,7 @@ export function Panel() {
         <button type="button" className={`row inboxrow${view === "templates" ? " is-on" : ""}`} onClick={() => setView("templates")}>
           <span className="dot dot--templates" aria-hidden="true" />
           <span className="row__main">
-            <span className="row__name">Templates</span>
+            <span className="row__name">Skills</span>
           </span>
           <span className="row__status">Start one</span>
         </button>
@@ -279,9 +279,9 @@ function Detail({ agent: a, batch, line, agentName }: { agent: AgentView; batch:
             <button
               type="button"
               className="btn btn--quiet"
-              onClick={() => run(async () => { await api.saveTemplate(a.id); }, "Saved as a template. Add blanks to it in Settings → Agents → Templates.")}
+              onClick={() => run(async () => { await api.saveTemplate(a.id); }, "Saved as a skill. Add blanks to it in Settings → Agents → Skills.")}
             >
-              Save as template
+              Save as skill
             </button>
           )}
           {finished && (

@@ -410,7 +410,18 @@ async fn start(app: &AppHandle, m: &McpServer) -> Result<Session, String> {
             let (proc, stderr) = TokioChildProcess::builder(cmd)
                 .stderr(std::process::Stdio::piped())
                 .spawn()
-                .map_err(|e| format!("Couldn't start \"{}\": {e}", m.command))?;
+                .map_err(|e| {
+                    let hint = match (e.kind(), m.command.as_str()) {
+                        (std::io::ErrorKind::NotFound, "npx" | "npm" | "node") => {
+                            " Install Node.js (nodejs.org) and try again."
+                        }
+                        (std::io::ErrorKind::NotFound, "uvx" | "uv") => {
+                            " Install uv (docs.astral.sh/uv) and try again."
+                        }
+                        _ => "",
+                    };
+                    format!("Couldn't start \"{}\": {e}.{hint}", m.command)
+                })?;
             // Keep the last lines the server printed, for error messages.
             if let Some(stderr) = stderr {
                 let app = app.clone();
@@ -1266,6 +1277,53 @@ mod tests {
             .unwrap();
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["isError"], json!(true));
+        session.cancel().await.unwrap();
+    }
+
+    /// Needs Node.js, a page served at http://127.0.0.1:8765 with an
+    /// "Accept all" button and a "Next page" link, and optionally
+    /// PLAYWRIGHT_CHROME pointing at a Chrome to drive. Proves the page
+    /// format a live Playwright MCP server sends is what agents are given
+    /// as text, and that a ref copied from it clicks.
+    #[cfg(unix)]
+    #[tokio::test]
+    #[ignore]
+    async fn drives_the_playwright_browser_server() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cmd = tokio::process::Command::new("npx");
+        cmd.args(["@playwright/mcp@latest", "--headless", "--no-sandbox"]);
+        if let Ok(chrome) = std::env::var("PLAYWRIGHT_CHROME") {
+            cmd.args(["--executable-path", &chrome]);
+        }
+        cmd.current_dir(dir.path());
+        let (proc, _) = TokioChildProcess::builder(cmd).spawn().unwrap();
+        let session = client_info().serve(proc).await.unwrap();
+        let call = |name: &str, args: Value| {
+            let params = CallToolRequestParams::new(name.to_string())
+                .with_arguments(bare_refs(args.as_object().cloned().unwrap_or_default()));
+            let (session, base) = (&session, dir.path());
+            async move {
+                let r = session.call_tool(params).await.unwrap();
+                result_text_in(&serde_json::to_value(&r).unwrap(), base)
+            }
+        };
+        // The page comes back as compact text, whether the server links to a
+        // saved snapshot (navigate) or sends it inline (snapshot).
+        let opened = call("browser_navigate", json!({"url": "http://127.0.0.1:8765/"})).await;
+        assert!(
+            opened.contains("the page as text") && opened.contains("button \"Accept all\" [ref=e"),
+            "{opened}"
+        );
+        let page = call("browser_snapshot", json!({})).await;
+        let link = page
+            .lines()
+            .find(|l| l.starts_with("link \"Next page\" [ref="))
+            .unwrap_or_else(|| panic!("{page}"));
+        let r = link.split("[ref=").nth(1).and_then(|r| r.split(']').next()).unwrap();
+        // A ref copied the way models copy it still clicks.
+        let args = json!({"element": "Next page", "target": format!("[ref={r}]")});
+        let after = call("browser_click", args).await;
+        assert!(after.contains("page 2") || after.contains("p2.html"), "{after}");
         session.cancel().await.unwrap();
     }
 

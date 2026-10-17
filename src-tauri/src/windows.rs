@@ -19,6 +19,12 @@ pub const DOCK: &str = "dock";
 pub const DOCK_CARD: &str = "dockcard";
 /// Which agent the dock card shows (None: it's closed).
 pub const DOCK_CARD_EVENT: &str = "dock://card";
+/// The buddy's island at the screen edge (its home when not beside the cursor).
+pub const ISLAND: &str = "island";
+/// Where the island is, in one overlay's own logical pixels.
+pub const NOTCH_EVENT: &str = "buddy://notch";
+/// Agents are starting: the island pushes them off toward the dock.
+pub const ISLAND_SPAWN_EVENT: &str = "island://spawn";
 /// The agent panel.
 pub const AGENTS: &str = "agents";
 pub const AGENTS_FOCUS_EVENT: &str = "agents://focus";
@@ -44,6 +50,188 @@ pub struct BuddyHandoff {
     pub x: f64,
     pub y: f64,
 }
+/// The island's centre in global physical pixels while it shows.
+static ISLAND_CENTRE: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
+
+#[derive(Serialize, TS, Clone, Copy, Debug)]
+#[ts(export)]
+pub struct NotchPoint {
+    pub x: f64,
+    pub y: f64,
+    /// True on the overlay whose screen holds the island; false elsewhere
+    /// and when it isn't showing (the buddy lives by the cursor).
+    pub shown: bool,
+}
+
+/// The island is on screen, standing in for the buddy.
+pub fn island_shown(app: &AppHandle) -> bool {
+    let _ = app;
+    ISLAND_CENTRE.lock().unwrap().is_some()
+}
+
+/// Where the voice pill goes beside the island (global physical pixels):
+/// just inward of the edge the island sits on, centred on it.
+pub fn beside_island(
+    centre: (f64, f64),
+    island: (f64, f64),
+    pill: (f64, f64),
+    edge: crate::settings::schema::ScreenEdge,
+    monitor: (f64, f64, f64, f64),
+    gap: f64,
+) -> (f64, f64) {
+    use crate::settings::schema::ScreenEdge::*;
+    let (cx, cy) = centre;
+    let (iw, ih) = island;
+    let (w, h) = pill;
+    let (mx, my, mw, mh) = monitor;
+    let (x, y) = match edge {
+        Top => (cx - w / 2.0, cy + ih / 2.0 + gap),
+        Bottom => (cx - w / 2.0, cy - ih / 2.0 - gap - h),
+        Left => (cx + iw / 2.0 + gap, cy - h / 2.0),
+        Right => (cx - iw / 2.0 - gap - w, cy - h / 2.0),
+    };
+    (x.clamp(mx, (mx + mw - w).max(mx)), y.clamp(my, (my + mh - h).max(my)))
+}
+
+/// The island's size in physical pixels while it shows.
+static ISLAND_SIZE: std::sync::Mutex<(f64, f64)> = std::sync::Mutex::new((0.0, 0.0));
+/// A fullscreen app is in front and the island is out of the way.
+static ISLAND_COVERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Hides the island while a fullscreen app is in front (with "hide in
+/// fullscreen apps" on) and brings it back after, without forgetting where it is.
+pub fn island_covered(app: &AppHandle, covered: bool) {
+    ISLAND_COVERED.store(covered, std::sync::atomic::Ordering::Relaxed);
+    let Some(w) = app.get_webview_window(ISLAND) else {
+        return;
+    };
+    if covered {
+        let _ = w.hide();
+    } else if ISLAND_CENTRE.lock().unwrap().is_some() && !w.is_visible().unwrap_or(false) {
+        let _ = w.show();
+        let _ = w.set_always_on_top(true);
+    }
+}
+
+/// Where the island's top-left goes (physical pixels): flat against its
+/// edge, `offset` of the way along it.
+pub fn island_origin(
+    m: (f64, f64, f64, f64),
+    size: (f64, f64),
+    edge: crate::settings::schema::ScreenEdge,
+    offset: f64,
+) -> (f64, f64) {
+    use crate::settings::schema::ScreenEdge::*;
+    let (mx, my, mw, mh) = m;
+    let t = offset.clamp(0.0, 1.0);
+    match edge {
+        Top => (mx + (mw - size.0) * t, my),
+        Bottom => (mx + (mw - size.0) * t, my + mh - size.1),
+        Left => (mx, my + (mh - size.1) * t),
+        Right => (mx + mw - size.0, my + (mh - size.1) * t),
+    }
+}
+
+/// The island page reports its size; it shows only while the buddy's home
+/// is the screen edge.
+#[tauri::command]
+pub fn island_layout(app: AppHandle, width: f64, height: f64) {
+    let Some(w) = app.get_webview_window(ISLAND) else {
+        return;
+    };
+    let b = app.state::<crate::settings::SettingsStore>().get().buddy;
+    if width <= 0.0 || height <= 0.0 || !b.enabled || b.home != crate::settings::schema::BuddyHome::Notch {
+        hide_island(&app);
+        return;
+    }
+    let Some(m) = dock_monitor(&app) else { return };
+    let size = (width * m.scale, height * m.scale);
+    let (x, y) = island_origin(
+        (m.x as f64, m.y as f64, m.width as f64, m.height as f64),
+        size,
+        b.notch_edge,
+        b.notch_offset,
+    );
+    let _ = w.set_size(PhysicalSize::new(size.0.round() as u32, size.1.round() as u32));
+    let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+    if !w.is_visible().unwrap_or(false) && !ISLAND_COVERED.load(std::sync::atomic::Ordering::Relaxed) {
+        let _ = w.show();
+        let _ = w.set_always_on_top(true);
+    }
+    *ISLAND_CENTRE.lock().unwrap() = Some((x + size.0 / 2.0, y + size.1 / 2.0));
+    *ISLAND_SIZE.lock().unwrap() = size;
+    tell_notch(&app);
+    // The pill stays beside the island as it grows and shrinks.
+    if let Some(p) = app.get_webview_window(PILL) {
+        if p.is_visible().unwrap_or(false) && !PILL_FOLLOWS.load(std::sync::atomic::Ordering::Relaxed) {
+            place_pill_by_island(&app, &p);
+        }
+    }
+}
+
+/// Puts the pill beside the island; true when the island is showing.
+fn place_pill_by_island(app: &AppHandle, w: &tauri::WebviewWindow) -> bool {
+    let Some(centre) = *ISLAND_CENTRE.lock().unwrap() else {
+        return false;
+    };
+    let Some(m) = dock_monitor(app) else { return false };
+    let edge = app.state::<crate::settings::SettingsStore>().get().buddy.notch_edge;
+    // Before its first show the window can still report no size (X11).
+    let size = match w.outer_size() {
+        Ok(s) if s.width > 0 && s.height > 0 => (s.width as f64, s.height as f64),
+        _ => (PILL_SIZE.0 * m.scale, PILL_SIZE.1 * m.scale),
+    };
+    let (x, y) = beside_island(
+        centre,
+        *ISLAND_SIZE.lock().unwrap(),
+        size,
+        edge,
+        (m.x as f64, m.y as f64, m.width as f64, m.height as f64),
+        // The pill window carries a 14 px margin for its glow.
+        -8.0 * m.scale,
+    );
+    let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+    true
+}
+
+fn hide_island(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(ISLAND) {
+        let _ = w.hide();
+    }
+    *ISLAND_CENTRE.lock().unwrap() = None;
+    tell_notch(app);
+}
+
+/// Every overlay learns where the island is, in its own pixels, so the buddy
+/// can fly between it and the cursor.
+pub fn tell_notch(app: &AppHandle) {
+    let centre = *ISLAND_CENTRE.lock().unwrap();
+    for (label, m) in app.state::<Overlays>().snapshot() {
+        let point = match centre {
+            Some((x, y)) => {
+                let (lx, ly) = m.to_local_logical(x, y);
+                NotchPoint { x: lx, y: ly, shown: m.contains(x, y) }
+            }
+            None => NotchPoint { x: 0.0, y: 0.0, shown: false },
+        };
+        let _ = app.emit_to(label.as_str(), NOTCH_EVENT, point);
+    }
+}
+
+/// The buddy settings changed: the island hides when it's no longer the
+/// home; when it is, the page reports its size again and it shows.
+pub fn island_sync(app: &AppHandle, s: &crate::settings::Settings) {
+    if !(s.buddy.enabled && s.buddy.home == crate::settings::schema::BuddyHome::Notch) {
+        hide_island(app);
+    }
+}
+
+/// A click on the island opens the text chat beside it.
+#[tauri::command]
+pub fn island_open(app: AppHandle) {
+    show_ask(&app);
+}
+
 /// Plan card size in logical pixels (matches tauri.conf.json).
 const PLAN_SIZE: (f64, f64) = (460.0, 520.0);
 
@@ -122,14 +310,18 @@ pub fn show_pill(app: &AppHandle) {
     let Some(w) = app.get_webview_window(PILL) else {
         return;
     };
-    if let Ok(cursor) = app.cursor_position() {
-        place_pill(app, &w, (cursor.x, cursor.y));
+    let by_island = place_pill_by_island(app, &w);
+    if !by_island {
+        if let Ok(cursor) = app.cursor_position() {
+            place_pill(app, &w, (cursor.x, cursor.y));
+        }
     }
-    // The pill drops its waveform while the buddy shows the voice state.
-    let _ = w.emit_to(PILL, crate::cursor::VISIBLE_EVENT, crate::cursor::buddy_shown(app));
+    // The pill drops its waveform while the buddy (or its island) shows the
+    // voice state.
+    let _ = w.emit_to(PILL, crate::cursor::VISIBLE_EVENT, by_island || crate::cursor::buddy_shown(app));
     let _ = w.show();
     let _ = w.set_always_on_top(true);
-    PILL_FOLLOWS.store(true, std::sync::atomic::Ordering::Relaxed);
+    PILL_FOLLOWS.store(!by_island, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The pill is showing and keeps beside the cursor, like the buddy; not
@@ -552,7 +744,7 @@ fn buddy_hands_off(app: &AppHandle) -> bool {
         .get()
         .agents
         .dock
-        && crate::cursor::buddy_shown(app)
+        && (crate::cursor::buddy_shown(app) || island_shown(app))
 }
 
 /// The hand-off from the buddy: a copy peels off beside the cursor and flies
@@ -564,6 +756,9 @@ pub fn buddy_to_dock(app: &AppHandle) {
         return;
     }
     let _ = app.emit_to(DOCK, DOCK_INCOMING_EVENT, ());
+    if island_shown(app) {
+        let _ = app.emit_to(ISLAND, ISLAND_SPAWN_EVENT, ());
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         // Give the dock a moment to make room for the new chip.
@@ -709,6 +904,30 @@ pub fn open_settings_section(app: AppHandle, section: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_pill_sits_inward_of_the_island() {
+        use crate::settings::schema::ScreenEdge::*;
+        let m = (0.0, 0.0, 1000.0, 600.0);
+        // Under an island at the top, centred on it.
+        assert_eq!(beside_island((500.0, 12.0), (64.0, 24.0), (300.0, 120.0), Top, m, 4.0), (350.0, 28.0));
+        // Above one at the bottom, and never off screen at the side.
+        assert_eq!(beside_island((980.0, 588.0), (64.0, 24.0), (300.0, 120.0), Bottom, m, 4.0), (700.0, 452.0));
+        assert_eq!(beside_island((12.0, 300.0), (24.0, 64.0), (300.0, 120.0), Left, m, 4.0), (28.0, 240.0));
+        assert_eq!(beside_island((988.0, 300.0), (24.0, 64.0), (300.0, 120.0), Right, m, 4.0), (672.0, 240.0));
+    }
+
+    #[test]
+    fn island_hugs_its_edge_at_the_offset() {
+        use crate::settings::schema::ScreenEdge::*;
+        let m = (0.0, 0.0, 1000.0, 600.0);
+        assert_eq!(island_origin(m, (100.0, 40.0), Top, 0.5), (450.0, 0.0));
+        assert_eq!(island_origin(m, (100.0, 40.0), Bottom, 0.0), (0.0, 560.0));
+        assert_eq!(island_origin(m, (100.0, 40.0), Left, 1.0), (0.0, 560.0));
+        assert_eq!(island_origin(m, (100.0, 40.0), Right, 0.5), (900.0, 280.0));
+        // Off-screen offsets are pulled back, and a second monitor keeps its origin.
+        assert_eq!(island_origin((2000.0, 100.0, 1000.0, 600.0), (100.0, 40.0), Top, 7.0), (2900.0, 100.0));
+    }
 
     #[test]
     fn agent_panel_takes_most_of_the_screen() {

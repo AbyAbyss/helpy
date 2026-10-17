@@ -51,7 +51,8 @@ export function Pill() {
       listen<number>(EVENTS.voiceLevel, (e) => (level.current = e.payload)),
       listen<string>(EVENTS.voicePartial, (e) => setState((s) => onPartial(s, e.payload))),
       listen<boolean>(EVENTS.speaking, (e) => setSpeaking(e.payload)),
-      listen<string>(EVENTS.speakError, (e) => setState({ mode: "message", caption: e.payload, tone: "error" })),
+      // The answer stays; the voice problem goes under it.
+      listen<string>(EVENTS.speakError, (e) => setState((s) => (s.caption ? { ...s, hint: e.payload } : { mode: "message", caption: e.payload, tone: "error" }))),
       getCurrentWindow().listen("pill://handoff", () => setHandoff(true)),
       listen<boolean>(EVENTS.buddyVisible, (e) => setBuddy(e.payload)),
       listen<AskEvent>(EVENTS.ask, ({ payload }) => {

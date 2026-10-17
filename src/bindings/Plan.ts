@@ -34,4 +34,13 @@ started: boolean,
 /**
  * The model that planned it, when a model did.
  */
-plannedBy: string | null, };
+plannedBy: string | null, 
+/**
+ * The skill (template) the plan came from, by name, for the card.
+ */
+skill: string | null, 
+/**
+ * The request asked for this again and again: a cron schedule (local
+ * time) that becomes a trigger when the plan starts.
+ */
+schedule: string | null, };

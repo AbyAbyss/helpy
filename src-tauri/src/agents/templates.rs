@@ -408,6 +408,8 @@ pub fn agents_template_plan(
         None,
         false,
         None,
+        Some(t.name.clone()),
+        None,
     )
 }
 
@@ -438,7 +440,26 @@ pub fn agents_save_template(app: AppHandle, id: String) -> Result<Template, Stri
         .iter()
         .map(|a| (a.id.clone(), a.name.clone()))
         .collect();
-    let mut s = app.state::<SettingsStore>().get();
+    let _ = batch;
+    let list = agents
+        .iter()
+        .map(|a| TemplateAgent {
+            name: a.name.clone(),
+            goal: a.goal.clone(),
+            tools: a.tools.clone(),
+            keep_open: a.keep_open,
+            after: a
+                .after
+                .iter()
+                .filter_map(|d| names.get(d).cloned())
+                .collect(),
+        })
+        .collect();
+    save(&app, &request, list)
+}
+
+/// A name for something saved from a request: its first words, capitalised.
+pub fn title_for(request: &str, fallback: &str) -> String {
     let base: String = request
         .chars()
         .take(40)
@@ -446,37 +467,28 @@ pub fn agents_save_template(app: AppHandle, id: String) -> Result<Template, Stri
         .trim()
         .to_string();
     let name = if base.is_empty() {
-        agents[0].name.clone()
+        fallback.to_string()
     } else {
         base
     };
     let mut chars = name.chars();
-    let name: String = chars
+    chars
         .next()
         .map(|c| c.to_uppercase().chain(chars).collect())
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// Saves these agents as a template of the user's own.
+pub fn save(app: &AppHandle, request: &str, agents: Vec<TemplateAgent>) -> Result<Template, String> {
+    let mut s = app.state::<SettingsStore>().get();
     let t = Template {
         id: super::new_id("t"),
-        name,
+        name: title_for(request, &agents[0].name),
         description: format!("Saved from \"{}\".", request.trim()),
         params: Vec::new(),
-        agents: agents
-            .iter()
-            .map(|a| TemplateAgent {
-                name: a.name.clone(),
-                goal: a.goal.clone(),
-                tools: a.tools.clone(),
-                keep_open: a.keep_open,
-                after: a
-                    .after
-                    .iter()
-                    .filter_map(|d| names.get(d).cloned())
-                    .collect(),
-            })
-            .collect(),
+        agents,
         folders: Vec::new(),
     };
-    let _ = batch;
     s.agents.templates.push(t.clone());
     let value = serde_json::to_value(&s.agents.templates).unwrap_or_default();
     crate::settings::settings_set(app.clone(), "agents.templates".into(), value)

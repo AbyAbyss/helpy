@@ -5,6 +5,7 @@ import type { Builder } from "./Builder";
 import type { ConfirmPlans } from "./ConfirmPlans";
 import type { DefaultRunMode } from "./DefaultRunMode";
 import type { DockSide } from "./DockSide";
+import type { DockStyle } from "./DockStyle";
 import type { OnFailure } from "./OnFailure";
 import type { SearchEngine } from "./SearchEngine";
 import type { ShellPolicy } from "./ShellPolicy";
@@ -48,7 +49,7 @@ noProgressSteps: number,
 /**
  * Older work is summarized once an agent's conversation passes this.
  */
-contextTokens: number, dock: boolean, dockSide: DockSide, 
+contextTokens: number, dock: boolean, dockSide: DockSide, dockStyle: DockStyle, 
 /**
  * Read each new status line aloud.
  */

@@ -16,6 +16,9 @@ use crate::settings::SettingsStore;
 
 pub const CURSOR_EVENT: &str = "overlay://cursor";
 pub const VISIBLE_EVENT: &str = "buddy://visible";
+/// The mouse has rested this long: the island may doze off.
+pub const SLEEPY_EVENT: &str = "buddy://sleepy";
+const SLEEPY_AFTER: Duration = Duration::from_secs(90);
 
 const POLL: Duration = Duration::from_millis(8);
 const FULLSCREEN_CHECK: Duration = Duration::from_millis(500);
@@ -55,6 +58,8 @@ fn run(app: AppHandle) {
     let mut last_monitor_check = Instant::now();
     let mut fullscreen = false;
     let mut last_visible: Option<bool> = None;
+    let mut last_sleepy = false;
+    let mut island_covered = false;
 
     loop {
         thread::sleep(POLL);
@@ -83,11 +88,28 @@ fn run(app: AppHandle) {
         let idle = buddy.hide_when_idle
             && last_move.elapsed() >= Duration::from_secs(buddy.idle_seconds as u64)
             && !busy(&app);
-        let visible = buddy.enabled && !(buddy.hide_in_fullscreen && fullscreen) && !idle;
+        // In its island at the screen edge, the buddy never leaves it: it
+        // listens, thinks and answers there.
+        let at_home = buddy.home == crate::settings::schema::BuddyHome::Notch;
+        let visible = buddy.enabled && !(buddy.hide_in_fullscreen && fullscreen) && !idle && !at_home;
         if last_visible != Some(visible) || resend {
             last_visible = Some(visible);
             shared.visible.store(visible, Ordering::Relaxed);
             let _ = app.emit(VISIBLE_EVENT, visible);
+        }
+        if resend {
+            crate::windows::tell_notch(&app);
+        }
+        // The island steps aside for a fullscreen app too, when asked to.
+        let covered = at_home && buddy.hide_in_fullscreen && fullscreen;
+        if covered != island_covered || resend {
+            island_covered = covered;
+            crate::windows::island_covered(&app, covered);
+        }
+        let sleepy = last_move.elapsed() >= SLEEPY_AFTER && !busy(&app);
+        if sleepy != last_sleepy || resend {
+            last_sleepy = sleepy;
+            let _ = app.emit(SLEEPY_EVENT, sleepy);
         }
 
         if !moved && !resend {

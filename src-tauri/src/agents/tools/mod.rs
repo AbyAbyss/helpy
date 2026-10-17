@@ -117,7 +117,7 @@ pub fn groups(a: &Agents) -> Vec<ToolGroup> {
         a.tools.fetch,
         "web",
         "Read web pages",
-        "read public web pages",
+        "read public web pages, and save data as CSV files",
         vec![],
     );
     add(
@@ -277,6 +277,10 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
             json!({}),
             &[],
         ));
+    }
+    // Also with page reading: a browser connector (Playwright) has no CSV
+    // tool of its own, and researchers are asked for spreadsheets too.
+    if has("browser") || has("web") {
         out.push(def(
             "save_csv",
             "Save rows of data as a CSV file in the user's projects folder (Data). Use it for anything the user wants as a table or spreadsheet.",
@@ -600,6 +604,10 @@ impl Toolbox {
         let Some(group) = group_of(tool) else {
             return Gate::Never(format!("there's no tool called {tool}."));
         };
+        // Offered with page reading as well as the browser (see `defs`).
+        if tool == "save_csv" && groups.iter().any(|g| g == "web") {
+            return Gate::Allow;
+        }
         if !groups.iter().any(|g| g == group) {
             return Gate::Never(format!("{tool} isn't one of this agent's tools."));
         }
@@ -1199,6 +1207,25 @@ mod tests {
         for t in ["edit_file", "grep_files", "find_files"] {
             assert!(files.contains(&t.to_string()), "{t}");
         }
+    }
+
+    /// An agent on a browser connector (Playwright) has search and web, not
+    /// Helpy's browser; it can still save what it found as a CSV.
+    #[test]
+    fn save_csv_comes_with_page_reading_too() {
+        let has_csv = |g: &[&str]| {
+            let groups: Vec<String> = g.iter().map(|s| s.to_string()).collect();
+            defs(&groups).iter().any(|d| d.name == "save_csv")
+        };
+        assert!(has_csv(&["mcp_playwright", "search", "web"]));
+        assert!(has_csv(&["browser"]));
+        assert!(!has_csv(&["search"]));
+        let t = toolbox(&Agents::default());
+        let args = json!({"name": "x", "columns": ["a"], "rows": [["1"]]});
+        let gate = |g: &str| t.gate(&[g.to_string()], "save_csv", &args);
+        assert!(matches!(gate("web"), Gate::Allow));
+        assert!(matches!(gate("browser"), Gate::Allow));
+        assert!(matches!(gate("search"), Gate::Never(_)));
     }
 
     #[test]

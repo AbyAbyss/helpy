@@ -17,6 +17,42 @@
 .buddy__dots circle { fill: var(--buddy-body); stroke: var(--buddy-rim); stroke-width: 1; opacity: 0; }
 .buddy__body { transform-box: fill-box; transform-origin: center; }
 
+/* Babies of the buddy: rosy cheeks, shiny eyes, a little smile that gives
+   way to the talking mouth. */
+.buddy__cheeks ellipse { fill: #ffb3b0; opacity: 0.85; }
+.buddy__glint { fill: #fff; }
+.buddy__smile { fill: none; stroke: var(--buddy-eye); stroke-width: 1.6; stroke-linecap: round; }
+.buddy--baby.buddy--speaking .buddy__smile { opacity: 0; }
+.buddy--baby .buddy__eyes { transform-box: fill-box; transform-origin: center; }
+.buddy--baby .buddy__dots circle { opacity: 0; }
+.buddy--baby.buddy--thinking .buddy__dots circle { opacity: 1; }
+.buddy--baby.buddy--thinking .buddy__eyes { transform: translate(1px, -1px); }
+/* The babies' blink is a bit more often and a touch of a wobble. */
+.buddy--animate.buddy--baby.buddy--idle .buddy__eyes { animation: buddy-blink 3.6s infinite; }
+.buddy--animate.buddy--baby .buddy__body { animation: buddy-baby-sway 2.8s ease-in-out infinite; }
+.buddy--animate.buddy--baby.buddy--thinking .buddy__body { animation: buddy-baby-sway 1.4s ease-in-out infinite; }
+/* Moods on top of a state. */
+.buddy__arc { fill: none; stroke: var(--buddy-eye); stroke-width: 2.4; stroke-linecap: round; }
+.buddy__brow { fill: none; stroke: var(--buddy-eye); stroke-width: 1.8; stroke-linecap: round; }
+.buddy__sweat { fill: #7fc4ff; stroke: var(--buddy-rim); stroke-width: 1; }
+.buddy__mark { fill: var(--buddy-rim); font: 700 13px var(--font-ui); paint-order: stroke; stroke: var(--buddy-eye); stroke-width: 2.5px; }
+.buddy--happy .buddy__smile { stroke-width: 2; }
+.buddy--sleepy .buddy__smile { opacity: 0.5; }
+.buddy--animate .buddy__zzz { animation: buddy-zzz 2.2s ease-in-out infinite; }
+@keyframes buddy-zzz { 0% { transform: translate(0, 2px); opacity: 0; } 30%, 70% { opacity: 1; } 100% { transform: translate(3px, -6px); opacity: 0; } }
+.buddy__zzz { transform-box: fill-box; transform-origin: center; }
+.buddy--curious .buddy__body { transform: rotate(-10deg); }
+.buddy--animate.buddy--worried .buddy__sweat { animation: buddy-sweat 1.6s ease-in infinite; }
+.buddy--animate.buddy--worried .buddy__body { animation: buddy-shiver 0.9s ease-in-out infinite; }
+.buddy--animate.buddy--curious .buddy__body { animation: buddy-peek 2.4s ease-in-out infinite; }
+.buddy--animate.buddy--happy .buddy__body { animation: buddy-hop 1.6s ease-in-out infinite; }
+@keyframes buddy-sweat { 0% { transform: translateY(-2px); opacity: 0; } 30%, 70% { opacity: 1; } 100% { transform: translateY(6px); opacity: 0; } }
+@keyframes buddy-shiver { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-0.8px) rotate(-1.5deg); } 75% { transform: translateX(0.8px) rotate(1.5deg); } }
+@keyframes buddy-peek { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(-4deg) translateY(-1px); } }
+@keyframes buddy-hop { 0%, 60%, 100% { transform: translateY(0) scale(1); } 15% { transform: translateY(-4px) scale(1.04, 0.96); } 30% { transform: translateY(0) scale(0.98, 1.02); } }
+
+@keyframes buddy-baby-sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+
 .buddy__badge {
   position: absolute;
   top: -4px;

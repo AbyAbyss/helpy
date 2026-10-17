@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from "vitest";
-import { describe, fromCron, toCron } from "./TriggerControls";
+import { describe, fromCron, toCron } from "../lib/schedule";
 
 group("trigger schedules", () => {
   it("reads common schedules as plain words", () => {

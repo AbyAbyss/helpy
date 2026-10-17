@@ -55,6 +55,11 @@ pub struct Plan {
     pub started: bool,
     /// The model that planned it, when a model did.
     pub planned_by: Option<String>,
+    /// The skill (template) the plan came from, by name, for the card.
+    pub skill: Option<String>,
+    /// The request asked for this again and again: a cron schedule (local
+    /// time) that becomes a trigger when the plan starts.
+    pub schedule: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -147,7 +152,11 @@ pub fn system_prompt(s: &Settings, groups: &[ToolGroup]) -> String {
          what you set up\"}}\n\n\
          If the request is clearly one of these templates, reply instead with only {{\"template\": \"id\", \"params\": \
          {{\"blank\": \"value\"}}, \"reply\": \"one short sentence\"}}, filling the blanks from the request (leave out \
-         ones it doesn't say):\n{templates}"
+         ones it doesn't say):\n{templates}\n\
+         When the user wants this to happen again and again (\"every morning at 8\", \"each Friday\", \"every 2 hours\"), \
+         add \"schedule\": a 5-field cron expression in their local time (minute hour day-of-month month weekday, e.g. \
+         \"0 8 * * *\"; weekdays are 1-5) to either reply and say so in \"reply\"; the goals describe one run, and the \
+         task also runs now. Leave \"schedule\" out otherwise."
     )
 }
 
@@ -330,9 +339,14 @@ pub async fn plan(
             "\n\n(The agents will get a picture of what the user had on screen with their task.)";
     }
     parts.push(Part::Text(text));
+    let mut system = system_prompt(&s, &groups);
+    if let Some(notes) = crate::ai::memory::prompt_section(app) {
+        system += "\n\n";
+        system += &notes;
+    }
     let req = ChatRequest {
         model: String::new(),
-        system: system_prompt(&s, &groups),
+        system,
         messages: vec![Message {
             role: Role::User,
             parts,
@@ -353,21 +367,41 @@ pub async fn plan(
     .await
     .map_err(|e| e.message)?;
     let text = completion.text();
-    let (mode, agents, folders, reply) = match template_choice(&text) {
+    let (mode, agents, folders, reply, skill) = match template_choice(&text) {
         Some((id, values, reply)) => {
             let t = super::templates::all(&s)
                 .into_iter()
                 .find(|t| t.id == id)
                 .ok_or("The planner picked a template that doesn't exist")?;
             let (mode, agents, folders) = super::templates::build(&t, &values)?;
-            (mode, agents, folders, reply)
+            (mode, agents, folders, reply, Some(t.name.clone()))
         }
-        None => parse(&text, &groups, s.agents.default_mode)?,
+        None => {
+            let (mode, agents, folders, reply) = parse(&text, &groups, s.agents.default_mode)?;
+            (mode, agents, folders, reply, None)
+        }
     };
     let named = tools::named_groups(crate::connectors::external(app, &s).as_ref(), request);
-    let agents = with_named_tools(agents, &named);
+    let mut agents = with_named_tools(agents, &named);
+    // Templates list a browser alone, and a named connector replaces it:
+    // either way the agent also gets to search and read pages.
+    let known: Vec<&str> = groups.iter().map(|g| g.id.as_str()).collect();
+    for a in &mut agents {
+        with_page_reading(&mut a.tools, &known);
+    }
     let planned_by = Some(completion.model.clone()).filter(|m| !m.is_empty());
-    offer(app, &s, request, mode, agents, folders, reply, image, voice, planned_by)
+    let schedule = schedule_choice(&text);
+    offer(app, &s, request, mode, agents, folders, reply, image, voice, planned_by, skill, schedule)
+}
+
+/// A repeat the planner read from the request, as a cron expression that
+/// runs at sane times; anything else is dropped rather than guessed at.
+fn schedule_choice(text: &str) -> Option<String> {
+    let t = text.trim();
+    let v: Value = serde_json::from_str(&t[t.find('{')?..=t.rfind('}')?]).ok()?;
+    let cron = v["schedule"].as_str()?.trim().to_string();
+    super::triggers::check_schedule(&cron).ok()?;
+    Some(cron)
 }
 
 /// A template the planner picked: {"template": id, "params": {...}}.
@@ -419,6 +453,8 @@ pub fn offer(
     image: Option<String>,
     voice: bool,
     planned_by: Option<String>,
+    skill: Option<String>,
+    schedule: Option<String>,
 ) -> Result<Plan, String> {
     let mut groups = tools::groups(&s.agents);
     groups.extend(crate::connectors::external(app, s).groups());
@@ -448,6 +484,8 @@ pub fn offer(
         },
         started: false,
         planned_by,
+        skill,
+        schedule,
         agents,
     };
     let quiet = starts_quietly(s.agents.confirm_plans, &plan);
@@ -505,6 +543,9 @@ fn start(app: &AppHandle, id: &str, mode: RunMode) -> Result<(), String> {
     } else {
         mode
     };
+    if let Some(cron) = &plan.schedule {
+        super::triggers::add_for_plan(app, &plan.request, cron, &plan.agents)?;
+    }
     let names: Vec<String> = plan.agents.iter().map(|a| a.name.clone()).collect();
     let agents = plan
         .agents
@@ -739,6 +780,19 @@ mod tests {
     }
 
     #[test]
+    fn a_schedule_is_kept_only_when_it_is_a_sane_cron() {
+        assert_eq!(
+            schedule_choice(r#"{"agents": [], "schedule": "0 8 * * 1-5"}"#),
+            Some("0 8 * * 1-5".into())
+        );
+        assert_eq!(schedule_choice(r#"{"template": "morning-briefing", "schedule": "30 7 * * *"}"#), Some("30 7 * * *".into()));
+        assert_eq!(schedule_choice(r#"{"agents": []}"#), None);
+        assert_eq!(schedule_choice(r#"{"agents": [], "schedule": "every morning"}"#), None);
+        // Too often to be a trigger.
+        assert_eq!(schedule_choice(r#"{"agents": [], "schedule": "* * * * *"}"#), None);
+    }
+
+    #[test]
     fn one_agent_is_single_and_garbage_is_an_error() {
         let (mode, ..) = parse(
             r#"{"mode": "parallel", "agents": [{"name": "Tidy", "goal": "Sort the desktop", "tools": ["files"]}]}"#,
@@ -812,6 +866,8 @@ mod tests {
             reply: String::new(),
             started: false,
             planned_by: None,
+            skill: None,
+            schedule: None,
             agents: Vec::new(),
         };
         assert!(starts_quietly(ConfirmPlans::SideEffectsOnly, &plan(Vec::new())));

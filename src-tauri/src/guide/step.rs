@@ -306,7 +306,7 @@ fn actions_schema() -> Value {
                     "description": "For line: [[x, y], ...], at least 2 points."
                 },
                 "closed": { "type": "boolean", "description": "For line: join the last point to the first, making a shape." },
-                "curved": { "type": "boolean", "description": "For line: a smooth curve through the points." },
+                "curved": { "type": "boolean", "description": "For line: a smooth curve through the points. Closed and curved through 6 or more points around a spot draws a circle or ellipse." },
                 "label": label,
                 "text": { "type": "string", "description": "For text: what to write (a few words, a number or a formula like a² + b² = c²; up to 60 characters). For speak: what to say aloud." },
                 "size": { "type": "string", "enum": ["small", "medium", "large"], "description": "For text: how big to write it. Default medium." },
@@ -319,7 +319,8 @@ fn actions_schema() -> Value {
         },
         "description": "highlight: a box (x, y = top-left corner, width, height) around a control. \
             point: a pointer at x, y. arrow: from fromX, fromY to toX, toY. line: a line through points, \
-            closed for a triangle, square or other shape, curved for a curve; use lines to trace, \
+            closed for a triangle, square or other shape, curved for a curve (closed and curved through 6 or \
+            more points draws a circle or ellipse); use lines to trace, \
             underline or build on what's on screen (e.g. the sides of a triangle, a square on one side). \
             Lines draw one after another in order. text: write text centred on x, y, like a teacher on a \
             board: numbers on a triangle's sides, a formula, a working step; keep it clear of what's already \
@@ -342,7 +343,7 @@ pub fn json_instructions() -> String {
      {\"step\": {\"instruction\": \"...\", \"step\": 1, \"total\": 3, \"actions\": [...]}}. \
      Actions: {\"type\": \"highlight\", \"x\", \"y\", \"width\", \"height\", \"label\"} (x, y = top-left corner), \
      {\"type\": \"point\", \"x\", \"y\", \"label\"}, {\"type\": \"arrow\", \"fromX\", \"fromY\", \"toX\", \"toY\", \"label\"}, \
-     {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape; use lines to trace or build on what's on screen), \
+     {\"type\": \"line\", \"points\": [[x, y], ...], \"closed\", \"curved\", \"label\"} (closed makes a shape, closed and curved through 6 or more points a circle; use lines to trace or build on what's on screen), \
      {\"type\": \"text\", \"x\", \"y\", \"text\", \"size\": \"small\"|\"medium\"|\"large\"} (writes numbers, words or a formula centred on x, y), \
      {\"type\": \"image\", \"x\", \"y\", \"width\", \"query\", \"caption\"} (a reference picture found by query, 2 to 4 plain words naming the subject, top-left at x, y), \
      {\"type\": \"chart\", \"x\", \"y\", \"width\", \"chart\", \"caption\"} (a chart or diagram from Mermaid source, e.g. pie or xychart-beta, top-left at x, y), \

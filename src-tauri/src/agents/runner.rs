@@ -927,6 +927,18 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
             .map(|(id, name, input)| (id.to_string(), name.to_string(), input.clone()))
             .collect();
         if calls.is_empty() {
+            // A first reply that only says what it's about to do ("I'll start
+            // by searching…") isn't a result yet; the model gets one nudge.
+            if agent.counters.steps == 1 && agent.counters.tool_calls == 0 && !agent.tools.is_empty() {
+                push_user_text(
+                    agent,
+                    "Nothing has been done yet. If that was your whole answer, send it again as the answer; \
+                     otherwise go ahead with your tools now."
+                        .into(),
+                );
+                run.save(agent);
+                continue;
+            }
             run.finish(agent, &text);
             return;
         }
@@ -947,9 +959,11 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
                 run.stop(agent, Limit::ToolCalls, msg);
                 return;
             }
+            // The same call is a repeat only while it keeps giving the same
+            // result; "next page" or "list files" again after a change is work.
             let key = format!("{name} {}", canonical(&args));
-            let seen = agent.repeats.get(&key).copied().unwrap_or(0) + 1;
-            if seen >= lim.repeat {
+            let seen = agent.repeats.get(&key).copied().unwrap_or(0);
+            if seen + 1 >= lim.repeat {
                 let msg = format!(
                     "Stopped as stuck: it tried {name} with the same input {} times.",
                     lim.repeat
@@ -957,7 +971,6 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
                 run.stop(agent, Limit::Repeat, msg);
                 return;
             }
-            agent.repeats.insert(key, seen);
             agent.counters.tool_calls += 1;
             agent.log(
                 env.now_ms(),
@@ -969,6 +982,9 @@ pub async fn run(agent: &mut Agent, env: &dyn Env, lim: &Limits, cancel: &Cancel
                 Ok(r) => r,
                 Err(_) => return,
             };
+            let result_hash = stable_hash(&output);
+            let same = agent.repeat_outputs.insert(key.clone(), result_hash) == Some(result_hash);
+            agent.repeats.insert(key, if same { seen + 1 } else { 1 });
             progress |= agent
                 .seen
                 .insert(stable_hash(&format!("{name}\u{0}{output}")));
@@ -1446,11 +1462,60 @@ mod tests {
                 tool_call("", "search", json!({"q": "x", "n": 5})),
             ],
         );
+        let same = || ToolOutcome::Ok { text: "the same 3 results".into(), ops: Vec::new() };
+        f.tools.lock().unwrap().extend([same(), same(), same()]);
         let mut a = agent();
         go(&f, &mut a, &limits()).await;
         assert_eq!(a.stop.as_ref().unwrap().limit, Limit::Repeat);
         // The third identical call never ran.
         assert_eq!(f.tool_runs.lock().unwrap().len(), 2);
+    }
+
+    /// "Next page" three times is the same call with a new result each time:
+    /// work, not a loop (the Fake answers every call differently).
+    #[tokio::test]
+    async fn the_same_call_with_new_results_is_not_stuck() {
+        let f = Fake::default();
+        script(
+            &f,
+            vec![
+                tool_call("", "browser_click", json!({"target": "Next page"})),
+                tool_call("", "browser_click", json!({"target": "Next page"})),
+                tool_call("", "browser_click", json!({"target": "Next page"})),
+                tool_call("", "browser_click", json!({"target": "Next page"})),
+                text("Four pages read."),
+            ],
+        );
+        let mut a = agent();
+        go(&f, &mut a, &limits()).await;
+        assert_eq!(a.status, Status::Done, "{:?}", a.stop);
+        assert_eq!(f.tool_runs.lock().unwrap().len(), 4);
+    }
+
+    /// A model that only announces its first step is sent back to do it.
+    #[tokio::test]
+    async fn a_first_reply_without_tools_gets_one_nudge() {
+        let f = Fake::default();
+        script(
+            &f,
+            vec![
+                text("I'll start by searching for laptops."),
+                tool_call("", "search", json!({"q": "laptops"})),
+                text("Here are three laptops."),
+            ],
+        );
+        let mut a = agent();
+        a.tools = vec!["search".into()];
+        go(&f, &mut a, &limits()).await;
+        assert_eq!(a.result.as_deref(), Some("Here are three laptops."));
+        assert_eq!(f.calls.load(Ordering::SeqCst), 3);
+        // An answer that needs no tools still goes through after the nudge.
+        let f = Fake::default();
+        script(&f, vec![text("Two plus two is four."), text("Two plus two is four.")]);
+        let mut a = agent();
+        a.tools = vec!["search".into()];
+        go(&f, &mut a, &limits()).await;
+        assert_eq!(a.result.as_deref(), Some("Two plus two is four."));
     }
 
     #[tokio::test]

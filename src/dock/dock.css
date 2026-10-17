@@ -160,6 +160,30 @@ body,
   transform: scale(1.09);
 }
 
+/* The buddy's face in place of the mark; the glow still says how it's doing. */
+.chip--face .buddy {
+  filter: drop-shadow(0 0 4px var(--glow));
+  transition: transform 420ms var(--spring);
+}
+.chip--face:hover .buddy {
+  transform: rotate(-8deg);
+}
+
+/* A finished baby jumps for joy once, then keeps smiling. */
+.chip__face {
+  display: inline-flex;
+  line-height: 0;
+}
+.chip--done .chip__face {
+  animation: cheer 900ms var(--out) 200ms;
+}
+@keyframes cheer {
+  0%, 100% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-10px) scale(1.08, 0.94) rotate(-6deg); }
+  55% { transform: translateY(0) scale(0.95, 1.06); }
+  75% { transform: translateY(-4px) rotate(4deg); }
+}
+
 .chip:hover svg {
   transform: rotate(-8deg);
 }

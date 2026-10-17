@@ -10,7 +10,7 @@ import { api, EVENTS } from "../lib/ipc";
 type Metric = "tokens" | "cost";
 
 const shortTokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
-const money = (n: number) => `$${n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
+const money = (n: number) => `$${n < 0.1 ? n.toFixed(3) : n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
 const dayLabel = (date: string) => new Date(`${date}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
 /**
@@ -35,7 +35,7 @@ export function UsagePanel({ settings }: { settings: Settings }) {
     ["Input", shortTokens(usage.inputTokens), "tokens sent, not counting cached ones"],
     ["Output", shortTokens(usage.outputTokens), "tokens the models wrote"],
     ["Cached", shortTokens(cached), `${shortTokens(usage.cacheReadTokens)} read from the provider's cache (cheaper), ${shortTokens(usage.cacheWriteTokens)} written to it`],
-    ["Cost", usage.cost > 0 ? `$${usage.cost.toFixed(2)}` : "—", usage.cost > 0 ? "priced models only" : "no priced model used yet"],
+    ["Cost", usage.cost > 0 ? money(usage.cost) : "—", usage.cost > 0 ? "priced models only" : "no priced model used yet"],
   ];
   const withUse = (rows: Total[]) => rows.filter((r) => r.tokens > 0);
   return (
@@ -160,28 +160,90 @@ function Breakdown({ title, rows, value, format, cost }: { title: string; rows: 
 /** The notes Helpy has saved about the user, each removable. */
 export function MemoryNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
+  const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const load = () => void api.notes().then(setNotes, () => {});
     load();
     const off = listen(EVENTS.memoryChanged, load);
     return () => void off.then((f) => f());
   }, []);
-  if (notes.length === 0) return <p className="group__note">Nothing remembered yet. Tell Helpy about yourself in a conversation and it saves what matters here.</p>;
+  const add = () => {
+    if (!draft.trim()) return;
+    api.noteAdd(draft).then(
+      () => {
+        setDraft("");
+        setError(null);
+      },
+      (e) => setError(String(e)),
+    );
+  };
+  const save = () => {
+    if (!editing) return;
+    api.noteUpdate(editing.id, editing.text).then(
+      () => {
+        setEditing(null);
+        setError(null);
+      },
+      (e) => setError(String(e)),
+    );
+  };
   return (
     <div className="notes">
-      <ul className="notes__list">
-        {notes.map((n) => (
-          <li key={n.id} className="notes__row">
-            <span>{n.text}</span>
-            <button type="button" className="link-btn" onClick={() => api.noteDelete(n.id)} aria-label={`Forget "${n.text}"`}>
-              Forget
-            </button>
-          </li>
-        ))}
-      </ul>
-      <button type="button" className="link-btn" onClick={() => api.notesClear()}>
-        Forget everything ({notes.length})
-      </button>
+      {notes.length === 0 ? (
+        <p className="group__note">Nothing remembered yet. Tell Helpy about yourself in a conversation, or add a note below.</p>
+      ) : (
+        <ul className="notes__list">
+          {notes.map((n) => (
+            <li key={n.id} className="notes__row">
+              {editing?.id === n.id ? (
+                <input
+                  className="text-input"
+                  value={editing.text}
+                  autoFocus
+                  onChange={(e) => setEditing({ id: n.id, text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") save();
+                    if (e.key === "Escape") setEditing(null);
+                  }}
+                  onBlur={save}
+                  aria-label="Edit note"
+                />
+              ) : (
+                <>
+                  <span>{n.text}</span>
+                  <button type="button" className="link-btn" onClick={() => setEditing({ id: n.id, text: n.text })} aria-label={`Edit "${n.text}"`}>
+                    Edit
+                  </button>
+                  <button type="button" className="link-btn" onClick={() => api.noteDelete(n.id)} aria-label={`Forget "${n.text}"`}>
+                    Forget
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="notes__add">
+        <input
+          className="text-input"
+          value={draft}
+          placeholder="Something Helpy should know, like “I use Linux and prefer short answers”"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          aria-label="New note"
+        />
+        <button type="button" className="btn btn--ghost" onClick={add} disabled={!draft.trim()}>
+          Remember
+        </button>
+      </div>
+      {error && <p className="err-text">{error}</p>}
+      {notes.length > 0 && (
+        <button type="button" className="link-btn" onClick={() => api.notesClear()}>
+          Forget everything ({notes.length})
+        </button>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import type { TemplateInfo } from "../bindings/TemplateInfo";
 import type { TemplateParam } from "../bindings/TemplateParam";
 import { api } from "../lib/ipc";
 
-/** Templates to start, each with its blanks to fill in. */
+/** Skills to start, each with its blanks to fill in. */
 export function Templates() {
   const [list, setList] = useState<TemplateInfo[]>([]);
   const [picked, setPicked] = useState<string | null>(null);
@@ -15,15 +15,15 @@ export function Templates() {
     <article className="detail templates">
       <header className="detail__head">
         <div className="detail__title">
-          <h1>Templates</h1>
+          <h1>Skills</h1>
         </div>
         <div className="detail__actions">
           <button type="button" className="btn btn--quiet" onClick={() => api.openSettingsSection("agents")}>
-            Edit templates
+            Edit skills
           </button>
         </div>
       </header>
-      <p className="muted">Tasks to start again and again. Fill in the blanks and Helpy shows the plan first, as always.</p>
+      <p className="muted">Tasks Helpy knows how to do, with blanks to fill in. Save any finished request as one. Helpy shows the plan first, as always.</p>
       {current ? (
         <TemplateForm key={current.template.id} info={current} onBack={() => setPicked(null)} />
       ) : (

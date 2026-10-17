@@ -54,6 +54,12 @@ body,
   filter: drop-shadow(0 0 8px #5b93ff) drop-shadow(0 0 18px rgba(91, 147, 255, 0.55));
 }
 
+/* The buddy itself on its way back into its island after a tour. */
+.overlay-handoff--plain {
+  --buddy-body: #f0544f;
+  filter: drop-shadow(0 2px 3px rgba(10, 12, 20, 0.35));
+}
+
 @media (prefers-reduced-motion: reduce) {
   .overlay-buddy__offset {
     transition: none;

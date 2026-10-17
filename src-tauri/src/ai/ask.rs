@@ -1434,7 +1434,9 @@ async fn answer(app: &AppHandle, pending: Pending) {
         Ok((messages, completion, acted)) => {
             *state.conversation.lock().unwrap() = keep_recent(messages, KEEP_QUESTIONS);
             persist(app);
-            let offer_agents = turn.plan.agents && !acted && looks_like_task(&text);
+            // Agents plan with their own model, so the offer stands even when
+            // the questions model has no tools of its own.
+            let offer_agents = !acted && looks_like_task(&text);
             if offer_agents {
                 *state.offer.lock().unwrap() = Some(text);
             }

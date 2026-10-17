@@ -50,12 +50,14 @@ describe("dock", () => {
       agent({ id: "run", created: 3 }),
       agent({ id: "done-recent", status: "done", finished: now - 10_000, created: 1 }),
       agent({ id: "done-old", status: "done", finished: now - 90_000 }),
+      agent({ id: "done-unseen", status: "done", finished: now - 90_000, unseen: true, created: 2 }),
       agent({ id: "failed", status: "failed", finished: 0 }),
       agent({ id: "ready", status: "ready", finished: 0 }),
       agent({ id: "gone", dismissed: true }),
     ];
-    // Oldest first; the finished-long-ago one and the dismissed one are gone.
-    expect(inDock(list, now, 60).map((a) => a.id)).toEqual(["failed", "ready", "done-recent", "run"]);
+    // Oldest first; the finished-long-ago one and the dismissed one are gone,
+    // but one the user hasn't looked at yet stays.
+    expect(inDock(list, now, 60).map((a) => a.id)).toEqual(["failed", "ready", "done-recent", "done-unseen", "run"]);
     expect(inDock(list, now, 0).map((a) => a.id)).toContain("done-old");
   });
 

@@ -22,6 +22,22 @@ export function tone(s: Status): Tone {
   }
 }
 
+/** How a baby of the buddy feels about its job, by status. */
+export function mood(s: Status): "happy" | "curious" | "worried" | null {
+  switch (s) {
+    case "done":
+    case "ready":
+      return "happy";
+    case "question":
+      return "curious";
+    case "approval":
+    case "failed":
+      return "worried";
+    default:
+      return null;
+  }
+}
+
 export const STATUS_LABEL: Record<Status, string> = {
   queued: "Waiting",
   running: "Working",
@@ -40,14 +56,15 @@ const finished = (s: Status) => s === "done" || s === "failed" || s === "stopped
 /**
  * Which agents sit in the dock, oldest first: everything active, anything
  * that needs the user, open-ended agents ready for changes, and finished
- * ones for `doneSeconds` (0 keeps them). Failures stay until dismissed.
+ * ones for `doneSeconds` (0 keeps them) or until the user has looked at
+ * them. Failures stay until dismissed.
  */
 export function inDock(agents: AgentView[], now: number, doneSeconds: number): AgentView[] {
   return agents
     .filter((a) => {
       if (a.dismissed) return false;
       if (!finished(a.status)) return true;
-      if (a.status === "failed" || a.status === "stopped") return true;
+      if (a.status === "failed" || a.status === "stopped" || a.unseen) return true;
       if (doneSeconds === 0) return true;
       return a.finished != null && now - a.finished < doneSeconds * 1000;
     })

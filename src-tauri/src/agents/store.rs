@@ -170,6 +170,14 @@ impl Store {
         }
     }
 
+    pub fn update_note(&self, id: i64, text: &str) {
+        let _ = self
+            .db
+            .lock()
+            .unwrap()
+            .execute("UPDATE notes SET text = ?1 WHERE id = ?2", params![text, id]);
+    }
+
     pub fn delete_note(&self, id: i64) {
         let _ = self
             .db

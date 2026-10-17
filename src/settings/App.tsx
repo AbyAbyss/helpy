@@ -176,6 +176,7 @@ export function App() {
         platform={platform}
         commitAi={commitAi}
         setProfile={(p) => update("profiles.active", p)}
+        setWhisperModel={(n) => update("voiceInput.whisperModel", n)}
         onDone={() => update("general.onboarded", true)}
       />
     );

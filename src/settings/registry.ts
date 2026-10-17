@@ -187,6 +187,36 @@ export const FIELDS: Field[] = [
     control: { kind: "buddyStyle" },
   },
   {
+    path: "buddy.home", section: "buddy", group: "Buddy", label: "Where it lives",
+    help: "Next to the cursor, it follows your pointer everywhere. At the screen edge, it lives in a small island (under the notch on a MacBook): it listens and answers there, pushes new agents off toward the dock, and opens the chat when you click it.",
+    keywords: "notch island edge top dynamic home position",
+    control: { kind: "segmented", options: [{ value: "cursor", label: "Next to the cursor" }, { value: "notch", label: "At the screen edge" }] },
+  },
+  {
+    path: "buddy.notchEdge", section: "buddy", group: "Buddy", label: "Which edge",
+    keywords: "notch island top bottom left right",
+    control: { kind: "segmented", options: [{ value: "top", label: "Top" }, { value: "bottom", label: "Bottom" }, { value: "left", label: "Left" }, { value: "right", label: "Right" }] },
+    when: (s) => s.buddy.home === "notch",
+  },
+  {
+    path: "buddy.islandLook", section: "buddy", group: "Buddy", label: "Island look",
+    help: "The buddy's baby peeking out of the island, or the island itself as a little character with eyes, a mouth and hands that shows how it feels: listening, thinking, working, cheering, dozing off.", keywords: "island look eyes face character mascot peek cute",
+    control: { kind: "segmented", options: [{ value: "face", label: "Island face" }, { value: "peek", label: "Peeking baby" }] },
+    when: (s) => s.buddy.home === "notch",
+  },
+  {
+    path: "buddy.islandSize", section: "buddy", group: "Buddy", label: "Island scale",
+    keywords: "island bigger smaller zoom",
+    control: { kind: "slider", min: 0.75, max: 2, step: 0.05, format: pct },
+    when: (s) => s.buddy.home === "notch",
+  },
+  {
+    path: "buddy.notchOffset", section: "buddy", group: "Buddy", label: "Where along the edge",
+    help: "The middle sits under a MacBook's notch.", keywords: "notch island offset centre middle",
+    control: { kind: "slider", min: 0, max: 1, step: 0.05, format: pct, ends: ["Start", "End"] },
+    when: (s) => s.buddy.home === "notch",
+  },
+  {
     path: "buddy.size", section: "buddy", group: "Look", label: "Size", keywords: "scale big small",
     control: { kind: "slider", min: 16, max: 128, step: 2, format: px },
   },
@@ -682,9 +712,9 @@ FIELDS.push(
     control: { kind: "stringList", placeholder: "Add a command, e.g. git status" }, when: (s) => s.agents.shellPolicy === "allowlist",
   },
   {
-    path: "agents.templates", section: "agents", group: "Templates", label: "Your templates",
-    help: "Tasks to start again and again, with blanks to fill in. Start them from Templates in the agent panel.",
-    keywords: "template reuse preset blanks parameters saved tasks",
+    path: "agents.templates", section: "agents", group: "Skills", label: "Your skills",
+    help: "Tasks Helpy knows how to do, with blanks to fill in. Start them from Skills in the agent panel, or just ask and Helpy picks one.",
+    keywords: "skill template reuse preset blanks parameters saved tasks",
     control: { kind: "templates" },
   },
   {
@@ -755,6 +785,12 @@ FIELDS.push(
     path: "agents.dock", section: "agents", group: "Dock and notifications", label: "Agent dock",
     help: "Glowing chips at the screen edge. Hover one for its card.", keywords: "dock chips floating cards",
     control: { kind: "toggle" },
+  },
+  {
+    path: "agents.dockStyle", section: "agents", group: "Dock and notifications", label: "Chips look like",
+    help: "Babies of the buddy, one per agent, thinking while it works.", keywords: "dock chips faces babies mascot buddy look",
+    control: { kind: "segmented", options: [{ value: "chips", label: "Marks" }, { value: "faces", label: "Buddy babies" }] },
+    when: (s) => s.agents.dock,
   },
   {
     path: "agents.dockSide", section: "agents", group: "Dock and notifications", label: "Dock side",
