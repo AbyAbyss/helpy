@@ -432,6 +432,12 @@ a.md-link:hover {
   padding: 4px 0;
 }
 
+.slow {
+  margin: -2px 0 6px;
+  font-size: 12px;
+  color: var(--ink-3, #8a92a3);
+}
+
 .dots i {
   width: 7px;
   height: 7px;

@@ -50,6 +50,16 @@ export function Panel() {
     return () => void off.then((f) => f());
   }, []);
 
+  // Waiting on the first words: after a while, say so.
+  const isWaiting = waiting(items, running);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (!isWaiting) return;
+    const t = setTimeout(() => setSlow(true), 5000);
+    return () => clearTimeout(t);
+  }, [isWaiting]);
+
   // Follow the answer as it streams, unless the user scrolled up to read.
   useEffect(() => {
     const el = scroller.current;
@@ -137,11 +147,12 @@ export function Panel() {
         ) : (
           items.map((item, i) => <ItemView key={i} item={item} onPermission={answerPermission} onAgents={startAgents} />)
         )}
-        {waiting(items, running) && (
+        {isWaiting && (
           <div className="dots" aria-label="Thinking">
             <i /> <i /> <i />
           </div>
         )}
+        {isWaiting && slow && <p className="slow">Taking a little longer than usual…</p>}
       </div>
 
       <footer className="composer">

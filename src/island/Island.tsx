@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { AgentView } from "../bindings/AgentView";
 import type { AskActivity } from "../bindings/AskActivity";
 import type { VoicePhase } from "../bindings/VoicePhase";
 import { Buddy, type BuddyState } from "../buddy/Buddy";
@@ -67,7 +68,10 @@ function PillFace({ expr }: { expr: Expression }) {
       ) : expr === "sleepy" ? (
         <path d="M27.5 21.5 q2.5 2.4 5 0" fill="none" stroke="#8fc6ff" strokeWidth={1.6} strokeLinecap="round" />
       ) : expr === "working" ? (
-        <rect className="pf__bar" x={14} y={22} width={32} height={3.6} rx={1.8} fill="url(#pf-bar)" />
+        <g clipPath="url(#pf-track)">
+          <rect x={14} y={22} width={32} height={3.6} rx={1.8} fill="#223058" />
+          <rect className="pf__bar" x={14} y={22} width={14} height={3.6} rx={1.8} fill="url(#pf-bar)" />
+        </g>
       ) : (
         <path className="pf__mouth" d="M26.5 20.5 q3.5 4.5 7 0 z" fill="#ff6f91" />
       )}
@@ -91,6 +95,9 @@ function PillFace({ expr }: { expr: Expression }) {
         </g>
       )}
       <defs>
+        <clipPath id="pf-track">
+          <rect x={14} y={22} width={32} height={3.6} rx={1.8} />
+        </clipPath>
         <linearGradient id="pf-bar" x1="0" x2="1">
           <stop offset="0" stopColor="#2f6bff" /><stop offset="0.5" stopColor="#8fb6ff" /><stop offset="1" stopColor="#2f6bff" />
         </linearGradient>
@@ -112,7 +119,16 @@ export function Island() {
   const [voice, setVoice] = useState<VoicePhase["phase"]>("idle");
   const [speaking, setSpeaking] = useState(false);
   const [activity, setActivity] = useState<AskActivity>({ running: false, queued: 0 });
-  const [working, setWorking] = useState(0);
+  // Agents by id, for how many work and what each is doing right now.
+  const [agents, setAgents] = useState<Map<string, AgentView>>(new Map());
+  const known = useRef<Map<string, AgentView>>(new Map());
+  // A step an agent just reported, shown for a moment; and which running
+  // agent the open island narrates.
+  const [toast, setToast] = useState<string | null>(null);
+  const [narrated, setNarrated] = useState(0);
+  const lastToast = useRef(-Infinity);
+  // A model that's taking longer than usual to answer.
+  const [slow, setSlow] = useState(false);
   // A little agent pushed off toward the dock as agents start.
   const [spawn, setSpawn] = useState(0);
   // The last agent just finished: a moment of cheer.
@@ -127,14 +143,47 @@ export function Island() {
       listen<VoicePhase>(EVENTS.voiceState, (e) => setVoice(e.payload.phase)),
       listen<boolean>(EVENTS.speaking, (e) => setSpeaking(e.payload)),
       listen<AskActivity>(EVENTS.askActivity, (e) => setActivity(e.payload)),
-      listen<number>(EVENTS.agentCount, (e) => setWorking(e.payload)),
+      listen<AgentView>(EVENTS.agentUpdate, ({ payload: a }) => {
+        const was = known.current.get(a.id);
+        known.current = new Map(known.current).set(a.id, a);
+        setAgents(known.current);
+        // A new step from a working agent: say it, but not more than once
+        // every few seconds.
+        if (a.status === "running" && a.statusLine && a.statusLine !== was?.statusLine && performance.now() - lastToast.current > 8000) {
+          lastToast.current = performance.now();
+          setToast(`${a.name} · ${a.statusLine}`);
+        }
+      }),
+      listen<string>(EVENTS.agentRemoved, ({ payload: id }) => {
+        const n = new Map(known.current);
+        n.delete(id);
+        known.current = n;
+        setAgents(n);
+      }),
       getCurrentWindow().listen(EVENTS.islandSpawn, () => setSpawn((n) => n + 1)),
       listen<boolean>(EVENTS.sleepy, (e) => setSleepy(e.payload)),
     ];
     api.askActivity().then(setActivity, () => {});
-    api.agents().then((l) => setWorking(l.agents.filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status)).length), () => {});
+    api.agents().then((l) => {
+      known.current = new Map(l.agents.map((a) => [a.id, a]));
+      setAgents(known.current);
+    }, () => {});
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
+  const running = [...agents.values()].filter((a) => a.status === "running" && !a.parent);
+  const working = [...agents.values()].filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status) && !a.parent).length;
+
+  // The toast shows for a moment; the narration moves on every few seconds.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
+  useEffect(() => {
+    if (running.length < 2) return;
+    const t = setInterval(() => setNarrated((n) => n + 1), 4000);
+    return () => clearInterval(t);
+  }, [running.length]);
 
   useEffect(() => {
     const finished = wasWorking.current > 0 && working === 0;
@@ -161,16 +210,27 @@ export function Island() {
     return () => ro.disconnect();
   }, [b?.home, b?.enabled, b?.notchEdge, b?.notchOffset, b?.islandSize]);
 
-  if (!b) return null;
   const mood: BuddyState =
     voice === "listening" ? "listening" : speaking ? "speaking" : voice === "transcribing" || activity.running ? "thinking" : "idle";
+  useEffect(() => {
+    setSlow(false);
+    if (mood !== "thinking") return;
+    const t = setTimeout(() => setSlow(true), 5000);
+    return () => clearTimeout(t);
+  }, [mood]);
+
+  if (!b) return null;
   const busy = mood !== "idle";
-  const open = hover || busy || spawn > 0 || cheer;
+  const open = hover || busy || spawn > 0 || cheer || !!toast;
   const dockSide = settings?.agents.dockSide ?? "right";
+  // What the open island says about its agents: a step just reported, or
+  // the working agents one at a time.
+  const now = running[narrated % Math.max(running.length, 1)];
+  const agentLine = toast ?? (now?.statusLine ? `${now.name} · ${now.statusLine}` : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : null);
   const expr: Expression =
     mood === "listening" ? "listening" : mood === "speaking" ? "speaking" : mood === "thinking" ? "thinking" : cheer ? "excited" : spawn > 0 ? "excited" : working > 0 ? "working" : sleepy && !hover ? "sleepy" : "happy";
   const line =
-    spawn > 0 ? "Starting agents…" : cheer ? "All done!" : mood === "listening" ? "Listening…" : mood === "thinking" ? "Thinking…" : mood === "speaking" ? "Speaking" : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Ask me anything";
+    spawn > 0 ? "Starting agents…" : cheer ? "All done!" : mood === "listening" ? "Listening…" : mood === "thinking" ? (slow ? "Still thinking…" : "Thinking…") : mood === "speaking" ? "Speaking" : (agentLine ?? "Ask me anything");
 
   return (
     <div
@@ -197,7 +257,7 @@ export function Island() {
               </span>
             )}
           </span>
-          <span className="island__line">{line}</span>
+          <span className="island__line" title={line}>{line}</span>
         </>
       ) : b.islandLook === "peek" ? (
         <span className="island__peek" aria-hidden="true">

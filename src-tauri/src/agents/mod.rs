@@ -234,10 +234,16 @@ fn commit(app: &AppHandle, a: &Agent) {
     }
 }
 
+/// On its own thread: on Linux the notification plugin blocks on a D-Bus
+/// call, which panics inside the async runtime's worker threads.
 fn notify(app: &AppHandle, title: &str, body: &str) {
-    if let Err(e) = app.notification().builder().title(title).body(body).show() {
-        log::warn!("couldn't show a notification: {e}");
-    }
+    let app = app.clone();
+    let (title, body) = (title.to_string(), body.to_string());
+    std::thread::spawn(move || {
+        if let Err(e) = app.notification().builder().title(&title).body(&body).show() {
+            log::warn!("couldn't show a notification: {e}");
+        }
+    });
 }
 
 /// Tells the user when an agent needs them or has finished.
