@@ -9,7 +9,7 @@ export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "usage" | "answ
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, profile, appearance and language." },
-  { id: "buddy", title: "Cursor buddy", blurb: "The small character that rides along with your mouse." },
+  { id: "buddy", title: "Buddy", blurb: "Helpy's little character: beside your cursor, or living in the notch." },
   { id: "hotkeys", title: "Hotkeys", blurb: "Shortcuts that work from any app. Click one to change it." },
   { id: "ai", title: "AI providers", blurb: "The models Helpy talks to and what each one is used for." },
   { id: "usage", title: "Usage & budgets", blurb: "Every token and dollar Helpy has spent, the daily limits, and how much of a conversation it keeps in mind." },
@@ -177,41 +177,44 @@ export const FIELDS: Field[] = [
 
   // Cursor buddy
   {
-    path: "buddy.enabled", section: "buddy", group: "Buddy", label: "Show the cursor buddy",
-    help: "Also in the tray menu. The buddy never blocks clicks.", keywords: "toggle on off character",
+    path: "buddy.enabled", section: "buddy", group: "Buddy", label: "Show the buddy",
+    help: "Beside the cursor or in the notch, whichever is chosen above. Also in the tray menu. It never blocks clicks.", keywords: "toggle on off character cursor",
     control: { kind: "toggle" },
   },
   {
     path: "buddy.style", section: "buddy", group: "Buddy", label: "Style",
-    help: "Pick a built-in buddy or upload an SVG or PNG up to 1 MB.", keywords: "character image upload custom svg png",
+    help: "Pick a built-in buddy or upload an SVG or PNG up to 1 MB. In the notch, this is the baby that peeks out and the agents' faces.", keywords: "character image upload custom svg png",
     control: { kind: "buddyStyle" },
   },
   {
+    // Chosen with the picture cards at the top of the page, not in a row.
     path: "buddy.home", section: "buddy", group: "Buddy", label: "Where it lives",
-    help: "Next to the cursor, it follows your pointer everywhere. At the screen edge, it lives in a small island (under the notch on a MacBook): it listens and answers there, pushes new agents off toward the dock, and opens the chat when you click it.",
-    keywords: "notch island edge top dynamic home position",
-    control: { kind: "segmented", options: [{ value: "cursor", label: "Next to the cursor" }, { value: "notch", label: "At the screen edge" }] },
+    help: "Beside the cursor, it follows your pointer everywhere. In the notch, it hides until you hover it or it has something to show.",
+    keywords: "notch island edge top dynamic home position cursor",
+    control: { kind: "segmented", options: [{ value: "cursor", label: "Beside the cursor" }, { value: "notch", label: "In the notch" }] },
+    when: () => false,
   },
   {
-    path: "buddy.notchEdge", section: "buddy", group: "Buddy", label: "Which edge",
+    path: "buddy.notchEdge", section: "buddy", group: "Island", label: "Which edge",
+    help: "Top is the notch on a MacBook. On a screen without one, the island is a slim black strip against the edge.",
     keywords: "notch island top bottom left right",
     control: { kind: "segmented", options: [{ value: "top", label: "Top" }, { value: "bottom", label: "Bottom" }, { value: "left", label: "Left" }, { value: "right", label: "Right" }] },
     when: (s) => s.buddy.home === "notch",
   },
   {
-    path: "buddy.islandLook", section: "buddy", group: "Buddy", label: "Island look",
+    path: "buddy.islandLook", section: "buddy", group: "Island", label: "Island look",
     help: "The buddy's baby peeking out of the island, or the island itself as a little character with eyes, a mouth and hands that shows how it feels: listening, thinking, working, cheering, dozing off.", keywords: "island look eyes face character mascot peek cute",
     control: { kind: "segmented", options: [{ value: "face", label: "Island face" }, { value: "peek", label: "Peeking baby" }] },
     when: (s) => s.buddy.home === "notch",
   },
   {
-    path: "buddy.islandSize", section: "buddy", group: "Buddy", label: "Island scale",
+    path: "buddy.islandSize", section: "buddy", group: "Island", label: "Island scale",
     keywords: "island bigger smaller zoom",
     control: { kind: "slider", min: 0.75, max: 2, step: 0.05, format: pct },
     when: (s) => s.buddy.home === "notch",
   },
   {
-    path: "buddy.notchOffset", section: "buddy", group: "Buddy", label: "Where along the edge",
+    path: "buddy.notchOffset", section: "buddy", group: "Island", label: "Where along the edge",
     help: "The middle sits under a MacBook's notch.", keywords: "notch island offset centre middle",
     control: { kind: "slider", min: 0, max: 1, step: 0.05, format: pct, ends: ["Start", "End"] },
     when: (s) => s.buddy.home === "notch",
@@ -219,26 +222,31 @@ export const FIELDS: Field[] = [
   {
     path: "buddy.size", section: "buddy", group: "Look", label: "Size", keywords: "scale big small",
     control: { kind: "slider", min: 16, max: 128, step: 2, format: px },
+    when: (s) => s.buddy.home === "cursor",
   },
   {
     path: "buddy.opacity", section: "buddy", group: "Look", label: "Opacity", keywords: "transparency see-through",
     control: { kind: "slider", min: 0.2, max: 1, step: 0.05, format: pct },
+    when: (s) => s.buddy.home === "cursor",
   },
   {
     path: "buddy.offsetX", section: "buddy", group: "Position", label: "Horizontal offset",
     help: "Distance from the pointer tip. Negative moves it left.", keywords: "x position distance",
     control: { kind: "number", min: -200, max: 200, unit: "px" },
+    when: (s) => s.buddy.home === "cursor",
   },
   {
     path: "buddy.offsetY", section: "buddy", group: "Position", label: "Vertical offset",
     help: "Negative moves it above the pointer.", keywords: "y position distance",
     control: { kind: "number", min: -200, max: 200, unit: "px" },
+    when: (s) => s.buddy.home === "cursor",
   },
   {
     path: "buddy.smoothness", section: "buddy", group: "Position", label: "Follow smoothness",
     help: "How much the buddy trails behind. All the way left keeps it glued to the pointer.",
     keywords: "lag trail delay speed easing",
     control: { kind: "slider", min: 0, max: 0.95, step: 0.05, format: (v) => (v === 0 ? "Glued" : v.toFixed(2)), ends: ["Glued", "Floaty"] },
+    when: (s) => s.buddy.home === "cursor",
   },
   {
     path: "buddy.showStateAnimations", section: "buddy", group: "Details", label: "State animations",
@@ -252,18 +260,19 @@ export const FIELDS: Field[] = [
   },
   {
     path: "buddy.hideInFullscreen", section: "buddy", group: "Auto-hide", label: "Hide in fullscreen apps",
-    help: "Games, videos and presentations get the whole screen.", keywords: "games video presentation",
+    help: "Games, videos and presentations get the whole screen. The island steps aside too.", keywords: "games video presentation",
     control: { kind: "toggle" },
   },
   {
     path: "buddy.hideWhenIdle", section: "buddy", group: "Auto-hide", label: "Hide when the mouse rests",
     help: "Comes back as soon as you move the mouse.", keywords: "inactive idle timeout",
     control: { kind: "toggle" },
+    when: (s) => s.buddy.home === "cursor",
   },
   {
     path: "buddy.idleSeconds", section: "buddy", group: "Auto-hide", label: "Hide after",
     keywords: "seconds timeout idle", control: { kind: "number", min: 2, max: 3600, unit: "sec" },
-    when: (s) => s.buddy.hideWhenIdle,
+    when: (s) => s.buddy.home === "cursor" && s.buddy.hideWhenIdle,
   },
 
   // Hotkeys

@@ -1,18 +1,3 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  margin: 0;
-  background: transparent;
-  overflow: hidden;
-  user-select: none;
-}
-
 /* The island merges with a MacBook's notch. Its shell is pure black, like
    the notch; the top `--band` of it hides behind the notch and `--notch-w`
    is how wide the notch is (both 0 without one). Rust sets the two from
@@ -47,6 +32,13 @@ body,
   font: 500 13px/1.3 var(--font-ui);
   -webkit-font-smoothing: antialiased;
   white-space: nowrap;
+}
+
+/* In the settings preview it sits in the page instead of a window of its own. */
+.island--preview {
+  position: relative;
+  animation: none;
+  cursor: default;
 }
 
 .island__shell {

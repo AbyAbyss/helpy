@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type Ref } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AgentView } from "../bindings/AgentView";
 import type { AskActivity } from "../bindings/AskActivity";
 import type { NotchInfo } from "../bindings/NotchInfo";
+import type { Buddy as BuddySettings } from "../bindings/Buddy";
 import type { Settings } from "../bindings/Settings";
 import type { UsageToday } from "../bindings/UsageToday";
 import type { VoicePhase } from "../bindings/VoicePhase";
@@ -20,7 +21,7 @@ export type Expression = "happy" | "listening" | "thinking" | "speaking" | "work
  * the eyes and mouth; the extras (a question mark, sparks, sound waves,
  * a progress bar, z's) sit around them.
  */
-function PillFace({ expr }: { expr: Expression }) {
+export function PillFace({ expr }: { expr: Expression }) {
   const closed = expr === "excited" || expr === "sleepy";
   const eye = (cx: number, squint: boolean) => (
     <g className="pf__eye" style={squint ? { transform: "scaleY(0.55)" } : undefined}>
@@ -126,7 +127,7 @@ function tone(a: AgentView): string {
 }
 
 /** "Alt+Shift+Space" as the keys a Mac or PC shows: ⌥⇧Space or Alt+Shift+Space. */
-function keys(combo: string): string {
+export function keys(combo: string): string {
   if (!/Mac/i.test(navigator.platform)) return combo.replace(/\+/g, " ");
   const map: Record<string, string> = { Alt: "⌥", Option: "⌥", Shift: "⇧", Control: "⌃", Ctrl: "⌃", Super: "⌘", Command: "⌘", Cmd: "⌘", Meta: "⌘" };
   return combo.split("+").map((k) => map[k] ?? k).join("");
@@ -167,6 +168,177 @@ function Waves({ level, live }: { level: number; live: boolean }) {
  * the notch into a panel: a row
  * of actions beside the notch, the face as the hero of one card, and what
  * its agents are doing in another. A click on it opens the text chat.
+ */
+/** One agent in the island's side card. */
+export type AgentRow = { id: string; name: string; what: string; tone: string; steps: string | null; goal: string };
+
+/** What the island shows about an agent. */
+function rowFor(a: AgentView): AgentRow {
+  const what =
+    a.pending?.type === "approval" ? "Needs your OK" : a.pending?.type === "question" ? "Has a question" : a.pending?.type === "failure" ? "Ran into trouble" : a.status === "done" ? "Done" : a.status === "failed" ? "Failed" : a.status === "cancelled" ? "Cancelled" : a.status === "stopped" ? "Stopped" : a.status === "ready" ? "Ready to start" : a.status === "paused" ? "Paused" : a.status === "queued" ? "Waiting its turn" : a.statusLine || a.goal;
+  const steps = a.plan.length > 0 && !OVER.includes(a.status) ? `${a.plan.filter((p) => p.status === "done").length}/${a.plan.length}` : null;
+  return { id: a.id, name: a.name, what, tone: tone(a), steps, goal: a.goal };
+}
+
+export type IslandViewProps = {
+  buddy: BuddySettings;
+  /** The notch on this screen; nothing hides without one. */
+  notch: NotchInfo | null;
+  open: boolean;
+  hidden: boolean;
+  busy: boolean;
+  sleepy: boolean;
+  expr: Expression;
+  mood: BuddyState;
+  cheer: boolean;
+  hover: boolean;
+  title: string;
+  line: string;
+  /** The voice level, 0 to 1, while listening. */
+  level: number;
+  working: number;
+  queued: number;
+  /** The agents listed in the side card, and how many more there are. */
+  rows: AgentRow[];
+  more: number;
+  tips: { voice: string; text: string; circle: string; usage: string };
+  spawn: number;
+  dockSide: "left" | "right";
+  onSpawnEnd: () => void;
+  /** Shown inside the settings page rather than its own window. */
+  preview?: boolean;
+  rootRef?: Ref<HTMLDivElement>;
+  onHover?: () => void;
+  onAsk: () => void;
+  onAgents: (id?: string) => void;
+  onSettings: () => void;
+};
+
+/**
+ * The island as it looks: the black shell merging with the notch, the
+ * strip with the face, or the open panel with its row of actions, the hero
+ * card and the side card. The `Island` below feeds it from the app; the
+ * settings page feeds it example scenes.
+ */
+export function IslandPanel(p: IslandViewProps) {
+  const { buddy: b, notch, open, hidden, busy, sleepy, expr, mood, cheer, hover, working, rows, more, tips } = p;
+  // The notch's size in the island's own (zoomed) pixels. Along other edges,
+  // or without a notch, nothing hides and the top row is a normal row.
+  const z = b.islandSize || 1;
+  const atNotch = b.notchEdge === "top" && !!notch;
+  const notchW = atNotch ? notch!.width / z : 0;
+  const band = atNotch ? notch!.height / z : 0;
+  const stop = (e: MouseEvent) => e.stopPropagation();
+  const style = b.style === "custom" ? "pip" : b.style;
+  const face: ReactNode = b.islandLook === "face" ? (
+    <PillFace expr={expr} />
+  ) : (
+    <Buddy style={style} size={28} state={mood} mood={cheer ? "happy" : sleepy && !hover ? "sleepy" : null} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={p.queued} />
+  );
+
+  return (
+    <div
+      ref={p.rootRef}
+      className={`island island--${b.notchEdge} island--${b.islandLook}${open ? " is-open" : ""}${busy ? " is-busy" : ""}${sleepy && !open ? " is-sleepy" : ""}${atNotch ? " is-notched" : ""}${hidden ? " is-hidden" : ""}${p.preview ? " island--preview" : ""}`}
+      style={{ zoom: z, "--notch-w": `${notchW}px`, "--band": `${band}px` } as React.CSSProperties}
+      role="button"
+      aria-label="Helpy. Click to ask"
+      onMouseEnter={p.onHover}
+      onClick={p.onAsk}
+    >
+      <span className="island__ear island__ear--l" aria-hidden="true" />
+      <span className="island__ear island__ear--r" aria-hidden="true" />
+      <div className="island__shell">
+        {open ? (
+          <>
+            <div className="island__row">
+              <div className="island__actions">
+                <button type="button" className="island__btn is-on" title="Ask Helpy" onClick={(e) => { stop(e); p.onAsk(); }}><IconChat /></button>
+                <button type="button" className="island__btn" title="Agents" onClick={(e) => { stop(e); p.onAgents(); }}>
+                  <IconAgents />
+                  {working > 0 && <b className="island__count">{working}</b>}
+                </button>
+              </div>
+              <div className="island__gap" />
+              <div className="island__actions island__actions--end">
+                <button type="button" className="island__btn" title="Settings" onClick={(e) => { stop(e); p.onSettings(); }}><IconGear /></button>
+              </div>
+            </div>
+            <div className="island__body">
+              <div className={`island__card island__hero island__hero--${expr}`}>
+                <span className={`island__face${p.spawn > 0 ? " is-pushing" : ""}`} key={p.spawn}>
+                  {face}
+                  {p.spawn > 0 && (
+                    <span className={`island__spawn island__spawn--${p.dockSide}`} onAnimationEnd={p.onSpawnEnd}>
+                      <Buddy style={style} size={16} baby state="idle" animate={false} />
+                    </span>
+                  )}
+                </span>
+                <span className="island__title" title={p.title}>{p.title}</span>
+                {mood === "listening" ? (
+                  <Waves level={p.level} live />
+                ) : mood === "speaking" ? (
+                  <Waves level={0.5} live />
+                ) : (
+                  <span className={`island__line${mood === "thinking" ? " is-pulsing" : ""}`} title={p.line}>{p.line}</span>
+                )}
+              </div>
+              <div className="island__card island__side">
+                {rows.length > 0 ? (
+                  <>
+                    {rows.map((a) => (
+                      <button key={a.id} type="button" className={`island__agent tone-${a.tone}`} onClick={(e) => { stop(e); p.onAgents(a.id); }} title={a.goal}>
+                        <i className="island__dot" />
+                        <span className="island__name">{a.name}</span>
+                        <span className="island__what">{a.what}</span>
+                        {a.steps && <span className="island__steps">{a.steps}</span>}
+                      </button>
+                    ))}
+                    {more > 0 && (
+                      <button type="button" className="island__more" onClick={(e) => { stop(e); p.onAgents(); }}>
+                        {more} more…
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="island__tips">
+                    <span className="island__tip"><kbd>{tips.voice}</kbd>Talk to Helpy</span>
+                    <span className="island__tip"><kbd>{tips.text}</kbd>Type a question</span>
+                    <span className="island__tip"><kbd>{tips.circle}</kbd>Circle to explain</span>
+                    <span className="island__usage">{tips.usage}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : hidden ? null : (
+          <div className="island__rest">
+            {b.islandLook === "peek" ? (
+              <span className="island__peek" aria-hidden="true">
+                <Buddy style={style} size={22} baby state="idle" mood={sleepy ? "sleepy" : null} animate={b.showStateAnimations} />
+                {working > 0 && <b className="island__dot island__dot--peek" />}
+              </span>
+            ) : (
+              <span className="island__rest-face" aria-hidden="true">
+                <PillFace expr={expr} />
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The buddy's home at the screen edge: a black island that merges with a
+ * MacBook's notch (its top band hides behind the notch; Rust keeps the
+ * window at the status-bar level so it can sit against it). Idle, it hides
+ * behind the notch; while agents work a strip with the face shows below
+ * it. Hovered, or while Helpy listens, thinks or speaks, it grows out of
+ * the notch into a panel: a row of actions beside the notch, the face as
+ * the hero of one card, and what its agents are doing in another. A click
+ * on it opens the text chat.
  */
 export function Island() {
   const [live] = useSettings();
@@ -309,8 +481,7 @@ export function Island() {
     api.usageToday().then(setUsage, () => {});
   }, [open]);
 
-  if (!b) return null;
-  const dockSide = settings?.agents.dockSide ?? "right";
+  if (!b || !settings) return null;
   // What the hero line says about its agents: a step just reported, or the
   // working agents one at a time.
   const now = running[narrated % Math.max(running.length, 1)];
@@ -325,116 +496,46 @@ export function Island() {
     mood === "listening" ? (partial || "Listening") : mood === "thinking" ? (transcript ? `“${transcript}”` : slow ? "Still thinking" : "Thinking") : mood === "speaking" ? "Answering" : spawn > 0 ? "Starting agents" : cheer ? "All done!" : waiting > 0 ? `${waiting} ${waiting === 1 ? "agent needs" : "agents need"} you` : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : sleepy && !hover ? "Zzz…" : "Hi there";
   const line =
     mood === "thinking" ? (slow ? "Still thinking…" : "Thinking…") : spawn > 0 ? "Off they go" : cheer ? (justDone ? `${justDone} finished` : "Nice work") : (agentLine ?? "Ask me anything");
-
-  // The notch's size in the island's own (zoomed) pixels. Along other edges,
-  // or without a notch, nothing hides and the top row is a normal row.
-  const z = b.islandSize || 1;
-  const atNotch = b.notchEdge === "top" && !!notch;
   // Under a notch the idle island hides behind it entirely, so it takes no
   // screen; the face peeks out while agents work, and hovering the notch
   // opens it. Without a notch there's nothing to hide behind.
-  const hidden = atNotch && !open && working === 0;
-  const notchW = atNotch ? notch!.width / z : 0;
-  const band = atNotch ? notch!.height / z : 0;
-  const stop = (e: MouseEvent) => e.stopPropagation();
-  const face = b.islandLook === "face" ? (
-    <PillFace expr={expr} />
-  ) : (
-    <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} mood={cheer ? "happy" : sleepy && !hover ? "sleepy" : null} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
-  );
+  const hidden = b.notchEdge === "top" && !!notch && !open && working === 0;
+  const shown = listed.length > 3 ? 2 : 3;
+  const h = settings.hotkeys;
 
   return (
-    <div
-      ref={root}
-      className={`island island--${b.notchEdge} island--${b.islandLook}${open ? " is-open" : ""}${busy ? " is-busy" : ""}${sleepy && !open ? " is-sleepy" : ""}${atNotch ? " is-notched" : ""}${hidden ? " is-hidden" : ""}`}
-      style={{ zoom: z, "--notch-w": `${notchW}px`, "--band": `${band}px` } as React.CSSProperties}
-      role="button"
-      aria-label="Helpy. Click to ask"
-      onMouseEnter={() => setHover(true)}
-      onClick={() => api.islandOpen()}
-    >
-      <span className="island__ear island__ear--l" aria-hidden="true" />
-      <span className="island__ear island__ear--r" aria-hidden="true" />
-      <div className="island__shell">
-        {open ? (
-          <>
-            <div className="island__row">
-              <div className="island__actions">
-                <button type="button" className="island__btn is-on" title="Ask Helpy" onClick={(e) => { stop(e); api.islandOpen(); }}><IconChat /></button>
-                <button type="button" className="island__btn" title="Agents" onClick={(e) => { stop(e); api.openAgentPanel(); }}>
-                  <IconAgents />
-                  {working > 0 && <b className="island__count">{working}</b>}
-                </button>
-              </div>
-              <div className="island__gap" />
-              <div className="island__actions island__actions--end">
-                <button type="button" className="island__btn" title="Settings" onClick={(e) => { stop(e); api.openSettingsSection("buddy"); }}><IconGear /></button>
-              </div>
-            </div>
-            <div className="island__body">
-              <div className={`island__card island__hero island__hero--${expr}`}>
-                <span className={`island__face${spawn > 0 ? " is-pushing" : ""}`} key={spawn}>
-                  {face}
-                  {spawn > 0 && (
-                    <span className={`island__spawn island__spawn--${dockSide}`} onAnimationEnd={() => setSpawn(0)}>
-                      <Buddy style={b.style === "custom" ? "pip" : b.style} size={16} baby state="idle" animate={false} />
-                    </span>
-                  )}
-                </span>
-                <span className="island__title" title={title}>{title}</span>
-                {mood === "listening" ? (
-                  <Waves level={level} live />
-                ) : mood === "speaking" ? (
-                  <Waves level={0.5} live />
-                ) : (
-                  <span className={`island__line${mood === "thinking" ? " is-pulsing" : ""}`} title={line}>{line}</span>
-                )}
-              </div>
-              <div className="island__card island__side">
-                {listed.length > 0 ? (
-                  <>
-                    {listed.slice(0, listed.length > 3 ? 2 : 3).map((a) => (
-                      <button key={a.id} type="button" className={`island__agent tone-${tone(a)}`} onClick={(e) => { stop(e); api.openAgentPanel(a.id); }} title={a.goal}>
-                        <i className="island__dot" />
-                        <span className="island__name">{a.name}</span>
-                        <span className="island__what">{a.pending?.type === "approval" ? "Needs your OK" : a.pending?.type === "question" ? "Has a question" : a.pending?.type === "failure" ? "Ran into trouble" : a.status === "done" ? "Done" : a.status === "failed" ? "Failed" : a.status === "cancelled" ? "Cancelled" : a.status === "stopped" ? "Stopped" : a.status === "ready" ? "Ready to start" : a.status === "paused" ? "Paused" : a.status === "queued" ? "Waiting its turn" : a.statusLine || a.goal}</span>
-                        {a.plan.length > 0 && !OVER.includes(a.status) && (
-                          <span className="island__steps">{a.plan.filter((p) => p.status === "done").length}/{a.plan.length}</span>
-                        )}
-                      </button>
-                    ))}
-                    {listed.length > 3 && (
-                      <button type="button" className="island__more" onClick={(e) => { stop(e); api.openAgentPanel(); }}>
-                        {listed.length - 2} more…
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <div className="island__tips">
-                    <span className="island__tip"><kbd>{keys(settings!.hotkeys.voiceAsk)}</kbd>Talk to Helpy</span>
-                    <span className="island__tip"><kbd>{keys(settings!.hotkeys.textAsk)}</kbd>Type a question</span>
-                    <span className="island__tip"><kbd>{keys(settings!.hotkeys.circleToExplain)}</kbd>Circle to explain</span>
-                    <span className="island__usage">{usage && usage.calls > 0 ? `Today · ${usage.calls} ${usage.calls === 1 ? "call" : "calls"} · ${money(usage.cost)}` : "Nothing spent today"}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        ) : hidden ? null : (
-          <div className="island__rest">
-            {b.islandLook === "peek" ? (
-              <span className="island__peek" aria-hidden="true">
-                <Buddy style={b.style === "custom" ? "pip" : b.style} size={22} baby state="idle" mood={sleepy ? "sleepy" : null} animate={b.showStateAnimations} />
-                {working > 0 && <b className="island__dot island__dot--peek" />}
-              </span>
-            ) : (
-              <span className="island__rest-face" aria-hidden="true">
-                <PillFace expr={expr} />
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+    <IslandPanel
+      rootRef={root}
+      buddy={b}
+      notch={notch}
+      open={open}
+      hidden={hidden}
+      busy={busy}
+      sleepy={sleepy}
+      expr={expr}
+      mood={mood}
+      cheer={cheer}
+      hover={hover}
+      title={title}
+      line={line}
+      level={level}
+      working={working}
+      queued={activity.queued}
+      rows={listed.slice(0, shown).map(rowFor)}
+      more={Math.max(0, listed.length - shown)}
+      tips={{
+        voice: keys(h.voiceAsk),
+        text: keys(h.textAsk),
+        circle: keys(h.circleToExplain),
+        usage: usage && usage.calls > 0 ? `Today · ${usage.calls} ${usage.calls === 1 ? "call" : "calls"} · ${money(usage.cost)}` : "Nothing spent today",
+      }}
+      spawn={spawn}
+      dockSide={settings.agents.dockSide ?? "right"}
+      onSpawnEnd={() => setSpawn(0)}
+      onHover={() => setHover(true)}
+      onAsk={() => api.islandOpen()}
+      onAgents={(id) => api.openAgentPanel(id)}
+      onSettings={() => api.openSettingsSection("buddy")}
+    />
   );
 }

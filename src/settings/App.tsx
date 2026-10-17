@@ -9,7 +9,7 @@ import type { PlatformInfo } from "../bindings/PlatformInfo";
 import type { Settings } from "../bindings/Settings";
 import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
-import { BuddyStage, BuddyStylePicker, useCustomBuddy } from "./BuddyPreview";
+import { BuddyStage, BuddyStylePicker, HomePicker, NotchStage, useCustomBuddy } from "./BuddyPreview";
 import { GuidanceStage } from "./GuidancePreview";
 import { ApprovalRules, Blocklist, BuilderPicker, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
 import { ConnectorList, McpServers } from "./ConnectorControls";
@@ -264,7 +264,12 @@ export function App() {
                 </ul>
               </aside>
             )}
-            {section === "buddy" && <BuddyStage buddy={settings.buddy} customSrc={customSrc} />}
+            {section === "buddy" && (
+              <>
+                <HomePicker value={settings.buddy.home} onChange={(v) => update("buddy.home", v)} />
+                {settings.buddy.home === "notch" ? <NotchStage buddy={settings.buddy} hotkeys={settings.hotkeys} /> : <BuddyStage buddy={settings.buddy} customSrc={customSrc} />}
+              </>
+            )}
             {section === "guidance" && <GuidanceStage look={settings.guidance} />}
             {section === "hotkeys" && (
               <p className="page__note">
