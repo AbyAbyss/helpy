@@ -121,6 +121,7 @@ export function Island() {
   const [activity, setActivity] = useState<AskActivity>({ running: false, queued: 0 });
   // Agents by id, for how many work and what each is doing right now.
   const [agents, setAgents] = useState<Map<string, AgentView>>(new Map());
+  const known = useRef<Map<string, AgentView>>(new Map());
   // A step an agent just reported, shown for a moment; and which running
   // agent the open island narrates.
   const [toast, setToast] = useState<string | null>(null);
@@ -143,29 +144,30 @@ export function Island() {
       listen<boolean>(EVENTS.speaking, (e) => setSpeaking(e.payload)),
       listen<AskActivity>(EVENTS.askActivity, (e) => setActivity(e.payload)),
       listen<AgentView>(EVENTS.agentUpdate, ({ payload: a }) => {
-        setAgents((m) => {
-          const was = m.get(a.id);
-          // A new step from a working agent: say it, but not more than once
-          // every few seconds.
-          if (a.status === "running" && a.statusLine && a.statusLine !== was?.statusLine && performance.now() - lastToast.current > 8000) {
-            lastToast.current = performance.now();
-            setToast(`${a.name} · ${a.statusLine}`);
-          }
-          return new Map(m).set(a.id, a);
-        });
+        const was = known.current.get(a.id);
+        known.current = new Map(known.current).set(a.id, a);
+        setAgents(known.current);
+        // A new step from a working agent: say it, but not more than once
+        // every few seconds.
+        if (a.status === "running" && a.statusLine && a.statusLine !== was?.statusLine && performance.now() - lastToast.current > 8000) {
+          lastToast.current = performance.now();
+          setToast(`${a.name} · ${a.statusLine}`);
+        }
       }),
-      listen<string>(EVENTS.agentRemoved, ({ payload: id }) =>
-        setAgents((m) => {
-          const n = new Map(m);
-          n.delete(id);
-          return n;
-        }),
-      ),
+      listen<string>(EVENTS.agentRemoved, ({ payload: id }) => {
+        const n = new Map(known.current);
+        n.delete(id);
+        known.current = n;
+        setAgents(n);
+      }),
       getCurrentWindow().listen(EVENTS.islandSpawn, () => setSpawn((n) => n + 1)),
       listen<boolean>(EVENTS.sleepy, (e) => setSleepy(e.payload)),
     ];
     api.askActivity().then(setActivity, () => {});
-    api.agents().then((l) => setAgents(new Map(l.agents.map((a) => [a.id, a]))), () => {});
+    api.agents().then((l) => {
+      known.current = new Map(l.agents.map((a) => [a.id, a]));
+      setAgents(known.current);
+    }, () => {});
     return () => offs.forEach((o) => void o.then((f) => f()));
   }, []);
   const running = [...agents.values()].filter((a) => a.status === "running" && !a.parent);
