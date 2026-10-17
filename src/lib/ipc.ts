@@ -45,6 +45,7 @@ export const EVENTS = {
   buddyImageChanged: "buddy://image-changed",
   buddyHandoff: "buddy://handoff",
   notch: "buddy://notch",
+  islandSpawn: "island://spawn",
   openSection: "settings://open-section",
   askShown: "ask://shown",
   ask: "ask://event",

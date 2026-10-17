@@ -2,6 +2,7 @@
 
 export type NotchPoint = { x: number, y: number, 
 /**
- * False when the island isn't showing (the buddy lives by the cursor).
+ * True on the overlay whose screen holds the island; false elsewhere
+ * and when it isn't showing (the buddy lives by the cursor).
  */
 shown: boolean, };

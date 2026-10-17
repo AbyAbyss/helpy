@@ -172,6 +172,7 @@
     "contextTokens": 60000,
     "dock": true,
     "dockSide": "right",
+    "dockStyle": "chips",
     "speakStatus": false,
     "doneSeconds": 60,
     "notifications": true,

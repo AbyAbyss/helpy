@@ -160,6 +160,15 @@ body,
   transform: scale(1.09);
 }
 
+/* The buddy's face in place of the mark; the glow still says how it's doing. */
+.chip--face .buddy {
+  filter: drop-shadow(0 0 4px var(--glow));
+  transition: transform 420ms var(--spring);
+}
+.chip--face:hover .buddy {
+  transform: rotate(-8deg);
+}
+
 .chip:hover svg {
   transform: rotate(-8deg);
 }

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { AgentView } from "../bindings/AgentView";
 import type { Batch } from "../bindings/Batch";
 import type { LiveLine } from "../bindings/LiveLine";
+import { Buddy } from "../buddy/Buddy";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
 import { inDock, STATUS_LABEL, tone } from "./dockState";
@@ -77,6 +78,8 @@ export function Dock() {
   const incomingAt = useRef(-Infinity);
 
   const side = settings?.agents.dockSide ?? "right";
+  const faces = settings?.agents.dockStyle === "faces";
+  const style = settings?.buddy.style === "custom" || !settings ? "pip" : settings.buddy.style;
   const shown = inDock([...agents.values()], now, settings?.agents.doneSeconds ?? 60);
   const chips = shown.slice(-MAX_CHIPS);
   const hidden = shown.length - chips.length;
@@ -150,7 +153,7 @@ export function Dock() {
             <button
               key={a.id}
               type="button"
-              className={`chip chip--${tone(a.status)}${drop !== null ? " chip--new" : ""}${open === a.id ? " is-open" : ""}`}
+              className={`chip chip--${tone(a.status)}${faces ? " chip--face" : ""}${drop !== null ? " chip--new" : ""}${open === a.id ? " is-open" : ""}`}
               // The drop, then the glow that follows it.
               style={drop ? { animationDelay: `${drop}ms, ${drop + DROP_MS}ms` } : undefined}
               aria-label={`${a.name}: ${STATUS_LABEL[a.status]}`}
@@ -159,7 +162,7 @@ export function Dock() {
               // Toggles the card; the card's ↗ button opens the panel.
               onClick={(e) => (open === a.id ? api.dockCardClose() : hover(a.id, e.currentTarget))}
             >
-              <Mark />
+              {faces ? <Buddy style={style} size={26} state={a.status === "running" ? "thinking" : "idle"} animate={settings?.buddy.showStateAnimations ?? true} /> : <Mark />}
               {/* Remounts on every status change, so each change ripples once. */}
               <span key={a.status} className="chip__ripple" aria-hidden="true" />
               {a.unseen && <span className="chip__dot" />}

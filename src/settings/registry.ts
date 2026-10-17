@@ -188,7 +188,7 @@ export const FIELDS: Field[] = [
   },
   {
     path: "buddy.home", section: "buddy", group: "Buddy", label: "Where it lives",
-    help: "Next to the cursor, it follows your pointer everywhere. At the screen edge, it waits in a small island (under the notch on a MacBook), comes over to your pointer when you talk, and opens the chat when you click it.",
+    help: "Next to the cursor, it follows your pointer everywhere. At the screen edge, it lives in a small island (under the notch on a MacBook): it listens and answers there, pushes new agents off toward the dock, and opens the chat when you click it.",
     keywords: "notch island edge top dynamic home position",
     control: { kind: "segmented", options: [{ value: "cursor", label: "Next to the cursor" }, { value: "notch", label: "At the screen edge" }] },
   },
@@ -773,6 +773,12 @@ FIELDS.push(
     path: "agents.dock", section: "agents", group: "Dock and notifications", label: "Agent dock",
     help: "Glowing chips at the screen edge. Hover one for its card.", keywords: "dock chips floating cards",
     control: { kind: "toggle" },
+  },
+  {
+    path: "agents.dockStyle", section: "agents", group: "Dock and notifications", label: "Chips look like",
+    help: "Little faces are the buddy itself, one per agent, thinking while it works.", keywords: "dock chips faces mascot buddy look",
+    control: { kind: "segmented", options: [{ value: "chips", label: "Marks" }, { value: "faces", label: "Little faces" }] },
+    when: (s) => s.agents.dock,
   },
   {
     path: "agents.dockSide", section: "agents", group: "Dock and notifications", label: "Dock side",

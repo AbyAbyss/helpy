@@ -925,6 +925,16 @@ pub enum DockSide {
     Left,
 }
 
+/// What a dock chip shows: Helpy's pointer mark, or the buddy's face.
+#[derive(Serialize, Deserialize, TS, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum DockStyle {
+    #[default]
+    Chips,
+    Faces,
+}
+
 #[derive(Serialize, Deserialize, TS, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 #[ts(export)]
@@ -973,6 +983,7 @@ pub struct Agents {
     // Dock and notifications
     pub dock: bool,
     pub dock_side: DockSide,
+    pub dock_style: DockStyle,
     /// Read each new status line aloud.
     pub speak_status: bool,
     /// Finished agents leave the dock after this many seconds. 0 keeps them.
@@ -1034,6 +1045,7 @@ impl Default for Agents {
             context_tokens: 60_000,
             dock: true,
             dock_side: DockSide::Right,
+            dock_style: DockStyle::Chips,
             speak_status: false,
             done_seconds: 60,
             notifications: true,

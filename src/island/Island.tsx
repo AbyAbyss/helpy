@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AskActivity } from "../bindings/AskActivity";
 import type { VoicePhase } from "../bindings/VoicePhase";
 import { Buddy, type BuddyState } from "../buddy/Buddy";
@@ -20,6 +21,8 @@ export function Island() {
   const [speaking, setSpeaking] = useState(false);
   const [activity, setActivity] = useState<AskActivity>({ running: false, queued: 0 });
   const [working, setWorking] = useState(0);
+  // A little agent pushed off toward the dock as agents start.
+  const [spawn, setSpawn] = useState(0);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,6 +31,7 @@ export function Island() {
       listen<boolean>(EVENTS.speaking, (e) => setSpeaking(e.payload)),
       listen<AskActivity>(EVENTS.askActivity, (e) => setActivity(e.payload)),
       listen<number>(EVENTS.agentCount, (e) => setWorking(e.payload)),
+      getCurrentWindow().listen(EVENTS.islandSpawn, () => setSpawn((n) => n + 1)),
     ];
     api.askActivity().then(setActivity, () => {});
     api.agents().then((l) => setWorking(l.agents.filter((a) => !["done", "failed", "stopped", "cancelled", "ready"].includes(a.status)).length), () => {});
@@ -54,9 +58,10 @@ export function Island() {
   const mood: BuddyState =
     voice === "listening" ? "listening" : speaking ? "speaking" : voice === "transcribing" || activity.running ? "thinking" : "idle";
   const busy = mood !== "idle";
-  const open = hover || busy;
+  const open = hover || busy || spawn > 0;
+  const dockSide = settings?.agents.dockSide ?? "right";
   const line =
-    mood === "listening" ? "Listening…" : mood === "thinking" ? "Thinking…" : mood === "speaking" ? "Speaking" : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Ask me anything";
+    spawn > 0 ? "Starting agents…" : mood === "listening" ? "Listening…" : mood === "thinking" ? "Thinking…" : mood === "speaking" ? "Speaking" : working > 0 ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Ask me anything";
 
   return (
     <div
@@ -70,7 +75,14 @@ export function Island() {
     >
       {open ? (
         <>
-          <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
+          <span className={`island__face${spawn > 0 ? " is-pushing" : ""}`} key={spawn}>
+            <Buddy style={b.style === "custom" ? "pip" : b.style} size={28} state={mood} animate={b.showStateAnimations} badge={b.showAgentBadge && working > 0 ? working : null} queued={activity.queued} />
+            {spawn > 0 && (
+              <span className={`island__spawn island__spawn--${dockSide}`} onAnimationEnd={() => setSpawn(0)}>
+                <Buddy style={b.style === "custom" ? "pip" : b.style} size={16} state="idle" animate={false} />
+              </span>
+            )}
+          </span>
           <span className="island__line">{line}</span>
         </>
       ) : (

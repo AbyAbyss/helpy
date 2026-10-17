@@ -61,6 +61,45 @@ body,
   color: #d9dde8;
 }
 
+/* Agents starting: the face gives a little push and a small one pops out
+   and slides off toward the dock. */
+.island__face {
+  position: relative;
+  display: inline-flex;
+  line-height: 0;
+}
+.island__face.is-pushing > .buddy {
+  animation: island-push 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.island__spawn {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  line-height: 0;
+  pointer-events: none;
+  animation: island-spawn-right 680ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+.island__spawn--left {
+  animation-name: island-spawn-left;
+}
+
+@keyframes island-push {
+  0% { transform: none; }
+  30% { transform: scale(1.18, 0.86); }
+  60% { transform: scale(0.94, 1.08) translateX(2px); }
+  100% { transform: none; }
+}
+@keyframes island-spawn-right {
+  0% { transform: translate(0, 0) scale(0.3); opacity: 0; }
+  25% { transform: translate(10px, -4px) scale(1); opacity: 1; }
+  100% { transform: translate(150px, -2px) scale(0.6); opacity: 0; }
+}
+@keyframes island-spawn-left {
+  0% { transform: translate(0, 0) scale(0.3); opacity: 0; }
+  25% { transform: translate(-10px, -4px) scale(1); opacity: 1; }
+  100% { transform: translate(-150px, -2px) scale(0.6); opacity: 0; }
+}
+
 /* Two eyes, blinking now and then, when the island is closed. */
 .island__eyes {
   position: relative;
@@ -95,5 +134,5 @@ body,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .island, .island__eyes i { transition: none; animation: none; }
+  .island, .island__eyes i, .island__face > .buddy, .island__spawn { transition: none; animation: none; }
 }

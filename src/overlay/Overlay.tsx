@@ -57,10 +57,9 @@ export function Overlay() {
   const returning = useRef(0);
   // Copies flying off to the dock, and the buddy's flash as one splits off.
   const [handoffs, setHandoffs] = useState<{ id: number; to: Point; from: Point }[]>([]);
-  // The island at the screen edge, when that's the buddy's home, and its
-  // trip between the island and the cursor as it comes over or goes back.
+  // The island at the screen edge, when that's the buddy's home: agents set
+  // off from there instead of from beside the cursor.
   const notch = useRef<NotchPoint | null>(null);
-  const [trip, setTrip] = useState<{ id: number; from: Point; to: Point; arriving: boolean } | null>(null);
   const [splitting, setSplitting] = useState(0);
   // Read from event handlers, which are set up once.
   const live = useRef({ visible, inside, settings });
@@ -103,18 +102,7 @@ export function Overlay() {
       target.current = { x: payload.x, y: payload.y };
       pos.current ??= target.current;
     });
-    const offVisible = listen<boolean>(EVENTS.buddyVisible, (e) => {
-      const { visible: was, settings } = live.current;
-      setVisible(e.payload);
-      // From its island the buddy flies over to the cursor, and back after.
-      const n = notch.current;
-      if (e.payload === was || settings?.buddy.home !== "notch" || !n?.shown || !pos.current) return;
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const b = settings.buddy;
-      const spot = { x: pos.current.x + b.offsetX + b.size / 2, y: pos.current.y + b.offsetY + b.size / 2 };
-      const island = { x: n.x, y: n.y };
-      setTrip({ id: performance.now(), from: e.payload ? island : spot, to: e.payload ? spot : island, arriving: e.payload });
-    });
+    const offVisible = listen<boolean>(EVENTS.buddyVisible, (e) => setVisible(e.payload));
     const offNotch = listen<NotchPoint>(EVENTS.notch, (e) => (notch.current = e.payload));
     // Every overlay hears each step; only the one on the step's monitor draws it.
     const self = getCurrentWebviewWindow().label;
@@ -129,12 +117,19 @@ export function Overlay() {
     });
     const offHandoff = getCurrentWebviewWindow().listen<BuddyHandoff>(EVENTS.buddyHandoff, ({ payload }) => {
       const { visible, inside, settings } = live.current;
-      // Only the overlay showing the buddy flies a copy off it.
-      if (!settings || !visible || !inside || tour.current || !pos.current) return;
+      if (!settings || tour.current) return;
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const b = settings.buddy;
-      const from = { x: pos.current.x + b.offsetX + b.size / 2, y: pos.current.y + b.offsetY + b.size / 2 };
       const id = performance.now();
+      // From the island, on the overlay whose screen holds it.
+      const n = notch.current;
+      if (n?.shown) {
+        setHandoffs((h) => [...h, { id, from: { x: n.x, y: n.y }, to: { x: payload.x, y: payload.y } }]);
+        return;
+      }
+      // Else only the overlay showing the buddy flies a copy off it.
+      if (!visible || !inside || !pos.current) return;
+      const from = { x: pos.current.x + b.offsetX + b.size / 2, y: pos.current.y + b.offsetY + b.size / 2 };
       setHandoffs((h) => [...h, { id, from, to: { x: payload.x, y: payload.y } }]);
       setSplitting(id);
     });
@@ -208,7 +203,7 @@ export function Overlay() {
   if (!settings) return null;
   const b = settings.buddy;
   // The buddy steps aside while a selection is being drawn over its spot.
-  const shown = visible && (inside || touring) && !circling && !trip?.arriving;
+  const shown = visible && (inside || touring) && !circling;
   const mood: BuddyState =
     voice === "listening" ? "listening" : speaking ? "speaking" : voice === "transcribing" || activity.running ? "thinking" : "idle";
   const tip = tipOf(b.style, b.size);
@@ -251,7 +246,6 @@ export function Overlay() {
           onDone={() => setHandoffs((l) => l.filter((x) => x.id !== h.id))}
         />
       ))}
-      {trip && <Handoff key={trip.id} from={trip.from} to={trip.to} style={b.style} size={b.size} customSrc={customSrc} self onDone={() => setTrip((t) => (t?.id === trip.id ? null : t))} />}
     </>
   );
 }
@@ -260,7 +254,7 @@ export function Overlay() {
  * A copy of the buddy that turns the working colour, peels off and flies to
  * the dock, where it becomes the new agent's chip.
  */
-function Handoff({ from, to, style, size, customSrc, self, onDone }: { from: Point; to: Point; style: BuddyStyle; size: number; customSrc: string | null; self?: boolean; onDone: () => void }) {
+function Handoff({ from, to, style, size, customSrc, onDone }: { from: Point; to: Point; style: BuddyStyle; size: number; customSrc: string | null; onDone: () => void }) {
   const el = useRef<HTMLDivElement>(null);
   const done = useRef(onDone);
   done.current = onDone;
@@ -277,7 +271,7 @@ function Handoff({ from, to, style, size, customSrc, self, onDone }: { from: Poi
     return () => a.cancel();
   }, [from, to, size]);
   return (
-    <div ref={el} className={`overlay-handoff${self ? " overlay-handoff--self" : ""}`}>
+    <div ref={el} className="overlay-handoff">
       <Buddy style={style} size={size} animate={false} customSrc={customSrc} />
     </div>
   );
