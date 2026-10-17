@@ -77,11 +77,14 @@ A three-minute demo with narration is in [`docs/video/helpy-demo.mp4`](docs/vide
 
 <table>
   <tr>
+    <td colspan="2" align="center"><img src="docs/images/island.png" alt="The island at the top of the screen: at rest, listening, thinking, narrating an agent's step, working, all done, dozing off, and the peeking baby"><br><sub><b>The island.</b> Helpy can live under the notch instead of beside the cursor: a little character that listens, thinks, works, cheers and dozes off, and tells you what its agents are doing.</sub></td>
+  </tr>
+  <tr>
     <td width="50%" align="center"><img src="docs/images/card-dark.png" alt="An agent's card in the dark theme"><br><sub><b>The dock.</b> One glowing chip per agent at the screen edge; hover it for its card.</sub></td>
     <td width="50%" align="center"><img src="docs/images/card-light.png" alt="An agent's card in the light theme"><br><sub>Light or dark, following your system. Follow up by text or voice.</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/images/plan-card.png" alt="The plan card"><br><sub><b>Plans first.</b> Every task shows its agents, tools and what they'll ask before anything starts.</sub></td>
+    <td align="center"><img src="docs/images/plan-card.png" alt="The plan card, with the skill it came from and its schedule"><br><sub><b>Plans first.</b> Every task shows its agents, tools and what they'll ask before anything starts; a repeat ("every weekday at 8") becomes a schedule.</sub></td>
     <td align="center"><img src="docs/images/card-approval.png" alt="An agent asking for approval"><br><sub><b>You stay in charge.</b> Deletes, sends and commands wait for your OK.</sub></td>
   </tr>
   <tr>
@@ -96,12 +99,18 @@ A three-minute demo with narration is in [`docs/video/helpy-demo.mp4`](docs/vide
     <td width="50%" align="center"><img src="docs/images/panel-dark.png" alt="The agent panel in the dark theme"><br><sub>Dark. On macOS and Windows 11 it's translucent (vibrancy and Mica).</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/images/templates-dark.png" alt="The templates gallery"><br><sub><b>Skills.</b> Tidy a folder, research a shortlist, pull a page into a CSV, build an app.</sub></td>
+    <td align="center"><img src="docs/images/skills-dark.png" alt="The skills gallery"><br><sub><b>Skills.</b> Tidy a folder, research a shortlist, pull a page into a CSV, build an app, or save any finished request as one.</sub></td>
     <td align="center"><img src="docs/images/settings-light.png" alt="The settings window"><br><sub><b>Settings.</b> Searchable, instant, with import and export.</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/settings-buddy.png" alt="The cursor buddy settings, with where it lives and the island look"><br><sub><b>Make it yours.</b> Beside the cursor or at any screen edge, the island face or the peeking baby, size, style and auto-hide.</sub></td>
+    <td align="center"><img src="docs/images/memory-notes.png" alt="Conversation memory notes with add, edit and forget"><br><sub><b>Memory you can see.</b> Helpy's notes about you are listed in settings: add one, edit one, forget any.</sub></td>
   </tr>
 </table>
 
-<sub>Screenshots are from the Linux build with a test model. On macOS and Windows 11 the panel and cards also blur what's behind them.</sub>
+<p align="center"><img src="docs/images/dock-babies.png" width="110" alt="Dock chips as babies of the buddy: working, done, question, needs you"><br><sub><b>Buddy babies.</b> Dock chips can be babies of the buddy, each showing how its job is going.</sub></p>
+
+<sub>Screenshots are from the Linux build and its pages, with a test model. On macOS and Windows 11 the panel and cards also blur what's behind them.</sub>
 
 ## What it does
 
