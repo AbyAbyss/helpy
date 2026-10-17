@@ -233,6 +233,7 @@ pub fn run() {
             agents::agents_voice_follow_up,
             windows::dock_layout,
             windows::island_layout,
+            windows::island_notch,
             windows::island_open,
             windows::agents_open_panel,
             windows::open_link,

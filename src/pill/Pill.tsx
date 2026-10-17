@@ -55,6 +55,7 @@ export function Pill() {
       listen<string>(EVENTS.speakError, (e) => setState((s) => (s.caption ? { ...s, hint: e.payload } : { mode: "message", caption: e.payload, tone: "error" }))),
       getCurrentWindow().listen("pill://handoff", () => setHandoff(true)),
       listen<boolean>(EVENTS.buddyVisible, (e) => setBuddy(e.payload)),
+      getCurrentWindow().listen<boolean>(EVENTS.pillBuddy, (e) => setBuddy(e.payload)),
       listen<AskEvent>(EVENTS.ask, ({ payload }) => {
         if (payload.type === "question") voiceTurn.current = payload.voice;
         // A spoken question waiting behind the current answer: the rest of
