@@ -135,8 +135,8 @@ pub enum BuddyHome {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum IslandLook {
-    #[default]
     Peek,
+    #[default]
     Face,
 }
 
@@ -186,7 +186,7 @@ impl Default for Buddy {
             home: BuddyHome::Cursor,
             notch_edge: ScreenEdge::Top,
             notch_offset: 0.5,
-            island_look: IslandLook::Peek,
+            island_look: IslandLook::Face,
             size: 36,
             opacity: 1.0,
             offset_x: 18,
