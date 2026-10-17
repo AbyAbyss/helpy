@@ -7,6 +7,34 @@ import { Buddy, type BuddyState } from "../buddy/Buddy";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings } from "../lib/useSettings";
 
+/** Two big glossy eyes with a blush, blinking and glancing about. */
+function SparklyEyes() {
+  const eye = (cx: number) => (
+    <g className="island__eye">
+      <ellipse cx={cx} cy={10} rx={6.2} ry={7.6} fill="url(#island-iris)" />
+      <ellipse cx={cx} cy={13.5} rx={3.2} ry={2.6} fill="#1b3a9a" opacity={0.55} />
+      <ellipse className="island__shine" cx={cx - 2.1} cy={7} rx={2.3} ry={2.9} fill="#fff" />
+      <circle className="island__twinkle" cx={cx + 2.4} cy={13} r={1.2} fill="#fff" />
+      <ellipse cx={cx} cy={10} rx={6.2} ry={7.6} fill="none" stroke="#fff" strokeOpacity={0.35} strokeWidth={0.8} />
+    </g>
+  );
+  return (
+    <svg viewBox="0 0 46 20" width="46" height="20">
+      <defs>
+        <linearGradient id="island-iris" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#a9e4ff" />
+          <stop offset="0.55" stopColor="#4d8dff" />
+          <stop offset="1" stopColor="#2a4fd6" />
+        </linearGradient>
+      </defs>
+      <ellipse cx={4} cy={16.5} rx={3} ry={1.5} fill="#ff8fa3" opacity={0.7} />
+      <ellipse cx={42} cy={16.5} rx={3} ry={1.5} fill="#ff8fa3" opacity={0.7} />
+      {eye(13)}
+      {eye(33)}
+    </svg>
+  );
+}
+
 /**
  * The buddy's home at the screen edge: a small dark island that hugs the
  * edge (under a MacBook's notch by default). Idle it shows only its eyes;
@@ -104,8 +132,7 @@ export function Island() {
         </span>
       ) : (
         <span className="island__eyes" aria-hidden="true">
-          <i />
-          <i />
+          <SparklyEyes />
           {working > 0 && <b className="island__dot" />}
         </span>
       )}
