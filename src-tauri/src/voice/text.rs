@@ -167,7 +167,13 @@ fn is_list_item(line: &str) -> bool {
 #[derive(Default)]
 pub struct SentenceSplitter {
     buf: String,
+    /// Something has been handed out: from here on only whole sentences.
+    started: bool,
 }
+
+/// The first spoken piece may be just the opening clause, once it's this
+/// many words, so the voice starts before the first full stop arrives.
+const FIRST_CLAUSE_WORDS: usize = 6;
 
 impl SentenceSplitter {
     pub fn push(&mut self, piece: &str) -> Vec<String> {
@@ -178,6 +184,7 @@ impl SentenceSplitter {
             let s = speakable(&sentence);
             if !s.is_empty() {
                 out.push(s);
+                self.started = true;
             }
         }
         out
@@ -203,6 +210,14 @@ impl SentenceSplitter {
             }
             if b[i] == b'\n' {
                 return Some(i + 1);
+            }
+            // Before anything is spoken, a clause long enough to say is enough.
+            if !self.started
+                && matches!(b[i], b',' | b';' | b':')
+                && b.get(i + 1) == Some(&b' ')
+                && self.buf[..i].split_whitespace().count() >= FIRST_CLAUSE_WORDS
+            {
+                return Some(i + 2);
             }
             // ". " and friends end a sentence, but not "e.g. " or "1. ".
             if matches!(b[i], b'.' | b'!' | b'?') && b.get(i + 1) == Some(&b' ') {
@@ -341,6 +356,23 @@ mod tests {
         );
         assert_eq!(s.finish(), Some("Done!".to_string()));
         assert_eq!(s.finish(), None);
+    }
+
+    #[test]
+    fn the_first_clause_is_spoken_early_then_whole_sentences() {
+        let mut s = SentenceSplitter::default();
+        // Too short to be worth starting on.
+        assert!(s.push("Yes, the").is_empty());
+        assert_eq!(
+            s.push(" notch holds the camera at the top, so apps"),
+            vec!["Yes, the notch holds the camera at the top,"]
+        );
+        // From here on, commas don't cut.
+        assert!(s.push(" lose almost no space, and Helpy's island").is_empty());
+        assert_eq!(
+            s.push(" lives under it. Next"),
+            vec!["so apps lose almost no space, and Helpy's island lives under it."]
+        );
     }
 
     #[test]

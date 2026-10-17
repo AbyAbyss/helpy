@@ -119,7 +119,7 @@ A three-minute demo with narration is in [`docs/video/helpy-demo.mp4`](docs/vide
 <summary><b>Ask, and be shown</b></summary>
 
 - **Text questions (Alt+Shift+T).** A panel opens next to the cursor. Answers stream in, and follow-ups keep the context until you close it (Esc). Answer style decides whether Helpy sends a screenshot with every question, asks you first, or lets the model decide. Screenshots are of the monitor under the cursor, downscaled to 1568 px, and never include Helpy's own windows.
-- **Voice (Alt+Shift+Space).** Hold to talk, or press to start and stop. A small glowing waveform appears by the cursor, shows what you're saying, then a short caption of the answer; click it for the full conversation. Speech recognition runs on your computer with Whisper, or through OpenAI or Deepgram. Answers are read aloud sentence by sentence as they arrive, in a system voice, a Piper voice or an OpenAI voice. Esc stops listening, answering and speaking. Optional wake word ("hey helpy"), noise suppression, auto-stop on silence, and a microphone picker with a live level meter.
+- **Voice (Alt+Shift+Space).** Hold to talk, or press to start and stop. A small glowing waveform appears by the cursor, shows what you're saying, then a short caption of the answer; click it for the full conversation. Speech recognition runs on your computer with Whisper, or through OpenAI or Deepgram. Answers are read aloud as they stream, in a system voice, a Piper voice or an OpenAI voice: the first clause goes to the voice as soon as it is long enough, then sentence by sentence, so speech starts before the answer is finished. Esc stops listening, answering and speaking. Optional wake word ("hey helpy"), noise suppression, auto-stop on silence, and a microphone picker with a live level meter.
 - **Visual guidance.** Ask "where is…" or "how do I…" about the app in front of you and Helpy shows you instead of only telling you: it highlights the control (optionally dimming the rest of the screen), points at it with a labelled pointer, draws an arrow, or draws lines and shapes over what's on screen to explain it (trace a triangle's sides, build a square on one of them), all on the click-through overlay. The buddy flies to each mark and traces it as it draws, one after another, then goes back to your cursor. Walkthroughs go one step at a time. A small step card ("Step 2 of 4", Next, Repeat, Stop) is the only clickable part. Click the highlighted spot (or press Next) and Helpy takes a fresh screenshot to check the result before showing the next step. Esc or Stop ends it. Steps are read aloud when voice guidance is on, which you can switch from the card. Models with tool calling use a `show_step` tool; others reply with a JSON step, which is validated the same way. Coordinates outside the screenshot are sent back to the model to correct. A walkthrough stops after 12 steps by default.
 - **Snapping and "Do it for me".** Highlights and pointers move onto the real button or field under them, using the OS accessibility layer (UI Automation, the macOS AX API, AT-SPI). With "Do it for me" on (off by default), the step card gets a Do it button: Helpy marks exactly where it will click, and clicks only after you confirm that one click.
 - **Circle to explain (Alt+Shift+C).** The screen freezes under a light dim, and you drag a box or draw freehand around anything. Helpy explains what's in it. For diagrams, pictures and busy interfaces it also labels the parts, textbook style, with labels placed around the selection that never overlap each other or the card; click a label for more about that part. The other actions are one click away: copy the text in it (read by the vision model, straight to the clipboard), translate it, summarize it, or ask your own follow-up questions about it. Only while this is open does the overlay take the mouse, and only on that monitor; Esc, the close button or a click outside gives every click back to your apps. It uses the model routed to Circle to explain, or the questions model.
@@ -191,6 +191,22 @@ npm run tauri dev
 ```
 
 Helpy starts in the tray. Open settings from the tray menu or with Alt+Shift+S. To have the window open on launch instead, turn off **General → Start in the tray**.
+
+### Screen recording
+
+Helpy's own windows (the buddy, the island, the pill, the dock, cards and panels) are content-protected: they stay out of screenshots, screen shares and recordings, and out of the screenshots Helpy takes of your screen to answer you. To record a demo with them visible, start Helpy with `HELPY_RECORDING=1`; its windows are then hidden only for the instant of each of its own captures.
+
+```sh
+# During development
+HELPY_RECORDING=1 npm run tauri dev
+
+# A built app
+HELPY_RECORDING=1 ./target/release/helpy                                   # Linux
+open -a Helpy --env HELPY_RECORDING=1                                      # macOS (or run Helpy.app/Contents/MacOS/helpy directly)
+$env:HELPY_RECORDING = "1"; & "$env:LOCALAPPDATA\Programs\Helpy\Helpy.exe"   # Windows PowerShell
+```
+
+Quit Helpy first if it is already running, since the switch is read at launch. Leave it unset for everyday use so a shared screen never shows your conversation.
 
 To ask questions, add a provider under **Settings → AI providers**. The quickest free option is [Ollama](https://ollama.com) with a vision model such as `llama3.2-vision`: start it, click **Add provider → Find models on this computer**, and press Alt+Shift+T anywhere.
 
