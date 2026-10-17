@@ -1,49 +1,84 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  margin: 0;
-  background: transparent;
-  overflow: hidden;
-  user-select: none;
-}
-
-/* Laid out at its natural size; Rust sizes the window to match. */
+/* The island merges with a MacBook's notch. Its shell is pure black, like
+   the notch; the top `--band` of it hides behind the notch and `--notch-w`
+   is how wide the notch is (both 0 without one). Rust sets the two from
+   the screen; the window is sized to this root, which also leaves room
+   around the shell for its shadow and the "ears" that curve it into the
+   menu bar when it's wider than the notch. */
 .island {
+  --ear: 14px;
+  --notch-w: 0px;
+  --band: 0px;
+  --row: max(var(--band), 36px);
+  --strip: 34px;
+  --ink: #f4f5f9;
+  --ink-2: rgba(255, 255, 255, 0.58);
+  --ink-3: rgba(255, 255, 255, 0.38);
+  --card: #15151b;
+  --soft: rgba(255, 255, 255, 0.08);
+  --soft-hover: rgba(255, 255, 255, 0.13);
+  --work: #6ea2ff;
+  --done: #4ade99;
+  --question: #f5c542;
+  --alert: #ff6b70;
+  --idle: #8a92a3;
+  --out: cubic-bezier(0.22, 1, 0.36, 1);
   position: fixed;
   top: 0;
   left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
   width: max-content;
-  min-width: 64px;
-  height: 24px;
-  padding: 0 14px;
-  background: linear-gradient(180deg, #171a24, #0b0d14 70%);
-  color: #f1f3f8;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  /* A glass rim: a thin light line inside the top edge. */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.35);
-  border-radius: 0 0 16px 16px;
+  padding: 0 var(--ear) 14px;
+  color: var(--ink);
   cursor: pointer;
-  font: 500 13px/1 var(--font-ui);
+  font: 500 13px/1.3 var(--font-ui);
   -webkit-font-smoothing: antialiased;
   white-space: nowrap;
+}
+
+/* In the settings preview it sits in the page instead of a window of its own. */
+.island--preview {
+  position: relative;
+  animation: none;
+  cursor: default;
+}
+
+.island__shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: max(var(--notch-w), 120px);
+  height: calc(var(--band) + var(--strip));
+  background: #000;
+  border-radius: 0 0 20px 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
   transition:
-    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-radius 220ms ease;
+    width 340ms var(--out),
+    height 340ms var(--out),
+    box-shadow 300ms ease;
+}
+
+/* Idle under the notch: nothing but the hidden band, and no shadow to
+   give it away. */
+.island.is-hidden .island__shell {
+  height: var(--band);
+  box-shadow: none;
+}
+
+.island.is-open .island__shell {
+  width: 468px;
+  height: calc(var(--row) + 132px);
+}
+
+.island.is-busy .island__shell {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(110, 162, 255, 0.22), 0 0 28px rgba(110, 162, 255, 0.22);
+}
+
+.island.is-sleepy .island__shell {
+  opacity: 0.92;
 }
 
 /* It slides out of its edge when it first appears. */
-.island { animation: island-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.island { animation: island-enter 520ms var(--out) both; }
 .island--bottom { animation-name: island-enter-up; }
 .island--left { animation-name: island-enter-right; }
 .island--right { animation-name: island-enter-left; }
@@ -52,29 +87,285 @@ body,
 @keyframes island-enter-right { from { transform: translateX(-100%); } }
 @keyframes island-enter-left { from { transform: translateX(100%); } }
 
-/* The flat side sits against the edge it lives on. */
-.island--top { border-top: 0; border-radius: 0 0 16px 16px; }
-.island--bottom { border-bottom: 0; border-radius: 16px 16px 0 0; }
-.island--left { border-left: 0; border-radius: 0 16px 16px 0; }
-.island--right { border-right: 0; border-radius: 16px 0 0 16px; }
+/* The flat side sits against the edge it lives on; the shadow's room moves
+   to the other sides. */
+.island--bottom { padding: 14px var(--ear) 0; }
+.island--left { padding: 14px 14px 14px 0; }
+.island--right { padding: 14px 0 14px 14px; }
+.island--bottom .island__shell { border-radius: 20px 20px 0 0; }
+.island--left .island__shell { border-radius: 0 20px 20px 0; }
+.island--right .island__shell { border-radius: 20px 0 0 20px; }
 
-.island.is-open {
-  height: 44px;
-  min-width: 176px;
+/* The ears: where the open island is wider than the notch, its top corners
+   curve into the menu bar instead of meeting it at a right angle. */
+.island__ear {
+  position: absolute;
+  top: 0;
+  width: var(--ear);
+  height: var(--ear);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.island__ear--l {
+  left: 0;
+  background: radial-gradient(circle at 0 100%, transparent calc(var(--ear) - 0.6px), #000 var(--ear));
+}
+.island__ear--r {
+  right: 0;
+  background: radial-gradient(circle at 100% 100%, transparent calc(var(--ear) - 0.6px), #000 var(--ear));
+}
+.island--top.is-open .island__ear {
+  opacity: 1;
+  transition-delay: 180ms;
 }
 
-.island.is-busy {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(77, 141, 255, 0.35), 0 0 22px rgba(77, 141, 255, 0.35);
+/* At rest: the strip below the notch, with the face in it. */
+.island__rest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--band);
+  height: var(--strip);
+}
+.island__rest-face {
+  display: inline-flex;
+  line-height: 0;
 }
 
-/* Resting with the baby peeking out: a touch taller, and it bobs and
-   glances about now and then. */
-.island--peek:not(.is-open),
-.island--eyes:not(.is-open) {
-  height: 30px;
-  min-width: 56px;
+/* Open: a row of actions beside the notch, then two cards. */
+.island__row {
+  display: grid;
+  grid-template-columns: 1fr var(--notch-w) 1fr;
+  align-items: center;
+  height: var(--row);
+  padding: 0 10px;
+  animation: island-fade 220ms 100ms both;
+}
+.island__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.island__actions--end {
+  justify-content: flex-end;
+}
+.island__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.island__btn:hover { background: var(--soft-hover); color: #fff; }
+.island__btn.is-on { background: var(--soft); color: #fff; }
+.island__count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  box-shadow: 0 0 0 2px #000;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: var(--work);
+  color: #0b0d14;
+  font: 700 9.5px/14px var(--font-ui);
+  text-align: center;
+}
+
+.island__body {
+  display: grid;
+  grid-template-columns: 1fr 198px;
+  gap: 10px;
+  height: 120px;
   padding: 0 12px;
+  animation: island-fade 220ms 140ms both;
 }
+@keyframes island-fade { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+.island__card {
+  position: relative;
+  min-width: 0;
+  border-radius: 18px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+/* The hero card: the face, big and lit, over what it's up to. */
+.island__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 14px 10px;
+  text-align: center;
+}
+.island__hero .pf__hands { display: none; }
+.island__hero .island__face {
+  zoom: 1.45;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.16));
+  transition: filter 400ms ease;
+}
+.island__hero--listening .island__face { filter: drop-shadow(0 0 16px rgba(110, 162, 255, 0.6)); }
+.island__hero--thinking .island__face { filter: drop-shadow(0 0 14px rgba(167, 200, 255, 0.4)); }
+.island__hero--speaking .island__face { filter: drop-shadow(0 0 16px rgba(143, 182, 255, 0.5)); }
+.island__hero--working .island__face { filter: drop-shadow(0 0 14px rgba(110, 162, 255, 0.4)); }
+.island__hero--excited .island__face { filter: drop-shadow(0 0 16px rgba(255, 209, 102, 0.55)); }
+.island__hero--sleepy .island__face { filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.08)); opacity: 0.8; }
+.island__title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-bottom: 1px;
+  font: 600 13.5px/1.35 var(--font-ui);
+  color: var(--ink);
+}
+.island__line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-bottom: 1px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+.island__line.is-pulsing { animation: island-pulse 1.6s ease-in-out infinite; }
+@keyframes island-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* The voice level, as bars that breathe while Helpy listens or speaks. */
+.island__waves {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  margin: 1px 0;
+}
+.island__waves i {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: #8fb6ff;
+  transition: height 90ms ease-out;
+}
+.island__waves.is-live i { animation: island-wave 900ms ease-in-out infinite alternate; }
+@keyframes island-wave { from { transform: scaleY(0.55); opacity: 0.7; } to { transform: scaleY(1); opacity: 1; } }
+
+/* The side card: agents, or how to start. */
+.island__side {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px;
+}
+.island__agent {
+  --tone: var(--idle);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "dot name steps" "dot what steps";
+  column-gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.island__agent:hover { background: var(--soft); }
+.island__agent.tone-work { --tone: var(--work); }
+.island__agent.tone-done { --tone: var(--done); }
+.island__agent.tone-question { --tone: var(--question); }
+.island__agent.tone-alert { --tone: var(--alert); }
+.island__dot {
+  grid-area: dot;
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone);
+  box-shadow: 0 0 8px var(--tone);
+}
+.tone-work .island__dot { animation: island-pulse 1.4s ease-in-out infinite; }
+.island__name {
+  grid-area: name;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 600 12px/1.2 var(--font-ui);
+  color: var(--ink);
+}
+.island__what {
+  grid-area: what;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  line-height: 1.2;
+  color: var(--ink-2);
+}
+.tone-question .island__what, .tone-alert .island__what { color: var(--tone); }
+.island__steps {
+  grid-area: steps;
+  font: 600 11px var(--font-mono);
+  color: var(--ink-3);
+}
+.island__more {
+  align-self: flex-start;
+  padding: 3px 8px 2px 23px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: 500 11.5px var(--font-ui);
+  cursor: pointer;
+}
+.island__more:hover { color: var(--ink); }
+
+.island__tips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 4px 5px 3px;
+}
+.island__tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.island__tip kbd {
+  display: inline-block;
+  min-width: 54px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--soft);
+  color: var(--ink);
+  font: 600 11px/1.3 var(--font-ui);
+  text-align: center;
+}
+.island__usage {
+  margin-top: auto;
+  padding-left: 1px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* Resting with the baby peeking out: it bobs and glances about now and then. */
 .island__peek {
   position: relative;
   display: inline-flex;
@@ -84,19 +375,11 @@ body,
 .island__peek .buddy__eyes {
   animation: island-glance 7s ease-in-out infinite !important;
 }
-.island__dot {
+.island__dot--peek {
   position: absolute;
-  right: -12px;
-  top: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #4d8dff;
-  box-shadow: 0 0 6px rgba(77, 141, 255, 0.8);
-}
-.island__peek .island__dot {
   right: -10px;
   top: -2px;
+  --tone: var(--work);
 }
 @keyframes island-bob {
   0%, 100% { transform: translateY(0) rotate(0); }
@@ -111,14 +394,6 @@ body,
   64% { transform: translateX(0) scaleY(1); }
 }
 
-.island__line {
-  padding-right: 2px;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #d9dde8;
-}
-
 /* Agents starting: the face gives a little push and a small one pops out
    and slides off toward the dock. */
 .island__face {
@@ -126,8 +401,9 @@ body,
   display: inline-flex;
   line-height: 0;
 }
-.island__face.is-pushing > .buddy {
-  animation: island-push 520ms cubic-bezier(0.22, 1, 0.36, 1);
+.island__face.is-pushing > .buddy,
+.island__face.is-pushing > .pf {
+  animation: island-push 520ms var(--out);
 }
 .island__spawn {
   position: absolute;
@@ -135,7 +411,7 @@ body,
   left: 6px;
   line-height: 0;
   pointer-events: none;
-  animation: island-spawn-right 680ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+  animation: island-spawn-right 680ms var(--out) 120ms both;
 }
 .island__spawn--left {
   animation-name: island-spawn-left;
@@ -158,17 +434,7 @@ body,
   100% { transform: translate(-150px, -2px) scale(0.6); opacity: 0; }
 }
 
-/* The island as a face. Resting it's a little wider than the eyes look,
-   with the hands on the rim; open, the face sits left of the line. */
-.island--face:not(.is-open) {
-  height: 32px;
-  min-width: 72px;
-  padding: 0 6px;
-}
-.island__rest {
-  display: inline-flex;
-  line-height: 0;
-}
+/* The face: white eyes, a mouth, hands on the rim. */
 .pf {
   overflow: visible;
   display: block;
@@ -195,7 +461,6 @@ body,
 .pf__waves path:nth-child(2), .pf__waves path:nth-child(4) { animation-delay: 0.25s; }
 .pf__bar { animation: pf-bar 1.4s linear infinite; }
 .pf--sleepy .pf__closed { animation: island-bob 3.4s ease-in-out infinite; }
-.island.is-sleepy { opacity: 0.85; }
 
 @keyframes pf-talk { from { transform: scaleY(0.6); } to { transform: scaleY(1.25); } }
 @keyframes pf-float { 0%, 100% { transform: translateY(0); opacity: 0.7; } 50% { transform: translateY(-2px); opacity: 1; } }
@@ -205,5 +470,36 @@ body,
 @keyframes pf-bar { from { transform: translateX(-14px); } to { transform: translateX(32px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .island, .island__face > .buddy, .island__spawn, .island__peek, .island__peek .buddy__eyes, .pf *, .pf__eyes { transition: none; animation: none !important; }
+  .island, .island__shell, .island__row, .island__body, .island__face > .buddy, .island__spawn, .island__peek, .island__peek .buddy__eyes, .island__waves i, .island__dot, .island__line, .pf *, .pf__eyes { transition: none; animation: none !important; }
+}
+
+/* Looking at it in a browser (island.html?mock=…, dev only): a desktop, a
+   menu bar and a notch stand in for the screen. */
+body.demo {
+  min-height: 100vh;
+  background: radial-gradient(120% 80% at 50% 110%, #3a3d58, #1d1f2c 60%, #15161f);
+}
+body.demo::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.07);
+}
+body.demo::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 50%;
+  width: 185px;
+  height: 32px;
+  transform: translateX(-50%);
+  background: #000;
+  border-radius: 0 0 11px 11px;
+  z-index: 5;
+}
+body.demo .island {
+  left: 50%;
+  transform: translateX(-50%);
+  animation: none;
 }

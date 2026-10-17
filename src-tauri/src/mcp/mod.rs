@@ -580,7 +580,74 @@ async fn refresh_tools(app: &AppHandle, m: &McpServer) -> Result<Vec<ToolInfo>, 
 }
 
 /// Longest page snapshot handed to an agent, characters.
-const MAX_SNAPSHOT: usize = 14_000;
+const MAX_SNAPSHOT: usize = 10_000;
+
+/// Browser tools whose result doesn't need the page: the agent already has
+/// what it asked for (a script's value, the matches, a confirmation), and
+/// the page it was looking at is still open. Playwright's server appends
+/// a full snapshot to every one of these; that's the bulk of a browsing
+/// agent's spend, so it's cut and the agent reads the page when it wants to.
+const NO_PAGE_TOOLS: [&str; 12] = [
+    "type", "fill_form", "press_key", "select_option", "hover", "drag", "evaluate", "find", "wait_for", "resize",
+    "console_messages", "tabs",
+];
+/// Most matches a find keeps.
+const MAX_MATCHES: usize = 25;
+
+/// Browser tools agents don't get: text models can't look at screenshots,
+/// and the rest are for debugging a site, not using one. Leaving them out
+/// takes about a third off what every call to the model costs.
+const HIDDEN_BROWSER_TOOLS: [&str; 13] = [
+    "browser_close", "browser_resize", "browser_console_messages", "browser_handle_dialog", "browser_emulate_media",
+    "browser_file_upload", "browser_drop", "browser_network_requests", "browser_network_request",
+    "browser_run_code_unsafe", "browser_take_screenshot", "browser_drag", "browser_hover",
+];
+
+/// A server that drives a browser, by the tool browser servers all have.
+fn is_browser_server(tools: &[ToolInfo]) -> bool {
+    tools.iter().any(|t| t.name == "browser_snapshot")
+}
+
+/// Trims a browser tool's result for the agent: no page after an action
+/// that didn't need one, and a find stops at its first matches.
+fn trim_browser_result(tool: &str, text: &str) -> String {
+    let short = tool.strip_prefix("browser_").unwrap_or(tool);
+    let mut out = text.to_string();
+    // Where the section starting at `start` ends: just before the next
+    // heading (which keeps its own line) or at the end of the text.
+    let section_end = |text: &str, start: usize| {
+        text[start + 1..].find("\n### ").map(|i| start + 1 + i + 1).unwrap_or(text.len())
+    };
+    if NO_PAGE_TOOLS.contains(&short) {
+        if let Some(start) = out.find("### Snapshot") {
+            let end = section_end(&out, start);
+            out.replace_range(start..end, "");
+            out = out.trim_end().to_string();
+            out += "\n\n(The page is still open. To read it, call browser_snapshot.)";
+        }
+    }
+    if short == "find" {
+        if let Some(head) = out.find("### Result") {
+            let end = section_end(&out, head);
+            let section = out[head..end].to_string();
+            let lines: Vec<&str> = section.lines().collect();
+            let matches: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| l.starts_with("- "))
+                .map(|(i, _)| i)
+                .collect();
+            if matches.len() > MAX_MATCHES {
+                let more = matches.len() - MAX_MATCHES;
+                let mut kept: Vec<&str> = lines[..matches[MAX_MATCHES]].to_vec();
+                let note = format!("(… and {more} more; search for something more specific.)\n");
+                kept.push(&note);
+                out.replace_range(head..end, &kept.join("\n"));
+            }
+        }
+    }
+    out
+}
 
 /// Browser servers such as Playwright's save the page they see to a file and
 /// send only its link, which an agent can't open. The page is read here and
@@ -633,11 +700,24 @@ pub(crate) fn compact_snapshot(yaml: &str) -> String {
         "button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "tab", "menuitem",
         "option", "switch", "slider", "spinbutton",
     ];
+    // Headers, menus and footers repeat on every page: only their controls
+    // (the search box, a cookie button) are kept, not their links and text.
+    const CHROME: [&str; 4] = ["banner", "navigation", "contentinfo", "menubar"];
     let mut out: Vec<String> = Vec::new();
+    let mut chrome_indent: Option<usize> = None;
+    let mut seen: HashMap<String, usize> = HashMap::new();
     for line in yaml.lines() {
+        let indent = line.len() - line.trim_start().len();
         let l = line.trim();
         let l = l.strip_prefix("- ").unwrap_or(l);
+        if chrome_indent.is_some_and(|c| indent <= c) {
+            chrome_indent = None;
+        }
+        let in_chrome = chrome_indent.is_some();
         if let Some(url) = l.strip_prefix("/url:") {
+            if in_chrome {
+                continue;
+            }
             let url = url.trim().trim_matches('"');
             // Tracking parameters make links long without saying more.
             let url = if url.len() > 100 { url.split('?').next().unwrap_or(url) } else { url };
@@ -647,13 +727,22 @@ pub(crate) fn compact_snapshot(yaml: &str) -> String {
             continue;
         }
         let Some(c) = LINE.captures(l) else {
-            out.push(l.to_string());
+            if !in_chrome {
+                out.push(l.to_string());
+            }
             continue;
         };
         let role = &c[1];
+        if CHROME.contains(&role) && chrome_indent.is_none() {
+            chrome_indent = Some(indent);
+            continue;
+        }
         let name = c.get(2).map_or("", |m| m.as_str());
         let text = c.get(4).map_or("", |m| m.as_str()).trim().trim_matches('"');
         let r = c.get(3).and_then(|a| REF.captures(a.as_str())).map(|r| r[1].to_string());
+        if in_chrome && !(CONTROLS.contains(&role) && role != "link") {
+            continue;
+        }
         if CONTROLS.contains(&role) {
             let label = if name.is_empty() { text } else { name };
             out.push(match r {
@@ -671,7 +760,10 @@ pub(crate) fn compact_snapshot(yaml: &str) -> String {
             }
         } else {
             let t = if text.is_empty() { name } else { text };
-            if !t.is_empty() {
+            // The same words over and over ("Sale", "In stock") say nothing new.
+            let n = seen.entry(t.to_string()).or_insert(0);
+            *n += 1;
+            if !t.is_empty() && *n <= 2 {
                 out.push(t.to_string());
             }
         }
@@ -858,9 +950,12 @@ pub fn defs(app: &AppHandle, s: &Settings, groups: &[String]) -> Vec<ToolDef> {
         .iter()
         .filter(|m| m.enabled && groups.contains(&group_id(&m.id)))
     {
-        for t in cached(app, &m.id)
+        let tools = cached(app, &m.id);
+        let browser = is_browser_server(&tools);
+        for t in tools
             .into_iter()
             .filter(|t| usable(m, t) && rule(m, t) != Rule::Never)
+            .filter(|t| !(browser && HIDDEN_BROWSER_TOOLS.contains(&t.name.as_str())))
         {
             out.push(ToolDef {
                 name: tool_name(&m.id, &t.name),
@@ -963,6 +1058,9 @@ pub fn run<'a>(
             }
             Ok(v) => {
                 let mut text = result_text_in(&v, &dir);
+                if t.name.starts_with("browser_") {
+                    text = trim_browser_result(&t.name, &text);
+                }
                 let hint = empty_script_hint(&t.name, &text);
                 if !hint.is_empty() {
                     text += &page_now(app, &m, &dir).await;
@@ -1177,6 +1275,79 @@ mod tests {
         let inline = inline_snapshots("### Snapshot\n```yaml\n- generic [ref=e1]:\n  - button \"Accept\" [ref=e18] [cursor=pointer]\n```", none);
         assert!(inline.contains("button \"Accept\" [ref=e18]") && !inline.contains("cursor"), "{inline}");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn site_chrome_keeps_only_its_controls() {
+        let yaml = r#"- generic [ref=e1]:
+  - banner [ref=e2]:
+    - link "Home" [ref=e3]:
+      - /url: /
+    - link "Sale" [ref=e4]:
+      - /url: /sale
+    - searchbox "Search product or brand" [ref=e5]
+    - button "Accept all cookies" [ref=e6]
+    - generic: Free delivery over £50
+  - main [ref=e7]:
+    - heading "Rackets" [level=1]
+    - link "Yonex Astrox" [ref=e8]:
+      - /url: /p/astrox
+    - generic: Sale
+    - generic: Sale
+    - generic: Sale
+    - generic: Sale
+  - contentinfo [ref=e9]:
+    - link "Privacy" [ref=e10]:
+      - /url: /privacy"#;
+        let out = compact_snapshot(yaml);
+        assert_eq!(
+            out,
+            "searchbox \"Search product or brand\" [ref=e5]\n\
+             button \"Accept all cookies\" [ref=e6]\n\
+             # Rackets\n\
+             link \"Yonex Astrox\" [ref=e8] → /p/astrox\n\
+             Sale\n\
+             Sale"
+        );
+    }
+
+    #[test]
+    fn actions_lose_the_page_and_clicks_keep_it() {
+        let result = "### Ran Playwright code\n```js\nawait page.fill('x');\n```\n### Page\n- Page URL: https://a.b/\n\
+                      ### Snapshot\n```yaml\n- generic [ref=e1]: Hello\n```";
+        let typed = trim_browser_result("browser_type", result);
+        assert!(!typed.contains("Snapshot") && !typed.contains("Hello"), "{typed}");
+        assert!(typed.contains("Page URL") && typed.contains("call browser_snapshot"), "{typed}");
+        let clicked = trim_browser_result("browser_click", result);
+        assert_eq!(clicked, result);
+        // The snapshot before another heading is cut cleanly.
+        let mid = "### Result\n42\n### Snapshot\n```yaml\n- generic: x\n```\n### Ran Playwright code\n```js\nx\n```";
+        let out = trim_browser_result("browser_evaluate", mid);
+        assert!(out.starts_with("### Result\n42\n### Ran Playwright code"), "{out}");
+    }
+
+    #[test]
+    fn a_find_stops_at_its_first_matches() {
+        let mut text = "### Result\nFound 30 matches for \"£\":\n".to_string();
+        for i in 0..30 {
+            text += &format!("- generic [ref=e{i}]: £{i}\n");
+        }
+        text += "### Page\n- Page URL: https://a.b/";
+        let out = trim_browser_result("browser_find", &text);
+        assert_eq!(out.matches("- generic").count(), 25, "{out}");
+        assert!(out.contains("and 5 more") && out.ends_with("\n### Page\n- Page URL: https://a.b/"), "{out}");
+        assert_eq!(trim_browser_result("browser_find", "### Result\n- a\n- b"), "### Result\n- a\n- b");
+    }
+
+    #[test]
+    fn browser_servers_hide_their_debugging_tools() {
+        let tool = |n: &str| ToolInfo { name: n.into(), description: String::new(), read_only: false, destructive: false, schema: json!({}) };
+        assert!(is_browser_server(&[tool("browser_navigate"), tool("browser_snapshot")]));
+        assert!(!is_browser_server(&[tool("search_issues")]));
+        for keep in ["browser_navigate", "browser_snapshot", "browser_click", "browser_type", "browser_fill_form", "browser_evaluate", "browser_find", "browser_tabs"] {
+            assert!(!HIDDEN_BROWSER_TOOLS.contains(&keep));
+        }
+        assert!(HIDDEN_BROWSER_TOOLS.contains(&"browser_take_screenshot"));
     }
 
     #[test]

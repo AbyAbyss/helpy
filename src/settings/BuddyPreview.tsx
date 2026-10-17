@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Buddy as BuddySettings } from "../bindings/Buddy";
+import type { BuddyHome } from "../bindings/BuddyHome";
 import type { BuddyStyle } from "../bindings/BuddyStyle";
+import type { Hotkeys } from "../bindings/Hotkeys";
 import { Buddy, type BuddyState } from "../buddy/Buddy";
 import { followStep, type Point } from "../buddy/follow";
+import { IslandPanel, PillFace, keys, type AgentRow, type Expression } from "../island/Island";
 import { api, EVENTS } from "../lib/ipc";
+import "../island/island.css";
 
 export function useCustomBuddy() {
   const [src, setSrc] = useState<string | null>(null);
@@ -96,6 +100,142 @@ export function BuddyStage({ buddy, customSrc }: { buddy: BuddySettings; customS
           </button>
         ))}
         <span className="stage__note">{buddy.showAgentBadge ? "Badge shows 2 example agents" : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Where the buddy lives: beside the cursor, or in the notch. Each choice
+ *  shows a little picture of itself. */
+export function HomePicker({ value, onChange }: { value: BuddyHome; onChange: (v: BuddyHome) => void }) {
+  return (
+    <div className="homes" role="radiogroup" aria-label="Where the buddy lives">
+      <button type="button" role="radio" aria-checked={value === "cursor"} className="home" onClick={() => onChange("cursor")}>
+        <span className="home__art home__art--cursor" aria-hidden="true">
+          <PointerGlyph />
+          <Buddy style="pip" size={24} animate={false} />
+        </span>
+        <span className="home__text">
+          <strong>Beside the cursor</strong>
+          <span>Rides along with your pointer on every screen, and shows what Helpy is doing right there.</span>
+        </span>
+      </button>
+      <button type="button" role="radio" aria-checked={value === "notch"} className="home" onClick={() => onChange("notch")}>
+        <span className="home__art home__art--notch" aria-hidden="true">
+          <i className="home__bar" />
+          <i className="home__notch" />
+          <span className="home__strip">
+            <PillFace expr="happy" />
+          </span>
+        </span>
+        <span className="home__text">
+          <strong>In the notch</strong>
+          <span>Hidden until you hover it or it has something to show: it listens, answers and tells you what its agents are doing.</span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+type Scene = "idle" | "working" | "listening" | "thinking" | "approval" | "done";
+const SCENES: { id: Scene; label: string }[] = [
+  { id: "idle", label: "Idle" },
+  { id: "working", label: "Agents working" },
+  { id: "listening", label: "Listening" },
+  { id: "thinking", label: "Thinking" },
+  { id: "approval", label: "Needs you" },
+  { id: "done", label: "All done" },
+];
+const row = (id: string, name: string, what: string, tone: string, steps: string | null): AgentRow => ({ id, name, what, tone, steps, goal: "" });
+const LAPTOPS = row("a1", "Laptops", "Reading three reviews", "work", "2/5");
+const INBOX = row("a2", "Inbox", "Sorting 38 emails", "work", "1/3");
+const REPORT = row("a3", "Report", "Done", "done", null);
+const EXPENSES = row("a4", "Expenses", "Needs your OK", "question", "2/4");
+type SceneView = { expr: Expression; mood: BuddyState; title: string; line: string; rows: AgentRow[]; more?: number; working: number; busy: boolean; cheer?: boolean };
+const VIEWS: Record<Scene, SceneView> = {
+  idle: { expr: "happy", mood: "idle", title: "Hi there", line: "Ask me anything", rows: [], working: 0, busy: false },
+  working: { expr: "working", mood: "idle", title: "2 agents working", line: "Laptops · Reading three reviews", rows: [LAPTOPS, INBOX, REPORT], working: 2, busy: false },
+  listening: { expr: "listening", mood: "listening", title: "Listening", line: "", rows: [], working: 0, busy: true },
+  thinking: { expr: "thinking", mood: "thinking", title: "“Which laptop is best for video editing?”", line: "Thinking…", rows: [], working: 0, busy: true },
+  approval: { expr: "working", mood: "idle", title: "1 agent needs you", line: "Laptops · Reading three reviews", rows: [EXPENSES, LAPTOPS], more: 1, working: 3, busy: false },
+  done: { expr: "excited", mood: "idle", title: "All done!", line: "Report finished", rows: [REPORT], working: 0, busy: false, cheer: true },
+};
+/** A MacBook 14" notch, in points. */
+const NOTCH = { width: 185, height: 32 };
+
+/**
+ * A stage with a Mac menu bar and its notch, and the island under it with
+ * your current settings, in a few example scenes. Hovering the notch opens
+ * it, as on the real screen.
+ */
+export function NotchStage({ buddy, hotkeys }: { buddy: BuddySettings; hotkeys: Hotkeys }) {
+  const [scene, setScene] = useState<Scene>("idle");
+  const [hover, setHover] = useState(false);
+  const [level, setLevel] = useState(0.4);
+  useEffect(() => {
+    if (scene !== "listening") return;
+    const t = setInterval(() => setLevel(0.15 + Math.random() * 0.75), 120);
+    return () => clearInterval(t);
+  }, [scene]);
+  const v = VIEWS[scene];
+  const open = hover || v.busy || !!v.cheer;
+  const atNotch = buddy.notchEdge === "top";
+  const hidden = atNotch && !open && v.working === 0;
+  return (
+    <div className="stage-wrap">
+      <div className={`stage stage--notch${open ? " is-hovering" : ""}`} onMouseLeave={() => setHover(false)}>
+        <div className="menubar" aria-hidden="true">
+          <span className="menubar__apple"></span>
+          <span className="menubar__app">Finder</span>
+          <span>File</span>
+          <span>Edit</span>
+          <span>View</span>
+          <span>Go</span>
+          <span>Window</span>
+          <span>Help</span>
+          <span className="menubar__right">Sat 9:41</span>
+        </div>
+        <div className={`stage__island stage__island--${buddy.notchEdge}`} onMouseEnter={() => setHover(true)}>
+          <IslandPanel
+            preview
+            buddy={buddy}
+            notch={atNotch ? NOTCH : null}
+            open={open}
+            hidden={hidden}
+            busy={v.busy}
+            sleepy={false}
+            expr={v.expr}
+            mood={v.mood}
+            cheer={!!v.cheer}
+            hover={hover}
+            title={v.title}
+            line={v.line}
+            level={level}
+            working={v.working}
+            queued={0}
+            rows={v.rows}
+            more={v.more ?? 0}
+            tips={{ voice: keys(hotkeys.voiceAsk), text: keys(hotkeys.textAsk), circle: keys(hotkeys.circleToExplain), usage: "Today · 14 calls · 8.3¢" }}
+            spawn={0}
+            dockSide="right"
+            onSpawnEnd={() => {}}
+            onAsk={() => {}}
+            onAgents={() => {}}
+            onSettings={() => {}}
+          />
+        </div>
+        {atNotch && <i className="menubar__notch" aria-hidden="true" />}
+        <span className="stage__hint">
+          {!buddy.enabled ? "Off: turn on the buddy below" : hidden ? "Hidden in the notch. Move your mouse onto the notch" : open ? "Open. It closes when you move away" : "Agents are working, so the face peeks out"}
+        </span>
+      </div>
+      <div className="stage__states" role="radiogroup" aria-label="Preview scene">
+        {SCENES.map((s) => (
+          <button key={s.id} type="button" role="radio" aria-checked={scene === s.id} className="chip" onClick={() => setScene(s.id)}>
+            {s.label}
+          </button>
+        ))}
+        <span className="stage__note">Example agents and your shortcuts</span>
       </div>
     </div>
   );

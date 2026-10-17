@@ -70,3 +70,27 @@ export function describe(cron: string): string {
       return `Schedule "${r.cron}"`;
   }
 }
+
+/** A one-time run's moment in plain words: "Today at 14:35", "Tomorrow at 09:00", "Tue 20 Oct at 09:00". */
+export function describeOnce(ms: number): string {
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return `Today at ${time}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `Tomorrow at ${time}`;
+  return `${d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} at ${time}`;
+}
+
+/** A moment as an <input type="datetime-local"> value, in local time. */
+export function toLocalInput(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** The input's value back as a moment; null when it isn't one. */
+export function fromLocalInput(value: string): number | null {
+  const t = new Date(value).getTime();
+  return Number.isFinite(t) ? t : null;
+}

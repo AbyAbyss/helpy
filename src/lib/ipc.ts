@@ -36,16 +36,19 @@ import type { ImportReport } from "../bindings/ImportReport";
 import type { Preset } from "../bindings/Preset";
 import type { ServerStatus } from "../bindings/ServerStatus";
 import type { ToolInfo } from "../bindings/ToolInfo";
+import type { NotchInfo } from "../bindings/NotchInfo";
 
 export const EVENTS = {
   settingsChanged: "settings://changed",
   hotkeyStatus: "hotkeys://status",
   cursor: "overlay://cursor",
   buddyVisible: "buddy://visible",
+  pillBuddy: "pill://buddy",
   buddyImageChanged: "buddy://image-changed",
   buddyHandoff: "buddy://handoff",
   notch: "buddy://notch",
   islandSpawn: "island://spawn",
+  islandHover: "island://hover",
   sleepy: "buddy://sleepy",
   openSection: "settings://open-section",
   askShown: "ask://shown",
@@ -236,6 +239,8 @@ export const api = {
   islandLayout: (width: number, height: number) => invoke<void>("island_layout", { width, height }),
   /** A click on the island: opens the text chat. */
   islandOpen: () => invoke<void>("island_open"),
+  /** The notch on the island's screen, if it has one. */
+  islandNotch: () => invoke<NotchInfo | null>("island_notch"),
   windowGlass: () => invoke<string | null>("window_glass"),
   /** Opens an https page in the browser. */
   openLink: (url: string) => invoke<void>("open_link", { url }),

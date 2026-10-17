@@ -112,6 +112,8 @@ fn run(app: AppHandle) {
             let _ = app.emit(SLEEPY_EVENT, sleepy);
         }
 
+        crate::windows::island_hover(&app, pos);
+
         if !moved && !resend {
             continue;
         }

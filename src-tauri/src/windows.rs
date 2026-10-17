@@ -25,6 +25,12 @@ pub const ISLAND: &str = "island";
 pub const NOTCH_EVENT: &str = "buddy://notch";
 /// Agents are starting: the island pushes them off toward the dock.
 pub const ISLAND_SPAWN_EVENT: &str = "island://spawn";
+/// Whether the buddy or its island is showing the voice state, so the pill
+/// can drop its own waveform (a bool, to the pill only).
+pub const PILL_BUDDY_EVENT: &str = "pill://buddy";
+/// The cursor moved onto or off the island (a bool). The page's own
+/// mouse-leave is unreliable in a window that never takes focus.
+pub const ISLAND_HOVER_EVENT: &str = "island://hover";
 /// The agent panel.
 pub const AGENTS: &str = "agents";
 pub const AGENTS_FOCUS_EVENT: &str = "agents://focus";
@@ -97,6 +103,23 @@ pub fn beside_island(
 static ISLAND_SIZE: std::sync::Mutex<(f64, f64)> = std::sync::Mutex::new((0.0, 0.0));
 /// A fullscreen app is in front and the island is out of the way.
 static ISLAND_COVERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The cursor is over the island.
+static ISLAND_HOVERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Tells the island when the cursor (global physical pixels) comes onto it
+/// or leaves it. Called on every cursor tick.
+pub fn island_hover(app: &AppHandle, pos: (f64, f64)) {
+    let over = match *ISLAND_CENTRE.lock().unwrap() {
+        Some((cx, cy)) => {
+            let (w, h) = *ISLAND_SIZE.lock().unwrap();
+            (pos.0 - cx).abs() <= w / 2.0 && (pos.1 - cy).abs() <= h / 2.0
+        }
+        None => false,
+    };
+    if ISLAND_HOVERED.swap(over, std::sync::atomic::Ordering::Relaxed) != over {
+        let _ = app.emit_to(ISLAND, ISLAND_HOVER_EVENT, over);
+    }
+}
 
 /// Hides the island while a fullscreen app is in front (with "hide in
 /// fullscreen apps" on) and brings it back after, without forgetting where it is.
@@ -109,6 +132,77 @@ pub fn island_covered(app: &AppHandle, covered: bool) {
         let _ = w.hide();
     } else if ISLAND_CENTRE.lock().unwrap().is_some() && !w.is_visible().unwrap_or(false) {
         let _ = w.show();
+        raise_island(&w);
+    }
+}
+
+/// The notch on the island's screen, in logical pixels: how wide it is and
+/// how far down it reaches. None without a notch (other OSes, external
+/// screens, older MacBooks); the island is then fully visible.
+#[derive(Serialize, TS, Clone, Copy, Debug, PartialEq)]
+#[ts(export)]
+pub struct NotchInfo {
+    pub width: f64,
+    pub height: f64,
+}
+
+#[tauri::command]
+pub async fn island_notch(app: AppHandle) -> Option<NotchInfo> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let _ = app.run_on_main_thread(move || {
+        let _ = tx.send(notch_on_main());
+    });
+    rx.await.ok().flatten()
+}
+
+/// Reads the primary screen's notch from AppKit. Main thread only.
+#[cfg(target_os = "macos")]
+fn notch_on_main() -> Option<NotchInfo> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSScreen;
+    let mtm = MainThreadMarker::new()?;
+    // The first screen is the one with the menu bar, where the island lives.
+    let screen = NSScreen::screens(mtm).firstObject()?;
+    let top = screen.safeAreaInsets().top;
+    if top <= 0.0 {
+        return None;
+    }
+    let frame = screen.frame();
+    let left = screen.auxiliaryTopLeftArea().size.width;
+    let right = screen.auxiliaryTopRightArea().size.width;
+    let width = frame.size.width - left - right;
+    (width > 0.0).then_some(NotchInfo { width, height: top })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn notch_on_main() -> Option<NotchInfo> {
+    None
+}
+
+/// Keeps the island above everything, including the menu bar. macOS pushes
+/// an ordinary floating window below the menu bar, so there it needs the
+/// status-bar level to sit against the notch; and it belongs on every
+/// space, without moving when spaces change.
+fn raise_island(w: &tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(ptr) = w.ns_window() else { return };
+        let addr = ptr as usize;
+        let _ = w.run_on_main_thread(move || {
+            use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
+            // Safety: a Tauri window's ns_window is a live NSWindow for the
+            // window's lifetime, and this runs on the main thread.
+            let win: &NSWindow = unsafe { &*(addr as *const NSWindow) };
+            win.setLevel(objc2_app_kit::NSStatusWindowLevel);
+            win.setCollectionBehavior(
+                NSWindowCollectionBehavior::CanJoinAllSpaces
+                    | NSWindowCollectionBehavior::Stationary
+                    | NSWindowCollectionBehavior::IgnoresCycle,
+            );
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
         let _ = w.set_always_on_top(true);
     }
 }
@@ -156,7 +250,7 @@ pub fn island_layout(app: AppHandle, width: f64, height: f64) {
     let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
     if !w.is_visible().unwrap_or(false) && !ISLAND_COVERED.load(std::sync::atomic::Ordering::Relaxed) {
         let _ = w.show();
-        let _ = w.set_always_on_top(true);
+        raise_island(&w);
     }
     *ISLAND_CENTRE.lock().unwrap() = Some((x + size.0 / 2.0, y + size.1 / 2.0));
     *ISLAND_SIZE.lock().unwrap() = size;
@@ -317,8 +411,9 @@ pub fn show_pill(app: &AppHandle) {
         }
     }
     // The pill drops its waveform while the buddy (or its island) shows the
-    // voice state.
-    let _ = w.emit_to(PILL, crate::cursor::VISIBLE_EVENT, by_island || crate::cursor::buddy_shown(app));
+    // voice state. Its own event: the overlays hear every window's
+    // "buddy://visible", and this one isn't about the cursor buddy.
+    let _ = w.emit_to(PILL, PILL_BUDDY_EVENT, by_island || crate::cursor::buddy_shown(app));
     let _ = w.show();
     let _ = w.set_always_on_top(true);
     PILL_FOLLOWS.store(!by_island, std::sync::atomic::Ordering::Relaxed);

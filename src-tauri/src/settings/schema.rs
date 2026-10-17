@@ -1127,6 +1127,12 @@ pub enum TriggerWhen {
     /// New files at the top of a folder, optionally matching a pattern
     /// such as "*.pdf".
     Folder { path: String, pattern: String },
+    /// One time only, at this moment (Unix milliseconds). The trigger goes
+    /// once it has run.
+    Once {
+        #[ts(type = "number")]
+        at: i64,
+    },
 }
 
 impl Default for TriggerWhen {

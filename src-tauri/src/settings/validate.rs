@@ -219,6 +219,9 @@ pub fn validate(s: &Settings) -> Vec<FieldError> {
                     (!std::path::Path::new(path).is_absolute())
                         .then(|| format!("\"{path}\" isn't a full folder path"))
                 }
+                crate::settings::schema::TriggerWhen::Once { at } => {
+                    crate::agents::triggers::check_once(*at).err()
+                }
             }
         };
         if let Some(p) = problem {

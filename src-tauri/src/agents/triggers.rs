@@ -1,7 +1,8 @@
-//! Triggers: agents that start by themselves, on a schedule or when new
-//! files arrive in a folder. Every trigger is capped at 10 runs an hour and
-//! pauses itself after 3 failures in a row. They only run while Helpy is
-//! running; runs missed while it was closed aren't made up.
+//! Triggers: agents that start by themselves, on a schedule, once at a set
+//! time, or when new files arrive in a folder. Every trigger is capped at 10
+//! runs an hour and pauses itself after 3 failures in a row. They only run
+//! while Helpy is running; schedule runs missed while it was closed aren't
+//! made up, but a one-time run whose moment passed runs as soon as it opens.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -187,6 +188,15 @@ pub fn due(expr: &str, after: DateTime<Local>, now: DateTime<Local>) -> bool {
     next_after(expr, after).is_some_and(|t| t <= now)
 }
 
+/// A one-time trigger's problem, if it has one. A moment in the past is
+/// fine: it runs straight away (Helpy may have been closed at the time).
+pub fn check_once(at: i64) -> Result<(), String> {
+    if at <= 0 {
+        return Err("A one-time trigger needs a time".into());
+    }
+    Ok(())
+}
+
 /// Whether a trigger may run now; the error says why not.
 pub fn admit(r: &mut Runtime, now: i64) -> Result<(), String> {
     if let Some(why) = &r.paused {
@@ -266,15 +276,20 @@ fn glob(pat: &str, text: &str) -> bool {
     )
 }
 
-/// A plan the user asked for again and again becomes a trigger: one agent
-/// is kept as its goal and tools, several are saved as a template first.
-pub fn add_for_plan(app: &AppHandle, request: &str, cron: &str, agents: &[PlanAgent]) -> Result<(), String> {
-    let name = super::templates::title_for(request, "Scheduled task");
+/// A plan the user asked for again and again, or for later, becomes a
+/// trigger: one agent is kept as its goal and tools, several are saved as a
+/// template first.
+pub fn add_for_plan(app: &AppHandle, request: &str, when: TriggerWhen, agents: &[PlanAgent]) -> Result<(), String> {
+    let fallback = match when {
+        TriggerWhen::Once { .. } => "One-time task",
+        _ => "Scheduled task",
+    };
+    let name = super::templates::title_for(request, fallback);
     let mut t = Trigger {
         id: super::new_id("tr"),
         name: name.clone(),
         enabled: true,
-        when: TriggerWhen::Schedule { cron: cron.to_string() },
+        when,
         ..Trigger::default()
     };
     match agents {
@@ -342,8 +357,41 @@ fn approved(folder: &str, s: &Settings) -> bool {
 }
 
 /// Starts a trigger's agents now, if its limits allow. `files` are the new
-/// files for a folder trigger.
+/// files for a folder trigger. A one-time trigger has had its moment either
+/// way: it goes once it ran, and stays switched off with the reason when it
+/// couldn't.
 pub fn fire(app: &AppHandle, id: &str, files: &[PathBuf]) -> Result<(), String> {
+    let result = fire_now(app, id, files);
+    let once = app
+        .state::<SettingsStore>()
+        .get()
+        .agents
+        .triggers
+        .iter()
+        .any(|t| t.id == id && matches!(t.when, TriggerWhen::Once { .. }));
+    if once {
+        retire(app, id, result.is_ok());
+    }
+    result
+}
+
+/// Removes a trigger, or just switches it off.
+fn retire(app: &AppHandle, id: &str, remove: bool) {
+    let mut s = app.state::<SettingsStore>().get();
+    if remove {
+        s.agents.triggers.retain(|t| t.id != id);
+    } else {
+        for t in s.agents.triggers.iter_mut().filter(|t| t.id == id) {
+            t.enabled = false;
+        }
+    }
+    let value = serde_json::to_value(&s.agents.triggers).unwrap_or_default();
+    if let Err(e) = crate::settings::settings_set(app.clone(), "agents.triggers".into(), value) {
+        log::warn!("trigger: couldn't retire {id}: {e:?}");
+    }
+}
+
+fn fire_now(app: &AppHandle, id: &str, files: &[PathBuf]) -> Result<(), String> {
     let s = app.state::<SettingsStore>().get();
     let state = app.state::<TriggersState>();
     let t = s
@@ -594,11 +642,14 @@ pub fn setup(app: &AppHandle) {
             let now = Local::now();
             let s = app.state::<SettingsStore>().get();
             for t in s.agents.triggers.iter().filter(|t| t.enabled) {
-                if let TriggerWhen::Schedule { cron } = &t.when {
-                    if due(cron, last, now) {
-                        if let Err(e) = fire(&app, &t.id, &[]) {
-                            log::info!("trigger: {e}");
-                        }
+                let its_time = match &t.when {
+                    TriggerWhen::Schedule { cron } => due(cron, last, now),
+                    TriggerWhen::Once { at } => *at <= now.timestamp_millis(),
+                    TriggerWhen::Folder { .. } => false,
+                };
+                if its_time {
+                    if let Err(e) = fire(&app, &t.id, &[]) {
+                        log::info!("trigger: {e}");
                     }
                 }
             }
@@ -642,6 +693,7 @@ pub fn agents_triggers_status(app: AppHandle) -> Vec<TriggerStatus> {
                 (TriggerWhen::Schedule { cron }, true) => {
                     next_after(cron, Local::now()).map(|d| d.timestamp_millis())
                 }
+                (TriggerWhen::Once { at }, true) => Some(*at),
                 _ => None,
             },
             problem: problems.get(&t.id).cloned(),
@@ -689,6 +741,8 @@ mod tests {
             .unwrap_err()
             .contains("10 minutes"));
         assert!(check_schedule("*/15 * * * *").is_ok());
+        assert!(check_once(0).is_err());
+        assert!(check_once(1).is_ok());
     }
 
     #[test]

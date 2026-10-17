@@ -814,6 +814,188 @@ select {
   color: var(--bg);
 }
 
+/* ---------- Where the buddy lives ---------- */
+
+.homes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.home {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.home[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.home__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.home__text strong {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+/* Little pictures of each home. */
+.home__art {
+  position: relative;
+  flex: none;
+  width: 88px;
+  height: 56px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.home__art--cursor .stage__pointer {
+  left: 30px;
+  top: 12px;
+}
+
+.home__art--cursor .buddy {
+  position: absolute;
+  left: 44px;
+  top: 24px;
+}
+
+.home__bar {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 13px;
+  background: color-mix(in srgb, var(--ink) 10%, var(--surface));
+}
+
+.home__notch {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 36px;
+  height: 11px;
+  transform: translateX(-50%);
+  background: #000;
+  border-radius: 0 0 5px 5px;
+}
+
+.home__strip {
+  position: absolute;
+  left: 50%;
+  top: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 17px;
+  transform: translateX(-50%);
+  background: #000;
+  border-radius: 0 0 8px 8px;
+}
+
+.home__strip .pf {
+  zoom: 0.46;
+}
+
+/* The notch preview: a Mac menu bar and its notch, with the island under it. */
+.stage--notch {
+  height: 290px;
+  background: radial-gradient(120% 80% at 50% 110%, #4a4f7a, #262a3d 55%, #1b1d29);
+}
+
+.menubar {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  height: 32px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font: 500 12.5px var(--font-ui);
+}
+
+.menubar__apple {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.menubar__app {
+  font-weight: 700;
+}
+
+.menubar__right {
+  margin-left: auto;
+}
+
+.menubar__notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 185px;
+  height: 32px;
+  transform: translateX(-50%);
+  background: #000;
+  border-radius: 0 0 11px 11px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.stage__island {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.stage__island--bottom {
+  top: auto;
+  bottom: 0;
+}
+
+.stage__island--left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.stage__island--right {
+  left: auto;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.stage--notch .stage__hint {
+  z-index: 4;
+}
+
 /* The sketched app window on the stage. */
 .mock {
   position: absolute;

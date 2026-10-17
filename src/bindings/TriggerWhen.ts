@@ -3,4 +3,4 @@
 /**
  * When a trigger starts its agents.
  */
-export type TriggerWhen = { "type": "schedule", cron: string, } | { "type": "folder", path: string, pattern: string, };
+export type TriggerWhen = { "type": "schedule", cron: string, } | { "type": "folder", path: string, pattern: string, } | { "type": "once", at: number, };

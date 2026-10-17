@@ -110,7 +110,9 @@ export function Overlay() {
       pos.current ??= target.current;
     });
     const offVisible = listen<boolean>(EVENTS.buddyVisible, (e) => setVisible(e.payload));
-    const offNotch = listen<NotchPoint>(EVENTS.notch, (e) => (notch.current = e.payload));
+    // Sent to each overlay in its own pixels, so listen on the window: with
+    // two screens the other overlay's point would arrive here too.
+    const offNotch = getCurrentWebviewWindow().listen<NotchPoint>(EVENTS.notch, (e) => (notch.current = e.payload));
     // Every overlay hears each step; only the one on the step's monitor draws it.
     const self = getCurrentWebviewWindow().label;
     const offMarks = listen<MarksView>(EVENTS.guideMarks, ({ payload }) => {
@@ -218,6 +220,7 @@ export function Overlay() {
   const b = settings.buddy;
   // The buddy steps aside while a selection is being drawn over its spot.
   const shown = (visible || (touring && b.home === "notch")) && (inside || touring) && !circling;
+
   const mood: BuddyState =
     voice === "listening" ? "listening" : speaking ? "speaking" : voice === "transcribing" || activity.running ? "thinking" : "idle";
   const tip = tipOf(b.style, b.size);
