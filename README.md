@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="#nvidia-nemotron-on-nebius">Nemotron on Nebius</a> ·
+  <a href="#open-models">Open models</a> ·
   <a href="#see-it">See it</a> ·
   <a href="#what-it-does">What it does</a> ·
   <a href="#run-it">Run it</a> ·
@@ -32,17 +32,19 @@
   <img src="docs/images/hero.jpg" alt="The agent panel and an agent's card beside the dock" width="100%">
 </p>
 
-Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first class, Linux X11 is supported, Linux Wayland is best effort. It works with NVIDIA Nemotron on Nebius Token Factory, Anthropic, OpenAI, Gemini, or a model on your own computer (Ollama, LM Studio, llama.cpp), with your own keys.
+Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first class, Linux X11 is supported, Linux Wayland is best effort. It works with Anthropic, OpenAI, Gemini, open models on Nebius Token Factory, or a model on your own computer (Ollama, LM Studio, llama.cpp), with your own keys.
 
-## NVIDIA Nemotron on Nebius
+## Open models
 
-Helpy is entered in the [Nebius x NVIDIA Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com/) (Personal AI track). It was started on 24 September 2026, during the submission period. With one click it runs entirely on open models served by [Nebius Token Factory](https://tokenfactory.nebius.com), with NVIDIA Nemotron doing the reasoning:
+Helpy doesn't need a closed model. With one click it runs entirely on open models served by [Nebius Token Factory](https://tokenfactory.nebius.com), routing each job to the model that suits it:
 
 | Job | Model on Token Factory | Why |
 |---|---|---|
 | Answering questions (voice and text), agent workers | `nvidia/nemotron-3-super-120b-a12b` | Fast, reliable tool calls, low cost |
 | Planning agents, splitting work among helpers | `nvidia/Nemotron-3-Ultra-550b-a55b` | The strongest reasoning, used only where it pays off |
-| Anything that reads the screen: pointing, walkthroughs, circle to explain | `moonshotai/Kimi-K3` | No Nemotron model on Token Factory takes images yet, and Kimi-K3 pointed most accurately (below) |
+| Anything that reads the screen: pointing, walkthroughs, circle to explain | `moonshotai/Kimi-K3` | The Nemotron models don't take images yet, and Kimi-K3 pointed most accurately (below) |
+
+Any other provider works the same way: under **Model routing** every job can be given its own model, from any provider you've added.
 
 ```mermaid
 flowchart LR
