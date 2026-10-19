@@ -6,11 +6,15 @@ The voice is synthesized (Kokoro, British English) and the music is a lo-fi bed 
 
 ## Title
 
-This is Helpy: an AI companion that lives next to your cursor. It looks at your screen, points at the answer, draws on your apps and runs agents in the background, all on open models from Nebius Token Factory, with NVIDIA Nemotron doing the thinking.
+This is Helpy: an AI companion next to your cursor, or in the notch. It looks at your screen, points at the answer, draws on your apps and runs agents in the background, on open models from Nebius Token Factory with NVIDIA Nemotron.
 
 ## Cursor buddy, voice and visual guidance
 
-Pip follows your pointer on every monitor. Ask out loud, and Helpy screenshots the monitor under your cursor, never its own windows, and highlights the real control. Walkthroughs go a step at a time, and Do it clicks for you after you confirm.
+Pip follows your pointer on every monitor. Ask out loud, and Helpy screenshots the monitor under your cursor and highlights the real control. Walkthroughs go a step at a time, and Do it clicks for you after you confirm.
+
+## The notch
+
+Or let Helpy live in the notch. It hides until you hover it. Ask out loud right there, and while agents work it tells you what each one is doing.
 
 ## Explaining on screen: shapes, labels, a picture and a chart
 
@@ -26,7 +30,7 @@ Background agents. Say what you want done. Nemotron Ultra plans it and shows a c
 
 ## Agents: Tavily and the Playwright browser at work
 
-Press Start and a copy of the buddy flies to the dock. The agent searches with Tavily, drives a real browser through the Playwright MCP server, reads every page as text, clicks through listings and fills in forms. Nemotron Super runs each step.
+Press Start and a copy of the buddy flies to the dock. The agent searches with Tavily, drives a real browser through the Playwright MCP server, clicks through listings and fills in forms. Nemotron Super runs each step.
 
 ## Agents: approvals
 
@@ -42,7 +46,7 @@ The agent panel shows every agent with its timeline, tokens and cost, and the ap
 
 ## Settings
 
-Settings are searchable and instant. Add Nebius Token Factory, load its models, and press Use for everything. Agents search with Tavily, work only in folders you approve, and connect to Gmail, Notion, Slack, GitHub and any MCP server, each action set to allow, ask or never. Privacy blanks password managers out of every screenshot, and the memory page shows what Helpy remembers.
+Settings are searchable and instant. Pick where the buddy lives, beside the cursor or in the notch, with a live preview. Add Nebius Token Factory, load its models, and press Use for everything. Agents search with Tavily and work only in folders you approve, and connectors reach Gmail, Notion, Slack, GitHub and any MCP server.
 
 ## Limits
 
@@ -50,7 +54,7 @@ Limits live in Rust, not in the prompt: steps, tool calls, time, and token and c
 
 ## Nemotron on Nebius
 
-Under the hood, Nemotron 3 Super answers and runs the agents, Nemotron 3 Ultra plans and splits the work, and Kimi K3 reads the screen: the most accurate pointer in our grounding benchmark, twelve targets out of twelve.
+Under the hood, Nemotron 3 Super answers and runs the agents, Nemotron 3 Ultra plans and splits the work, and Kimi K3 reads the screen: twelve targets out of twelve in our grounding benchmark.
 
 ## Outro
 
