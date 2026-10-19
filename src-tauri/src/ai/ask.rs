@@ -65,6 +65,9 @@ pub struct AskState {
     next_id: AtomicU32,
     /// When the last question finished, for starting fresh after a break.
     last_turn: Mutex<Option<Instant>>,
+    /// Questions that fell off the end of the conversation, waiting to be
+    /// reviewed for memory in one batch rather than one call each.
+    leftover: Mutex<Vec<Message>>,
 }
 
 /// Questions kept in the conversation, with their answers and steps.
@@ -887,7 +890,11 @@ impl Turn<'_> {
             }
             Err(e) => log::warn!("ask: couldn't summarize older questions, dropping them: {}", e.message),
         }
+        memory::mine(self.app, &self.settings, &messages[..cut]);
         messages.drain(..cut);
+        // Kept, so a question that fails or is stopped doesn't summarize
+        // and review the same messages again next time.
+        *state.conversation.lock().unwrap() = messages.clone();
         messages
     }
 
@@ -1386,7 +1393,8 @@ async fn answer(app: &AppHandle, pending: Pending) {
             .is_some_and(|t| t.elapsed() >= Duration::from_secs(fresh_after as u64 * 60));
     log::info!("ask: question started (voice: {}, fresh: {fresh})", origin == Origin::Voice);
     if fresh {
-        state.conversation.lock().unwrap().clear();
+        let ended = state.end_conversation();
+        memory::mine(app, &settings, &ended);
         state.summary.lock().unwrap().take();
         state.screen.lock().unwrap().take();
     }
@@ -1437,7 +1445,12 @@ async fn answer(app: &AppHandle, pending: Pending) {
 
     match result {
         Ok((messages, completion, acted)) => {
-            *state.conversation.lock().unwrap() = keep_recent(messages, KEEP_QUESTIONS);
+            let mut kept = messages;
+            let dropped: Vec<Message> = kept.drain(..recent_start(&kept, KEEP_QUESTIONS)).collect();
+            if let Some(batch) = state.bank_leftover(dropped) {
+                memory::mine(app, &turn.settings, &batch);
+            }
+            *state.conversation.lock().unwrap() = kept;
             persist(app);
             // Agents plan with their own model, so the offer stands even when
             // the questions model has no tools of its own.
@@ -1569,15 +1582,37 @@ fn document_text(bytes: &[u8]) -> Result<String, String> {
     })
 }
 
-/// Drops all but the last `questions` questions and what followed each. A
-/// question is a user message that isn't a tool result, so tool calls and
-/// their results always stay together.
-fn keep_recent(mut messages: Vec<Message>, questions: usize) -> Vec<Message> {
-    let starts = question_starts(&messages);
+/// Where the newest `questions` questions begin, so all before it can be
+/// dropped. A question is a user message that isn't a tool result, so tool
+/// calls and their results always stay together.
+fn recent_start(messages: &[Message], questions: usize) -> usize {
+    let starts = question_starts(messages);
     if starts.len() > questions {
-        messages.drain(..starts[starts.len() - questions]);
+        starts[starts.len() - questions]
+    } else {
+        0
     }
-    messages
+}
+
+impl AskState {
+    /// Puts questions that fell off the conversation aside for a memory
+    /// review; once enough have gathered, hands them all back for one.
+    fn bank_leftover(&self, dropped: Vec<Message>) -> Option<Vec<Message>> {
+        let mut leftover = self.leftover.lock().unwrap();
+        leftover.extend(dropped);
+        if question_starts(&leftover).len() >= KEEP_QUESTIONS {
+            return Some(std::mem::take(&mut *leftover));
+        }
+        None
+    }
+
+    /// Clears the conversation, returning it with anything set aside from
+    /// it, for one last memory review.
+    fn end_conversation(&self) -> Vec<Message> {
+        let mut ended = std::mem::take(&mut *self.leftover.lock().unwrap());
+        ended.append(&mut self.conversation.lock().unwrap());
+        ended
+    }
 }
 
 /// Removes tool calls that never got a result, which every provider
@@ -1642,7 +1677,8 @@ pub fn ask_cancel(state: tauri::State<AskState>) {
 #[tauri::command]
 pub fn ask_reset(app: AppHandle, state: tauri::State<AskState>) {
     ask_cancel(state.clone());
-    state.conversation.lock().unwrap().clear();
+    let ended = state.end_conversation();
+    memory::mine(&app, &app.state::<SettingsStore>().get(), &ended);
     state.summary.lock().unwrap().take();
     state.offer.lock().unwrap().take();
     state.screen.lock().unwrap().take();
@@ -1865,6 +1901,24 @@ mod tests {
     }
 
     #[test]
+    fn dropped_questions_are_reviewed_in_one_batch() {
+        let state = AskState::default();
+        let q = |t: &str| Message::user_text(t);
+        for i in 0..KEEP_QUESTIONS - 1 {
+            assert!(state.bank_leftover(vec![q(&i.to_string())]).is_none());
+        }
+        let batch = state.bank_leftover(vec![q("last")]).expect("a full batch is handed back");
+        assert_eq!(batch.len(), KEEP_QUESTIONS);
+        assert!(state.leftover.lock().unwrap().is_empty());
+
+        assert!(state.bank_leftover(vec![q("left")]).is_none());
+        *state.conversation.lock().unwrap() = vec![q("now")];
+        let ended = state.end_conversation();
+        assert_eq!(ended, vec![q("left"), q("now")]);
+        assert!(state.conversation.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn keeps_the_last_questions_with_their_tool_calls() {
         let q = |t: &str| Message::user_text(t);
         let a = |t: &str| Message {
@@ -1881,12 +1935,12 @@ mod tests {
             }],
         };
         let history = vec![q("one"), a("1"), q("two"), a("step"), result.clone(), a("2"), q("three"), a("3")];
-        let kept = keep_recent(history.clone(), 2);
+        let kept = &history[recent_start(&history, 2)..];
         // "two" starts the kept history; its tool result stays with it.
         assert_eq!(kept.len(), 6);
         assert_eq!(kept[0], q("two"));
         assert_eq!(kept[2], result);
-        assert_eq!(keep_recent(history.clone(), 10), history);
+        assert_eq!(recent_start(&history, 10), 0);
     }
 
     #[test]

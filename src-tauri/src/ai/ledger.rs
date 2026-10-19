@@ -104,6 +104,7 @@ pub struct Total {
 fn feature_name(feature: &str) -> &'static str {
     match feature {
         "ask" => "Questions and guidance",
+        "memory" => "Memory",
         "circle" => "Circle to explain",
         "agent planning" => "Planning agents",
         f if f.starts_with("agent ") => "Agents",

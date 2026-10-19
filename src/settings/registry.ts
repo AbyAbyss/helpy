@@ -374,7 +374,7 @@ export const FIELDS: Field[] = [
   },
   {
     path: "ai.remember", section: "usage", group: "Conversation memory", label: "Remember facts about you",
-    help: "Helpy may save short notes (the apps you use, preferences, names) and bring them into later conversations. The notes are listed below, where you can remove any of them.",
+    help: "Helpy may save short notes (the apps you use, preferences, names) and bring them into later conversations. When a conversation ends it also looks back over what you said for anything lasting, and folds it into the notes it already has rather than repeating them. The notes are listed below, where you can remove any of them.",
     keywords: "memory notes remember facts long-term", control: { kind: "toggle" },
   },
 
