@@ -163,6 +163,7 @@ export function MemoryNotes() {
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   useEffect(() => {
     const load = () => void api.notes().then(setNotes, () => {});
     load();
@@ -239,10 +240,21 @@ export function MemoryNotes() {
         </button>
       </div>
       {error && <p className="err-text">{error}</p>}
-      {notes.length > 0 && (
-        <button type="button" className="link-btn" onClick={() => api.notesClear()}>
+      {notes.length > 0 && !confirmClear && (
+        <button type="button" className="link-btn" onClick={() => setConfirmClear(true)}>
           Forget everything ({notes.length})
         </button>
+      )}
+      {notes.length > 0 && confirmClear && (
+        <div className="confirm" role="group" aria-label="Forget all notes">
+          <span>Forget all {notes.length} notes? This can't be undone.</span>
+          <button type="button" className="btn btn--danger" onClick={() => { setConfirmClear(false); api.notesClear(); }} autoFocus>
+            Forget
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => setConfirmClear(false)}>
+            Keep
+          </button>
+        </div>
       )}
     </div>
   );
