@@ -75,7 +75,7 @@ Run it yourself with `node scripts/grounding-eval.mjs --list nebius`, then `node
 
 ## See it
 
-A narrated demo (3:31) is in [`docs/video/helpy-demo.mp4`](docs/video/helpy-demo.mp4), with its script in [`docs/video/narration.md`](docs/video/narration.md).
+A narrated demo (2:52) is in [`docs/video/helpy-demo.mp4`](docs/video/helpy-demo.mp4), with its script in [`docs/video/narration.md`](docs/video/narration.md).
 
 <table>
   <tr>

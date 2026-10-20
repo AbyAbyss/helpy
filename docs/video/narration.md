@@ -1,8 +1,8 @@
 # Demo video narration
 
-`helpy-demo.mp4` runs 3:31. It is the original picture at its native speed. The title card now leads with "Works with any model" (Anthropic, OpenAI, Gemini, Ollama, LM Studio, any OpenAI-compatible API) and then names the open models this demo runs on. The cut adds two new scenes (builder agents, skills and triggers after the approval inbox; memory after Settings), a new narration and a new music track. The two static slides near the end hold a still frame while their lines finish.
+`helpy-demo.mp4` runs 2:52. Each scene plays up to 1.35 times faster where it was waiting, and only as fast as its narration allows. The title card now leads with "Works with any model" (Anthropic, OpenAI, Gemini, Ollama, LM Studio, any OpenAI-compatible API) and then names the open models this demo runs on. The cut adds two new scenes (builder agents, skills and triggers after the approval inbox; memory after Settings), a new narration and a new music track. The title card and the two static slides near the end hold a still frame while their lines finish.
 
-The voice is synthesized (OpenAI `tts-1-hd`, voice "fable", speed 1.08), every line with the same voice and the same fixed gain. The music is synthesized in code to the exact length of the cut, with a swell into each scene, so neither needs a licence. It sits about 16 dB under the voice and dips a little further while the voice talks. The mix is -17 LUFS with a true peak of -1.5 dBTP. The agent run, the plan cards and the memory notes are staged with sample data; the UI is Helpy's own React components.
+The voice is synthesized (OpenAI `tts-1-hd`, voice "fable", speed 1.2), every line with the same voice and the same fixed gain. The music is synthesized in code to the exact length of the cut, with a swell into each scene, so neither needs a licence. It sits about 16 dB under the voice and dips a little further while the voice talks. The mix is -17 LUFS with a true peak of -1.5 dBTP. The agent run, the plan cards and the memory notes are staged with sample data; the UI is Helpy's own React components.
 
 ## Title
 
