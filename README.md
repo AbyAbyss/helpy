@@ -42,7 +42,7 @@ Helpy doesn't need a closed model. With one click it runs entirely on open model
 |---|---|---|
 | Answering questions (voice and text), agent workers | `nvidia/nemotron-3-super-120b-a12b` | Fast, reliable tool calls, low cost |
 | Planning agents, splitting work among helpers | `nvidia/Nemotron-3-Ultra-550b-a55b` | The strongest reasoning, used only where it pays off |
-| Anything that reads the screen: pointing, walkthroughs, circle to explain | `moonshotai/Kimi-K3` | The Nemotron models don't take images yet, and Kimi-K3 pointed most accurately (below) |
+| Anything that reads the screen: pointing, walkthroughs, circle to explain | `moonshotai/Kimi-K3`, or `nvidia/Nemotron-3.5-Super-VL` | Nemotron Super and Ultra don't take images, so screen questions go to a vision model. Kimi-K3 pointed most accurately (below); Nemotron-3.5-Super-VL also reads the screen and keeps everything on Nemotron |
 
 Any other provider works the same way: under **Model routing** every job can be given its own model, from any provider you've added.
 
@@ -59,6 +59,8 @@ flowchart LR
 **Set it up:** add **Nebius Token Factory** under Settings → AI providers and paste a key. Loading its models fills in which ones read images and what they cost, from Token Factory's own model list. Then, under **Model routing**, click **Use for everything**.
 
 **Choosing the vision model.** Helpy's best features depend on a model pointing at the right pixel. `scripts/grounding-eval.mjs` renders 12 real web pages in headless Chrome, where every target's exact box is known, asks each model "where would you click to …", and scores the answers. On Token Factory in October 2026:
+
+We also used `nvidia/Nemotron-3.5-Super-VL` for screen reading during development. It was quick at first; from around 19 October its image requests became uneven, sometimes under a second and often 3 to 6 seconds, so it isn't in the timed table below.
 
 | Model | Hits (of 12) | Median distance from the target's centre | Average time |
 |---|---|---|---|

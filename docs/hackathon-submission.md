@@ -20,7 +20,7 @@ It's private by design: your keys stay in the OS keychain, its own windows never
 
 - Tauri 2 (Rust) and React + TypeScript; macOS, Windows and Linux.
 - **NVIDIA Nemotron on Nebius Token Factory does the reasoning.** Nemotron 3 Super answers questions and runs agents; Nemotron 3 Ultra plans agent teams and splits work among helpers. Helpy routes each job to its own model, so the expensive model is used only where it pays off.
-- **The screen is read by an open vision model on the same Token Factory.** No Nemotron model there accepts images yet, so we measured: a pointing test (`scripts/grounding-eval.mjs`) renders 12 real web pages in headless Chrome, where every target's exact box is known, and asks each model where to click. Kimi-K3 hit 12/12 (Claude Sonnet 5 hit 10/12), so it became the "eyes"; GLM-5.3-Flash hit 11/12 at about a twentieth of the price.
+- **The screen is read by a vision model on the same Token Factory.** Nemotron Super and Ultra don't take images, so we tried Nemotron-3.5-Super-VL and Kimi-K3 and measured: a pointing test (`scripts/grounding-eval.mjs`) renders 12 real web pages in headless Chrome, where every target's exact box is known, and asks each model where to click. Kimi-K3 hit 12/12 (Claude Sonnet 5 hit 10/12), so it became the "eyes"; GLM-5.3-Flash hit 11/12 at about a twentieth of the price.
 - **One-click setup:** Helpy reads Token Factory's detailed model list to fill in which models see images and what they cost, and a "Use for everything" button routes every job.
 - **Tavily is the agents' view of the web:** search with the relevant part of each page, page reading through Extract, and a deep-research tool on Tavily Research that returns a cited report (it asks first, since it can use many credits).
 - Accessibility APIs (UI Automation, AX, AT-SPI) snap highlights onto the real button, so a few pixels of model error don't matter.
@@ -33,14 +33,14 @@ It's private by design: your keys stay in the OS keychain, its own windows never
 
 ## What's next
 
-- A Nemotron vision model on Token Factory, to run fully on Nemotron.
+- Screen reading on Nemotron-3.5-Super-VL by default once its image latency is steady, so Helpy runs fully on Nemotron.
 - Running scheduled agents on Nebius Serverless Jobs while the laptop sleeps.
 
 ## Feedback on Nebius Token Factory, NVIDIA models and Tavily
 
 (Things we actually ran into while building.)
 
-- **No NVIDIA model on Token Factory accepts images.** All four Nemotron models answer `400 This model does not support image input`. A Nemotron vision-language model (e.g. Nemotron Nano VL) there would let screen-aware apps run end to end on NVIDIA models.
+- **Vision latency became uneven.** Nemotron-3.5-Super-VL was quick on image requests when we started; from around 19 October the same request might take under a second or 3 to 6 seconds, and Kimi-K3 was slower still. Steadier image latency, or image input on Nemotron Super itself, would make screen-aware voice apps feel instant.
 - **`/v1/models` hides the useful details.** The plain list has only ids; `?verbose=true` adds modality and pricing, which is great but hard to discover. A capability flag for tool calling would help too.
 - **Metadata and behaviour disagree for Gemma 3 27B.** It's listed as `text->text` but accepts images.
 - **MiniCPM-V 4.5 rejects requests that include tools** with a raw vLLM message about `--enable-auto-tool-choice`. Either support auto tool choice or say plainly that the model doesn't take tools.
