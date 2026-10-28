@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="#download">Download</a> ·
   <a href="#open-models">Open models</a> ·
   <a href="#see-it">See it</a> ·
   <a href="#what-it-does">What it does</a> ·
@@ -33,6 +34,32 @@
 </p>
 
 Built with Tauri v2 (Rust) and React + TypeScript. Windows and macOS are first class, Linux X11 is supported, Linux Wayland is best effort. It works with Anthropic, OpenAI, Gemini, open models on Nebius Token Factory, or a model on your own computer (Ollama, LM Studio, llama.cpp), with your own keys.
+
+## Download
+
+<p align="center">
+  <a href="https://github.com/AbyAbyss/helpy/releases/latest"><img alt="Download the latest release" src="https://img.shields.io/badge/Download-latest%20release-ff6166?style=for-the-badge&logo=github&logoColor=white"></a>
+</p>
+
+Installers for every platform are on the [Releases page](https://github.com/AbyAbyss/helpy/releases/latest). Under **Assets**, pick the file for your computer:
+
+| Computer | File | Install |
+|---|---|---|
+| Mac with Apple Silicon (M1 or later) | `Helpy_<version>_aarch64.dmg` | Open it and drag Helpy into Applications |
+| Windows 10 or 11 | `Helpy_<version>_x64-setup.exe` (or the `.msi`) | Run it |
+| Linux | `.AppImage`, `.deb` or `.rpm` | Make the AppImage executable and run it, or install the package |
+
+The builds aren't signed, so the first launch needs one extra step:
+
+- **macOS** says it can't verify Helpy. Open it once, then go to System Settings → Privacy & Security and click **Open Anyway**. If macOS says the app is damaged, run this in Terminal:
+
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/Helpy.app
+  ```
+
+- **Windows** shows a SmartScreen warning. Click **More info → Run anyway**.
+
+No build for your computer (an Intel Mac, for example)? [Build it from source](#run-it).
 
 ## Open models
 
