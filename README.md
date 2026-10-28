@@ -341,3 +341,8 @@ design/         source SVGs for the app and tray icons
 ## License
 
 [MIT](LICENSE). Copyright (c) 2026 AbyAbyss.
+
+<p align="center">
+  If Helpy is useful to you, you can buy me a coffee.<br><br>
+  <a href="https://buymeacoffee.com/abyabyss"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black"></a>
+</p>
