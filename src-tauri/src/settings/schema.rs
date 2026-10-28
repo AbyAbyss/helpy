@@ -124,8 +124,8 @@ pub enum BuddyStyle {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum BuddyHome {
-    #[default]
     Cursor,
+    #[default]
     Notch,
 }
 
@@ -185,7 +185,7 @@ impl Default for Buddy {
         Self {
             enabled: true,
             style: BuddyStyle::Pip,
-            home: BuddyHome::Cursor,
+            home: BuddyHome::Notch,
             notch_edge: ScreenEdge::Top,
             notch_offset: 0.5,
             island_look: IslandLook::Face,
