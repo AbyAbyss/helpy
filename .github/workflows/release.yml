@@ -1,12 +1,18 @@
 # Builds installers and attaches them to a GitHub Release.
-# Runs only when a release is published on the Releases page (the installers are
-# added to that release) or when started by hand (Actions → Release → Run
-# workflow, which makes a draft release to review and publish); never on
+# Runs only when a release is published on the Releases page, or when started by
+# hand (Actions → Release → Run workflow) with a version such as 0.2.0; never on
 # ordinary pushes, merges or bare tag pushes.
+# The installers take their version from the release's tag (v0.2.0 → 0.2.0) or
+# from the version typed in. A manual run creates the tag v<version> on the
+# chosen branch if it doesn't exist yet, and publishes a release for it.
 name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, such as 0.2.0"
+        required: true
   release:
     types: [published]
 
@@ -14,7 +20,52 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          INPUT: ${{ inputs.version }}
+        run: |
+          version="${TAG:-$INPUT}"
+          version="${version#v}"
+          # Windows installers only take plain numbers, so no -beta suffixes.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::\"$version\" isn't a version like 1.2.3"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG:-v$version}" >> "$GITHUB_OUTPUT"
+
+      - id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          BODY: |
+            Unsigned builds. On macOS, open Helpy once, then allow it under System Settings →
+            Privacy & Security → Open Anyway; if macOS says the app is damaged, run
+            `xattr -dr com.apple.quarantine /Applications/Helpy.app`. On Windows, choose
+            More info → Run anyway. See the README for setup.
+        run: |
+          if [ -z "$RELEASE_ID" ]; then
+            if ! gh api "repos/$GH_REPO/git/ref/tags/$TAG" > /dev/null 2>&1; then
+              gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+            fi
+            RELEASE_ID=$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq .id 2> /dev/null) ||
+              RELEASE_ID=$(gh api "repos/$GH_REPO/releases" -f tag_name="$TAG" -f name="Helpy $VERSION" -f body="$BODY" --jq .id)
+          fi
+          echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +76,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.prepare.outputs.tag }}
+
+      - name: Version from the release
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs"), f = "src-tauri/tauri.conf.json";
+            const c = JSON.parse(fs.readFileSync(f, "utf8"));
+            c.version = process.env.VERSION;
+            fs.writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
+          '
 
       - name: Linux packages
         if: runner.os == 'Linux'
@@ -51,15 +116,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # A published release gets the installers; a manual run makes a draft
-          # named after the app's version.
-          releaseId: ${{ github.event.release.id }}
-          tagName: v__VERSION__
-          releaseName: Helpy __VERSION__
-          releaseBody: |
-            Unsigned builds. On macOS, open Helpy once, then allow it under System Settings →
-            Privacy & Security → Open Anyway; if macOS says the app is damaged, run
-            `xattr -dr com.apple.quarantine /Applications/Helpy.app`. On Windows, choose
-            More info → Run anyway. See the README for setup.
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.prepare.outputs.release_id }}
