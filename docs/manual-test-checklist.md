@@ -368,6 +368,8 @@ macOS asks once to allow Helpy under Privacy & Security → Accessibility; windo
 
 - [ ] **21.1** With an app on screen that has a visible button, ask "click the Start chart button" (or any button you can see).
   Expected: Helpy looks, the panel asks **Click “Start chart” on your screen** with Allow / Always allow / Don't; on Allow the button is clicked and the pointer returns where it was. No agent starts.
+- [ ] **21.1b** Ask the same **out loud** with the panel closed.
+  Expected: Helpy says "Click “…” on your screen? Say yes, no, or always." and the voice pill shows it; hold the voice key and say "yes": it clicks, says "OK", then reads the rest of the answer. The log (`~/Library/Logs/com.helpy.app/Helpy.log`) has a line `ask: click "…"` saying whether it pressed by name or clicked the point.
 - [ ] **21.2** Click into a text field yourself, then ask "type hello world".
   Expected: the text goes into that field, not into Helpy's panel.
 - [ ] **21.3** Ask "press cmd+a" in a text editor.

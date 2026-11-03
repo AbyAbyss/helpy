@@ -657,9 +657,28 @@ struct Turn<'a> {
     visuals: Mutex<Vec<step::Action>>,
     /// The answer as the user saw it, for the chat history.
     record: Mutex<chats::Recording>,
+    /// Asked out loud: questions back to the user are spoken too, and can be
+    /// answered by voice.
+    spoken: bool,
 }
 
 impl Turn<'_> {
+    /// A question back to the user while they may not be looking at the
+    /// panel: said aloud and shown in the voice pill for a spoken question.
+    fn ask_aloud(&self, question: &str) {
+        if self.spoken {
+            crate::voice::ask_aloud(self.app, &format!("{question}? Say yes, no, or always."));
+        }
+    }
+
+    /// After the user answered out loud, the rest of the answer is read
+    /// again (their reply stopped the speaker).
+    fn resume_voice(&self) {
+        if let Some(f) = &self.feed {
+            f.resume();
+        }
+    }
+
     fn send(&self, e: AskEvent) {
         {
             let mut r = self.record.lock().unwrap();
@@ -800,23 +819,51 @@ impl Turn<'_> {
         let s = |k: &str| input[k].as_str().unwrap_or("").to_string();
         let done = match point {
             Some((x, y, scale)) => {
-                // Helpy's own panel may sit over the spot; step it aside.
-                let panel = self.app.get_webview_window(crate::windows::ASK).filter(|w| {
-                    let (Ok(true), Ok(p), Ok(size)) = (w.is_visible(), w.outer_position(), w.outer_size()) else {
-                        return false;
-                    };
-                    let (px, py) = (p.x as f64, p.y as f64);
-                    x >= px && y >= py && x < px + size.width as f64 && y < py + size.height as f64
-                });
-                if let Some(w) = &panel {
-                    let _ = w.hide();
+                let (target, right) = (s("target"), s("button") == "right");
+                let double = input["double"].as_bool().unwrap_or(false);
+                // Pressing the control by name doesn't depend on the model's
+                // aim, and works without bringing the app to the front.
+                let found = if right || double {
+                    None
+                } else {
+                    crate::a11y::press_named(&target, Some((x, y)), scale).await
+                };
+                log::info!(
+                    "ask: click \"{target}\" at {x:.0},{y:.0}: {}",
+                    match found {
+                        Some(p) if p.pressed => "pressed by name".to_string(),
+                        Some(p) => format!("found by name at {:.0},{:.0}, clicking", p.rect.center().0, p.rect.center().1),
+                        None => "not found by name, clicking the point".into(),
+                    }
+                );
+                match found {
+                    Some(p) if p.pressed => Ok(format!("Pressed “{target}”")),
+                    _ => {
+                        let (x, y) = found.map(|p| p.rect.center()).unwrap_or((x, y));
+                        // A click on a window behind Helpy's may only bring it forward.
+                        if self.app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false)) {
+                            let _ = crate::system::focus_front_app().await;
+                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        }
+                        // Helpy's own panel may sit over the spot; step it aside.
+                        let panel = self.app.get_webview_window(crate::windows::ASK).filter(|w| {
+                            let (Ok(true), Ok(p), Ok(size)) = (w.is_visible(), w.outer_position(), w.outer_size()) else {
+                                return false;
+                            };
+                            let (px, py) = (p.x as f64, p.y as f64);
+                            x >= px && y >= py && x < px + size.width as f64 && y < py + size.height as f64
+                        });
+                        if let Some(w) = &panel {
+                            let _ = w.hide();
+                        }
+                        let done = input::click(x, y, scale, right, double).await;
+                        if let Some(w) = &panel {
+                            let _ = w.show();
+                        }
+                        let how = if found.is_some() { "" } else { " (at your point; no control by that name was found)" };
+                        done.map(|_| format!("Clicked “{target}”{how}"))
+                    }
                 }
-                let right = s("button") == "right";
-                let done = input::click(x, y, scale, right, input["double"].as_bool().unwrap_or(false)).await;
-                if let Some(w) = &panel {
-                    let _ = w.show();
-                }
-                done.map(|_| format!("Clicked {}", s("target")))
             }
             None => {
                 let ours = self.app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false));
@@ -841,7 +888,16 @@ impl Turn<'_> {
         // Let the app react before looking again.
         tokio::time::sleep(std::time::Duration::from_millis(700)).await;
         match self.screen(false, false).await {
-            Ok(shot) => (Self::screenshot_parts(&format!("{done}. Here is the screen now"), shot), false),
+            Ok(shot) => (
+                Self::screenshot_parts(
+                    &format!(
+                        "{done}. Here is the screen now: check that it changed the way you expected. If it \
+                         didn't, tell the user the click didn't work instead of saying it's done"
+                    ),
+                    shot,
+                ),
+                false,
+            ),
             Err(reason) => (vec![Part::Text(format!("{done}. {reason}"))], false),
         }
     }
@@ -853,11 +909,14 @@ impl Turn<'_> {
         let (tx, rx) = oneshot::channel();
         let label = always.as_ref().map(|a| a.label.clone());
         *state.confirm.lock().unwrap() = Some((id, tx, always.map(|a| a.target)));
+        self.ask_aloud(&summary);
         self.send(AskEvent::Confirm { id, summary, always: label });
-        tokio::select! {
+        let allowed = tokio::select! {
             _ = self.cancel.cancelled() => false,
             r = rx => r.unwrap_or(false),
-        }
+        };
+        self.resume_voice();
+        allowed
     }
 
     /// A web search or a page read, done the way the agents do them.
@@ -890,11 +949,13 @@ impl Turn<'_> {
             let id = state.next_id.fetch_add(1, Ordering::Relaxed);
             let (tx, rx) = oneshot::channel();
             *state.permission.lock().unwrap() = Some((id, tx));
+            self.ask_aloud("Can I look at your screen");
             self.send(AskEvent::ScreenPermission { id });
             let allowed = tokio::select! {
                 _ = self.cancel.cancelled() => false,
                 r = rx => r.unwrap_or(false),
             };
+            self.resume_voice();
             if !allowed {
                 return Err("The user chose not to share their screen. Answer without it.".into());
             }
@@ -1628,6 +1689,7 @@ async fn answer(app: &AppHandle, pending: Pending) {
         playing: Mutex::new(None),
         visuals: Mutex::new(Vec::new()),
         record: Mutex::new(chats::Recording::default()),
+        spoken: origin == Origin::Voice,
     };
     let history = turn.compact(history).await;
     let image_count = images.len() as u32;
@@ -1970,6 +2032,61 @@ pub fn ask_screen_answer(app: AppHandle, state: tauri::State<AskState>, id: u32,
         let _ = tx.send(allow);
     }
 }
+
+/// "yes", "no", "always": an answer to a question Helpy asked out loud.
+/// Some((allow, always)); None for anything else.
+pub fn spoken_consent(text: &str) -> Option<(bool, bool)> {
+    let t = text.to_lowercase();
+    let words: Vec<&str> = t.split(|c: char| !c.is_alphanumeric() && c != '\'').filter(|w| !w.is_empty()).collect();
+    if words.is_empty() || words.len() > 6 {
+        return None;
+    }
+    let has = |list: &[&str]| words.iter().any(|w| list.contains(w));
+    // "no", "don't" win over a "yes" in the same breath ("no, don't do it").
+    if has(&["no", "nope", "don't", "dont", "stop", "cancel", "deny", "never"]) {
+        return Some((false, false));
+    }
+    if has(&["always"]) {
+        return Some((true, true));
+    }
+    has(&["yes", "yeah", "yep", "sure", "ok", "okay", "allow", "go", "do", "fine", "please", "approve"])
+        .then_some((true, false))
+}
+
+/// Answers a question Helpy asked out loud (a confirmation or the screen
+/// permission) with the user's spoken reply. None when nothing is waiting or
+/// the words aren't an answer; otherwise what to tell the user.
+pub fn take_spoken_answer(app: &AppHandle, text: &str) -> Option<String> {
+    let state = app.state::<AskState>();
+    let confirm = state.confirm.lock().unwrap().as_ref().map(|(id, ..)| *id);
+    let screen = state.permission.lock().unwrap().as_ref().map(|(id, _)| *id);
+    if confirm.is_none() && screen.is_none() {
+        return None;
+    }
+    let (allow, always) = spoken_consent(text)?;
+    if let Some(id) = confirm {
+        if let Err(e) = ask_confirm_answer(app.clone(), state, id, allow, Some(always)) {
+            return Some(e);
+        }
+    } else if let Some(id) = screen {
+        ask_screen_answer(app.clone(), state, id, allow, Some(always));
+    }
+    // Tells the panel the prompt is answered.
+    let consent = match (allow, always) {
+        (true, true) => "always",
+        (true, false) => "allowed",
+        _ => "denied",
+    };
+    let _ = app.emit(ANSWERED_EVENT, consent);
+    Some(match (allow, always) {
+        (true, true) => "OK, and I won't ask again.".into(),
+        (true, false) => "OK.".into(),
+        _ => "OK, I won't.".into(),
+    })
+}
+
+/// A prompt was answered some other way (out loud).
+pub const ANSWERED_EVENT: &str = "ask://answered";
 
 /// The user's answer to a Confirm: allow, allow from now on, or not.
 #[tauri::command]
@@ -2474,6 +2591,16 @@ mod tests {
         let mut f = SentinelFilter::new(false, false);
         assert_eq!(f.push("VIEW_SCREEN"), Some("VIEW_SCREEN".into()));
         assert!(is_sentinel(" VIEW_SCREEN\n"));
+    }
+
+    #[test]
+    fn spoken_replies_answer_prompts() {
+        assert_eq!(spoken_consent("Yes please"), Some((true, false)));
+        assert_eq!(spoken_consent("okay go ahead"), Some((true, false)));
+        assert_eq!(spoken_consent("always allow it"), Some((true, true)));
+        assert_eq!(spoken_consent("no, don't do that"), Some((false, false)));
+        assert_eq!(spoken_consent("what's the weather in London today then"), None);
+        assert_eq!(spoken_consent("open spotify"), None);
     }
 
     #[test]

@@ -58,6 +58,8 @@ export const EVENTS = {
   askShown: "ask://shown",
   /** A past chat continues in the panel. */
   askRestore: "ask://restore",
+  /** A prompt in the panel was answered out loud; payload is the Consent. */
+  askAnswered: "ask://answered",
   chatsChanged: "chats://changed",
   chatsFocus: "chats://focus",
   ask: "ask://event",

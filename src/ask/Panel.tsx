@@ -51,6 +51,14 @@ export function Panel() {
     return () => void off.then((f) => f());
   }, []);
 
+  // A prompt answered out loud ("yes", "always") shows that answer here.
+  useEffect(() => {
+    const off = listen<Consent>(EVENTS.askAnswered, ({ payload: answer }) =>
+      setItems((prev) => prev.map((i) => ((i.kind === "permission" || i.kind === "confirm") && i.answer === null ? { ...i, answer } : i))),
+    );
+    return () => void off.then((f) => f());
+  }, []);
+
   // A chat picked up again from the history.
   useEffect(() => {
     const off = listen<Chat>(EVENTS.askRestore, ({ payload: chat }) => {
