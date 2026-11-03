@@ -18,4 +18,21 @@ browserForms: Rule,
  * Builder agents' coding rounds, the commands they run and what they
  * launch.
  */
-builds: Rule, };
+builds: Rule, 
+/**
+ * Tavily deep research, which spends many search credits.
+ */
+deepResearch: Rule, 
+/**
+ * Opening a link in the user's own browser (builders showing their work).
+ */
+openLinks: Rule, 
+/**
+ * Opening apps and moving, resizing, focusing, minimizing and hiding
+ * windows on the user's desktop.
+ */
+appsAndWindows: Rule, 
+/**
+ * Quitting apps, which may lose unsaved work.
+ */
+quitApps: Rule, };

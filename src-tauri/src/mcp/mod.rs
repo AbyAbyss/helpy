@@ -1026,6 +1026,13 @@ pub fn gate(
                         .collect()
                 })
                 .unwrap_or_default(),
+            always: Some(crate::agents::allow::AlwaysAllow {
+                label: format!("{}: {}", m.name, t.name),
+                target: crate::agents::allow::AllowTarget::Mcp {
+                    server: m.id.clone(),
+                    tool: t.name.clone(),
+                },
+            }),
         },
     })
 }

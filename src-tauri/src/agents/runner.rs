@@ -14,6 +14,7 @@ use futures_util::future::BoxFuture;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
+use super::allow::AlwaysAllow;
 use super::model::*;
 use crate::ai::call::Progress;
 use crate::ai::error::{ErrorKind, ProviderError};
@@ -71,6 +72,8 @@ pub enum Gate {
         detail: String,
         /// Fields of the input the user may change before approving.
         editable: Vec<String>,
+        /// The standing rule "Always allow" turns on, when there is one.
+        always: Option<AlwaysAllow>,
     },
     Never(String),
 }
@@ -663,6 +666,7 @@ impl Run<'_> {
                 summary,
                 detail,
                 editable,
+                always,
             } => {
                 let pending = Pending::Approval {
                     id: format!("a{now}"),
@@ -672,6 +676,7 @@ impl Run<'_> {
                     detail,
                     args: args.clone(),
                     editable: editable.clone(),
+                    always,
                 };
                 agent.status_line = format!("Needs your OK: {summary}");
                 match self.wait(agent, pending, Status::Approval).await {
@@ -680,6 +685,13 @@ impl Run<'_> {
                             self.env.now_ms(),
                             LogKind::Approval,
                             format!("Approved: {summary}"),
+                        );
+                    }
+                    Some(Answer::AlwaysAllow) => {
+                        agent.log(
+                            self.env.now_ms(),
+                            LogKind::Approval,
+                            format!("Approved, and allowed from now on: {summary}"),
                         );
                     }
                     Some(Answer::Edit { args: edited }) => {
@@ -1698,6 +1710,7 @@ mod tests {
                 summary: "Run ls".into(),
                 detail: "ls -la".into(),
                 editable: vec!["c".into()],
+                always: None,
             },
             "delete_file" => Gate::Never("deleting is turned off.".into()),
             _ => Gate::Allow,

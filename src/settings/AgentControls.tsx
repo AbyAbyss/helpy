@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AgentTools } from "../bindings/AgentTools";
+import type { AlwaysAllow } from "../bindings/AlwaysAllow";
+import type { Settings } from "../bindings/Settings";
 import type { BrowserInfo } from "../bindings/BrowserInfo";
 import type { Builder } from "../bindings/Builder";
 import type { CoderInfo } from "../bindings/CoderInfo";
@@ -25,6 +27,10 @@ export function ApprovalRules({ value, onChange }: { value: Approvals; onChange:
     { key: "reminders", label: "Reminders and events", help: "Adding them to your reminders or calendar." },
     { key: "browserForms", label: "Typing into websites", help: "Filling in and sending forms in the agents' own browser." },
     { key: "builds", label: "Building apps", help: "Each coding round, command and launch of a builder agent, in its own project folder." },
+    { key: "deepResearch", label: "Deep research", help: "Tavily research, which can use about 110 search credits each time." },
+    { key: "openLinks", label: "Opening links", help: "A builder agent showing you its work in your own browser." },
+    { key: "appsAndWindows", label: "Apps and windows", help: "Opening apps, and moving, resizing, focusing, minimizing or hiding windows, from the chat or by agents." },
+    { key: "quitApps", label: "Quitting apps", help: "Like choosing Quit in the app; it may ask to save your work." },
   ];
   return (
     <div className="rules">
@@ -50,6 +56,7 @@ export function ToolToggles({ value, onChange }: { value: AgentTools; onChange: 
     { key: "reminders", label: "Reminders and calendar" },
     { key: "browser", label: "Web browser (for pages that need JavaScript, and scraping)" },
     { key: "build", label: "Building apps and sites" },
+    { key: "system", label: "Opening apps and arranging windows" },
   ];
   return (
     <div className="toggles">
@@ -299,5 +306,50 @@ function EngineKey({ service, name }: { service: "tavily" | "brave"; name: strin
       </div>
       {message && <p className="engine__msg">{message}</p>}
     </>
+  );
+}
+
+/**
+ * Everything Helpy does without asking: rules set to Allow, connector and
+ * MCP actions allowed for good, and allowlisted commands, each with a way
+ * back to asking.
+ */
+export function AlwaysAllowed({ settings, onError }: { settings: Settings; onError: (m: string) => void }) {
+  const [list, setList] = useState<AlwaysAllow[] | null>(null);
+  // Settings change when something is allowed or asked again; reload then.
+  useEffect(() => void api.permissionsAllowed().then(setList, (e) => onError(String(e))), [settings, onError]);
+  if (!list) return null;
+  const askAgain = (a: AlwaysAllow) => api.permissionsAskAgain(a.target).catch((e) => onError(String(e)));
+  return (
+    <section className="group" aria-labelledby="group-always">
+      <h2 id="group-always" className="group__title">
+        Always allowed
+      </h2>
+      <div className="panel">
+        <div className="row row--wide">
+          <div className="row__text">
+            <p className="row__help">
+              What Helpy and its agents do without asking, including everything you chose “Always allow” for. Turn any of it back to asking here.
+            </p>
+          </div>
+          <div className="row__control">
+            {list.length === 0 ? (
+              <p className="paths__empty">Nothing. Helpy asks before everything that has a rule.</p>
+            ) : (
+              <div className="paths">
+                {list.map((a) => (
+                  <div key={JSON.stringify(a.target)} className="paths__row">
+                    <span>{a.label}</span>
+                    <button type="button" className="link-btn" onClick={() => askAgain(a)}>
+                      Ask again
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,7 @@
 //! Background agents: running them within hard limits, their tools and
 //! approvals, persistence, and what the dock, cards and panel show.
 
+pub mod allow;
 pub mod model;
 pub mod planner;
 pub mod runner;
@@ -527,7 +528,15 @@ impl Env for AppEnv {
     }
 
     fn gate(&self, agent: &Agent, tool: &str, args: &Value) -> Gate {
-        self.toolbox.gate(&agent.tools, tool, args)
+        match self.toolbox.gate(&agent.tools, tool, args) {
+            // Allowed from now on since this agent started.
+            Gate::Ask { always: Some(a), .. }
+                if allow::is_allowed(&self.app.state::<SettingsStore>().get(), &a.target) =>
+            {
+                Gate::Allow
+            }
+            g => g,
+        }
     }
 
     fn run_tool<'a>(
@@ -1215,6 +1224,28 @@ pub fn agents_list(
 #[tauri::command]
 pub fn agents_answer(app: AppHandle, id: String, answer: Answer) -> Result<(), String> {
     let state = app.state::<AgentsState>();
+    if answer == Answer::AlwaysAllow {
+        let target = match state.agents.lock().unwrap().get(&id).and_then(|a| a.pending.clone()) {
+            Some(Pending::Approval { always: Some(a), .. }) => a.target,
+            _ => return Err("This action can't be allowed from now on".into()),
+        };
+        allow::commit_allow(&app, &target)?;
+        // Other agents waiting for the same thing go ahead too.
+        let others: Vec<String> = state
+            .agents
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|a| a.id != id)
+            .filter(|a| matches!(&a.pending, Some(Pending::Approval { always: Some(x), .. }) if x.target == target))
+            .map(|a| a.id.clone())
+            .collect();
+        for other in others {
+            if let Some(tx) = state.handles.lock().unwrap().get_mut(&other).and_then(|h| h.answer.take()) {
+                let _ = tx.send(Answer::Approve);
+            }
+        }
+    }
     let tx = state
         .handles
         .lock()

@@ -24,6 +24,7 @@ use super::error::{ErrorKind, ProviderError};
 use super::ledger::Ledger;
 use super::memory;
 use super::types::*;
+use crate::agents::allow::{self, AllowTarget};
 use crate::agents::runner::Gate;
 use crate::capture::{self, CaptureMeta, Shot};
 use crate::guide::{self, step};
@@ -60,6 +61,9 @@ pub struct AskState {
     /// by voice hands it to the agents.
     offer: Mutex<Option<String>>,
     permission: Mutex<Option<(u32, oneshot::Sender<bool>)>>,
+    /// An action waiting for the user's OK in the panel, with what
+    /// "Always allow" would allow.
+    confirm: Mutex<Option<(u32, oneshot::Sender<bool>, Option<AllowTarget>)>>,
     /// The newest screenshot in the conversation, which step coordinates refer to.
     screen: Mutex<Option<CaptureMeta>>,
     next_id: AtomicU32,
@@ -144,6 +148,14 @@ pub enum AskEvent {
     /// Screen access is "ask each time": the panel should ask the user.
     ScreenPermission {
         id: u32,
+    },
+    /// An action that needs the user's OK first (quitting an app, or
+    /// anything the user set to "Ask me").
+    Confirm {
+        id: u32,
+        summary: String,
+        /// What "Always allow" covers; None when it isn't offered.
+        always: Option<String>,
     },
     Screen {
         thumbnail: String,
@@ -374,6 +386,15 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
     if plan.agents {
         s += "\n\nWhen the user asks you to open a link, website or page, call open_link yourself; it opens in \
               their browser, so don't hand it to agents or say you can't. Don't open links they didn't ask for.";
+        if settings.agents.tools.system {
+            s += "\n\nYou can open any app installed on this computer (open_app) and arrange the windows of running \
+                  apps yourself: snap them left, right, to quarters or thirds, center, maximize, full-screen, minimize, \
+                  hide, move them to another screen (arrange_window), bring one to the front (focus_window) or quit an \
+                  app (quit_app). Do it straight away when asked, with one call per window in the order the user said \
+                  (\"Spotify right and Chrome left\" is two arrange_window calls). If an app isn't installed, say so \
+                  and name close matches. Call list_windows when you need to know what's open. Then confirm in one \
+                  short sentence; don't hand this to agents.";
+        }
         s += "\n\nLook up quick facts yourself when an answer needs facts you don't have or that change (prices, rates, \
               news, figures, opening hours): call web_search, and fetch_page when the snippets aren't enough. Then \
               answer, guide or draw with what you found; for \"chart the rupee against the dollar over 5 years\", \
@@ -675,6 +696,40 @@ impl Turn<'_> {
             Some(ToolOutcome::Ok { text, .. }) => (vec![Part::Text(truncate(&text, MAX_TOOL_OUTPUT))], false),
             Some(ToolOutcome::Transient(m) | ToolOutcome::Permanent(m)) => fail(m),
             None => fail(format!("{service} has no action {action}.")),
+        }
+    }
+
+    /// Opens an app or arranges a window, after the user's OK when their
+    /// rules ask for one.
+    async fn system(&self, tool: &str, input: &serde_json::Value) -> (Vec<Part>, bool) {
+        // The live rules, so "Always allow" counts from the next call on.
+        let live = self.app.state::<SettingsStore>().get();
+        match crate::system::gate(&live.agents.approvals, tool, input) {
+            Gate::Never(why) => return (vec![Part::Text(format!("Not allowed: {why}"))], true),
+            Gate::Ask { summary, always, .. } => {
+                if !self.confirm(summary, always).await {
+                    return (vec![Part::Text("The user said no. Don't try again.".into())], true);
+                }
+            }
+            Gate::Allow => {}
+        }
+        match crate::system::run(tool, input).await {
+            Ok(text) => (vec![Part::Text(text)], false),
+            Err(text) => (vec![Part::Text(text)], true),
+        }
+    }
+
+    /// Asks in the panel; true when the user allows it.
+    async fn confirm(&self, summary: String, always: Option<allow::AlwaysAllow>) -> bool {
+        let state = self.app.state::<AskState>();
+        let id = state.next_id.fetch_add(1, Ordering::Relaxed);
+        let (tx, rx) = oneshot::channel();
+        let label = always.as_ref().map(|a| a.label.clone());
+        *state.confirm.lock().unwrap() = Some((id, tx, always.map(|a| a.target)));
+        self.send(AskEvent::Confirm { id, summary, always: label });
+        tokio::select! {
+            _ = self.cancel.cancelled() => false,
+            r = rx => r.unwrap_or(false),
         }
     }
 
@@ -1055,6 +1110,9 @@ impl Turn<'_> {
             tools.push(open_link_tool());
             tools.extend(web_tools());
             tools.push(start_agents_tool());
+            if self.settings.agents.tools.system {
+                tools.extend(crate::system::defs());
+            }
             if !self.services().is_empty() {
                 tools.extend(service_tools());
             }
@@ -1196,6 +1254,7 @@ impl Turn<'_> {
                             Ok(m) => (vec![Part::Text(m)], false),
                             Err(m) => (vec![Part::Text(m)], true),
                         },
+                        n if crate::system::is_tool(n) => self.system(n, &input).await,
                         SERVICE_ACTIONS => self.service_actions(&input),
                         USE_SERVICE => self.use_service(&input).await,
                         WEB_SEARCH | FETCH_PAGE => self.web(&name, &input).await,
@@ -1671,6 +1730,7 @@ pub fn ask_cancel(state: tauri::State<AskState>) {
         c.cancel();
     }
     state.permission.lock().unwrap().take();
+    state.confirm.lock().unwrap().take();
 }
 
 /// Forgets the conversation (the panel was dismissed).
@@ -1685,13 +1745,38 @@ pub fn ask_reset(app: AppHandle, state: tauri::State<AskState>) {
     persist(&app);
 }
 
+/// `always`: stop asking before looking at the screen.
 #[tauri::command]
-pub fn ask_screen_answer(state: tauri::State<AskState>, id: u32, allow: bool) {
+pub fn ask_screen_answer(app: AppHandle, state: tauri::State<AskState>, id: u32, allow: bool, always: Option<bool>) {
     let mut pending = state.permission.lock().unwrap();
     if pending.as_ref().is_some_and(|(pid, _)| *pid == id) {
         let (_, tx) = pending.take().unwrap();
+        if allow && always == Some(true) {
+            if let Err(e) = allow::commit_allow(&app, &AllowTarget::Screen) {
+                log::warn!("ask: couldn't save the screen permission: {e}");
+            }
+        }
         let _ = tx.send(allow);
     }
+}
+
+/// The user's answer to a Confirm: allow, allow from now on, or not.
+#[tauri::command]
+pub fn ask_confirm_answer(
+    app: AppHandle,
+    state: tauri::State<AskState>,
+    id: u32,
+    allow: bool,
+    always: Option<bool>,
+) -> Result<(), String> {
+    let Some((_, tx, target)) = state.confirm.lock().unwrap().take_if(|(pid, ..)| *pid == id) else {
+        return Ok(());
+    };
+    if let (true, Some(true), Some(target)) = (allow, always, &target) {
+        allow::commit_allow(&app, target)?;
+    }
+    let _ = tx.send(allow);
+    Ok(())
 }
 
 #[tauri::command]

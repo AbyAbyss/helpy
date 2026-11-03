@@ -20,6 +20,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use ts_rs::TS;
 
+use super::allow::AlwaysAllow;
 use super::model::{ActionKind, Agent};
 use super::runner::{Gate, ToolOutcome, ASK_USER, DELEGATE, NOTE, PLAN};
 use crate::ai::types::ToolDef;
@@ -174,6 +175,16 @@ pub fn groups(a: &Agents) -> Vec<ToolGroup> {
         "make apps, websites, games and scripts in a project folder of its own (writing and running the code), \
          and open the result for the user",
         vec![rule_asks(a.approvals.builds, "coding and opening what it made")],
+    );
+    add(
+        a.tools.system,
+        crate::system::GROUP,
+        "Apps and windows",
+        crate::system::about(),
+        vec![
+            rule_asks(a.approvals.apps_and_windows, "opening apps and arranging windows"),
+            rule_asks(a.approvals.quit_apps, "quitting apps"),
+        ],
     );
     add(
         true,
@@ -376,6 +387,9 @@ pub fn defs(groups: &[String]) -> Vec<ToolDef> {
                 &["title", "start"],
             ));
         }
+    }
+    if has(crate::system::GROUP) {
+        out.extend(crate::system::defs());
     }
     out
 }
@@ -593,13 +607,24 @@ impl Toolbox {
             if !groups.iter().any(|g| g == "build") {
                 return Gate::Never("open_link isn't one of your tools; read pages with fetch_page.".into());
             }
-            return Gate::Ask {
-                kind: ActionKind::Browser,
-                source: "Web browser".into(),
-                summary: "Open a link in your browser".into(),
-                detail: s(args, "url").to_string(),
-                editable: Vec::new(),
+            return match self.settings.approvals.open_links {
+                Rule::Allow => Gate::Allow,
+                Rule::Never => Gate::Never("the user turned opening links off in Settings → Permissions.".into()),
+                Rule::Ask => Gate::Ask {
+                    kind: ActionKind::Browser,
+                    source: "Web browser".into(),
+                    summary: "Open a link in your browser".into(),
+                    detail: s(args, "url").to_string(),
+                    editable: Vec::new(),
+                    always: AlwaysAllow::approval("openLinks"),
+                },
             };
+        }
+        if crate::system::is_tool(tool) {
+            if !groups.iter().any(|g| g == crate::system::GROUP) {
+                return Gate::Never(format!("{tool} isn't one of this agent's tools."));
+            }
+            return crate::system::gate(&self.settings.approvals, tool, args);
         }
         let Some(group) = group_of(tool) else {
             return Gate::Never(format!("there's no tool called {tool}."));
@@ -611,13 +636,15 @@ impl Toolbox {
         if !groups.iter().any(|g| g == group) {
             return Gate::Never(format!("{tool} isn't one of this agent's tools."));
         }
-        let rule = |rule: Rule, kind: ActionKind, summary: String, detail: String| match rule {
+        let rule = |rule: Rule, key: &str, kind: ActionKind, summary: String, detail: String| match rule {
             Rule::Allow => Gate::Allow,
             Rule::Ask => Gate::Ask {
+                always: AlwaysAllow::approval(key),
                 source: match kind {
                     ActionKind::Reminder => "Reminders".into(),
                     ActionKind::Browser => "Web browser".into(),
                     ActionKind::Build => "Builder".into(),
+                    ActionKind::System => "Apps and windows".into(),
                     _ => "Files".into(),
                 },
                 editable: match (kind, tool) {
@@ -638,26 +665,33 @@ impl Toolbox {
                 summary,
                 detail,
             },
-            Rule::Never => Gate::Never("the user turned this off in Settings → Agents.".into()),
+            Rule::Never => Gate::Never("the user turned this off in Settings → Permissions.".into()),
         };
         let a = &self.settings.approvals;
         match tool {
             // Research can use a good share of a free plan's monthly credits.
-            DEEP_RESEARCH => Gate::Ask {
-                kind: ActionKind::Connector,
-                source: "Tavily".into(),
-                summary: "Research with Tavily (up to about 110 credits)".into(),
-                detail: s(args, "question").to_string(),
-                editable: vec!["question".into()],
+            DEEP_RESEARCH => match a.deep_research {
+                Rule::Allow => Gate::Allow,
+                Rule::Never => Gate::Never("the user turned deep research off in Settings → Permissions.".into()),
+                Rule::Ask => Gate::Ask {
+                    kind: ActionKind::Connector,
+                    source: "Tavily".into(),
+                    summary: "Research with Tavily (up to about 110 credits)".into(),
+                    detail: s(args, "question").to_string(),
+                    editable: vec!["question".into()],
+                    always: AlwaysAllow::approval("deepResearch"),
+                },
             },
             "write_file" => rule(
                 a.file_changes,
+                "fileChanges",
                 ActionKind::FileChange,
                 format!("Write {}", s(args, "path")),
                 preview(s(args, "content"), 3000),
             ),
             "edit_file" => rule(
                 a.file_changes,
+                "fileChanges",
                 ActionKind::FileChange,
                 format!("Edit {}", s(args, "path")),
                 format!(
@@ -668,18 +702,21 @@ impl Toolbox {
             ),
             "make_folder" => rule(
                 a.file_changes,
+                "fileChanges",
                 ActionKind::FileChange,
                 format!("Create the folder {}", s(args, "path")),
                 String::new(),
             ),
             "move_file" => rule(
                 a.file_changes,
+                "fileChanges",
                 ActionKind::FileChange,
                 format!("Move {} to {}", s(args, "from"), s(args, "to")),
                 String::new(),
             ),
             "delete_file" => rule(
                 a.file_deletes,
+                "fileDeletes",
                 ActionKind::FileDelete,
                 format!("Delete {}", s(args, "path")),
                 "A backup is kept, so it can be undone from the agent panel.".into(),
@@ -696,6 +733,10 @@ impl Toolbox {
                     summary: "Run a command".into(),
                     detail: s(args, "command").to_string(),
                     editable: vec!["command".into()],
+                    always: super::allow::command_prefix(s(args, "command")).map(|prefix| AlwaysAllow {
+                        label: format!("commands starting \"{prefix}\""),
+                        target: super::allow::AllowTarget::Command { prefix },
+                    }),
                 },
                 Verdict::Refuse(why) => Gate::Never(why),
             },
@@ -711,6 +752,7 @@ impl Toolbox {
                 };
                 rule(
                     a.reminders,
+                    "reminders",
                     ActionKind::Reminder,
                     format!(
                         "Add the {what} \"{}\" for {}",
@@ -722,6 +764,7 @@ impl Toolbox {
             }
             "browser_type" => rule(
                 a.browser_forms,
+                "browserForms",
                 ActionKind::Browser,
                 if args["submit"] == json!(true) {
                     format!("Type into \"{}\" and send the form", s(args, "field"))
@@ -732,6 +775,7 @@ impl Toolbox {
             ),
             "code" => rule(
                 a.builds,
+                "builds",
                 ActionKind::Build,
                 format!(
                     "Let {} work on the project",
@@ -748,12 +792,14 @@ impl Toolbox {
             }
             "project_run" => rule(
                 a.builds,
+                "builds",
                 ActionKind::Build,
                 "Run a command in the project".into(),
                 s(args, "command").to_string(),
             ),
             "launch" => rule(
                 a.builds,
+                "builds",
                 ActionKind::Build,
                 format!("Open {}", s(args, "target")),
                 s(args, "command").trim().to_string(),
@@ -788,6 +834,9 @@ impl Toolbox {
             if let Some(outcome) = x.run(tool, args).await {
                 return outcome;
             }
+        }
+        if crate::system::is_tool(tool) {
+            return text_result(crate::system::run(tool, args).await);
         }
         match tool {
             "web_search" => search::run(&self.search, &self.http, s(args, "query")).await,
@@ -1178,6 +1227,7 @@ mod tests {
                 "reminders",
                 "browser",
                 "build",
+                "system",
                 "team"
             ]
         );
@@ -1185,7 +1235,7 @@ mod tests {
         a.shell_policy = ShellPolicy::Never;
         assert_eq!(
             ids(&a),
-            ["search", "files", "reminders", "browser", "build", "team"]
+            ["search", "files", "reminders", "browser", "build", "system", "team"]
         );
         let files = groups(&a).into_iter().find(|g| g.id == "files").unwrap();
         assert_eq!(files.asks, ["deleting files"]);
@@ -1240,5 +1290,41 @@ mod tests {
         assert_eq!(range(&json!({"from_line": 10})), Some((10, usize::MAX)));
         assert_eq!(range(&json!({"to_line": 5})), Some((1, 5)));
         assert_eq!(range(&json!({"from_line": 3, "to_line": 4})), Some((3, 4)));
+    }
+
+    #[test]
+    fn approvals_offer_always_allow_and_follow_the_new_rules() {
+        let mut a = Agents::default();
+        let t = toolbox(&a);
+        let g = vec!["search".to_string(), "files".to_string(), "shell".to_string()];
+        // Deep research asks by default and can be allowed for good.
+        assert!(matches!(
+            t.gate(&g, DEEP_RESEARCH, &json!({"question": "q"})),
+            Gate::Ask { always: Some(ref x), .. } if x.target == crate::agents::allow::AllowTarget::Approval { key: "deepResearch".into() }
+        ));
+        assert!(matches!(
+            t.gate(&g, "delete_file", &json!({"path": "/x"})),
+            Gate::Ask { always: Some(_), .. }
+        ));
+        // Plain commands offer to allow their prefix; risky ones don't.
+        assert!(matches!(
+            t.gate(&g, "run_command", &json!({"command": "git status -s"})),
+            Gate::Ask { always: Some(ref x), .. } if x.target == crate::agents::allow::AllowTarget::Command { prefix: "git status".into() }
+        ));
+        assert!(matches!(
+            t.gate(&g, "run_command", &json!({"command": "rm -rf x"})),
+            Gate::Ask { always: None, .. }
+        ));
+        a.approvals.deep_research = Rule::Allow;
+        a.shell_allowlist = vec!["git status".into()];
+        let t = toolbox(&a);
+        assert!(matches!(t.gate(&g, DEEP_RESEARCH, &json!({})), Gate::Allow));
+        assert!(matches!(t.gate(&g, "run_command", &json!({"command": "git status"})), Gate::Allow));
+        assert!(matches!(t.gate(&g, "run_command", &json!({"command": "git status; rm x"})), Gate::Ask { .. }));
+        // System tools only with their group.
+        assert!(matches!(t.gate(&g, crate::system::ARRANGE, &json!({})), Gate::Never(_)));
+        let sys = vec![crate::system::GROUP.to_string()];
+        assert!(matches!(t.gate(&sys, crate::system::OPEN_APP, &json!({"name": "Spotify"})), Gate::Allow));
+        assert!(t.defs(&sys).iter().any(|d| d.name == crate::system::ARRANGE));
     }
 }

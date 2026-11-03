@@ -1,5 +1,7 @@
 // Typed wrappers around Helpy's Rust commands and events.
 import { invoke } from "@tauri-apps/api/core";
+import type { AllowTarget } from "../bindings/AllowTarget";
+import type { AlwaysAllow } from "../bindings/AlwaysAllow";
 import type { AskActivity } from "../bindings/AskActivity";
 import type { AskStatus } from "../bindings/AskStatus";
 import type { Note } from "../bindings/Note";
@@ -131,7 +133,9 @@ export const api = {
   pdfText: async (file: Blob) => invoke<string>("pdf_text", new Uint8Array(await file.arrayBuffer())),
   askCancel: () => invoke<void>("ask_cancel"),
   askReset: () => invoke<void>("ask_reset"),
-  askScreenAnswer: (id: number, allow: boolean) => invoke<void>("ask_screen_answer", { id, allow }),
+  askScreenAnswer: (id: number, allow: boolean, always = false) => invoke<void>("ask_screen_answer", { id, allow, always }),
+  /** The user's answer to an action waiting in the panel. */
+  askConfirmAnswer: (id: number, allow: boolean, always = false) => invoke<void>("ask_confirm_answer", { id, allow, always }),
   askStatus: () => invoke<AskStatus>("ask_status"),
   askActivity: () => invoke<AskActivity>("ask_activity"),
   notes: () => invoke<Note[]>("ai_notes"),
@@ -180,6 +184,10 @@ export const api = {
   // Agents. Changes arrive as EVENTS.agentUpdate and friends.
   agents: () => invoke<AgentList>("agents_list"),
   agentAnswer: (id: string, answer: Answer) => invoke<void>("agents_answer", { id, answer }),
+  // Standing permissions ("Always allow") and turning them back to asking.
+  permissionsAllowed: () => invoke<AlwaysAllow[]>("permissions_allowed"),
+  permissionsAskAgain: (target: AllowTarget) => invoke<void>("permissions_ask_again", { target }),
+  permissionsReset: () => invoke<Settings>("permissions_reset"),
   agentPause: (id: string) => invoke<void>("agents_pause", { id }),
   agentResume: (id: string) => invoke<void>("agents_resume", { id }),
   agentCancel: (id: string) => invoke<void>("agents_cancel", { id }),

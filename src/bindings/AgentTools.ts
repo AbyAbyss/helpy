@@ -8,4 +8,8 @@ browser: boolean,
 /**
  * Builder agents: apps and sites made in a project folder.
  */
-build: boolean, };
+build: boolean, 
+/**
+ * Opening apps and arranging windows on the user's desktop.
+ */
+system: boolean, };

@@ -841,6 +841,23 @@ pub struct Approvals {
     /// launch.
     #[serde(default = "ask")]
     pub builds: Rule,
+    /// Tavily deep research, which spends many search credits.
+    #[serde(default = "ask")]
+    pub deep_research: Rule,
+    /// Opening a link in the user's own browser (builders showing their work).
+    #[serde(default = "ask")]
+    pub open_links: Rule,
+    /// Opening apps and moving, resizing, focusing, minimizing and hiding
+    /// windows on the user's desktop.
+    #[serde(default = "allow")]
+    pub apps_and_windows: Rule,
+    /// Quitting apps, which may lose unsaved work.
+    #[serde(default = "ask")]
+    pub quit_apps: Rule,
+}
+
+fn allow() -> Rule {
+    Rule::Allow
 }
 
 fn ask() -> Rule {
@@ -855,6 +872,10 @@ impl Default for Approvals {
             reminders: Rule::Ask,
             browser_forms: Rule::Ask,
             builds: Rule::Ask,
+            deep_research: Rule::Ask,
+            open_links: Rule::Ask,
+            apps_and_windows: Rule::Allow,
+            quit_apps: Rule::Ask,
         }
     }
 }
@@ -902,6 +923,9 @@ pub struct AgentTools {
     /// Builder agents: apps and sites made in a project folder.
     #[serde(default = "yes")]
     pub build: bool,
+    /// Opening apps and arranging windows on the user's desktop.
+    #[serde(default = "yes")]
+    pub system: bool,
 }
 
 fn yes() -> bool {
@@ -918,6 +942,7 @@ impl Default for AgentTools {
             reminders: true,
             browser: true,
             build: true,
+            system: true,
         }
     }
 }

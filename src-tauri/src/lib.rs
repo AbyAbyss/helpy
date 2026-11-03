@@ -17,6 +17,7 @@ mod permissions;
 mod platform;
 mod privacy;
 mod settings;
+mod system;
 mod tray;
 mod voice;
 mod windows;
@@ -127,6 +128,7 @@ pub fn run() {
             app.manage(voice::VoiceState::new(handle.clone()));
             app.manage(agents::AgentsState::load(app.path().app_data_dir()?));
             ai::ask::restore(&handle);
+            system::init(&handle);
             app.manage(connectors::ConnectorsState::load(
                 app.path().app_data_dir()?,
             ));
@@ -195,6 +197,7 @@ pub fn run() {
             ai::ask::ask_cancel,
             ai::ask::ask_reset,
             ai::ask::ask_screen_answer,
+            ai::ask::ask_confirm_answer,
             ai::ask::ask_status,
             ai::ask::ask_activity,
             ai::memory::ai_notes,
@@ -214,6 +217,10 @@ pub fn run() {
             circle::circle_to_agent,
             agents::agents_list,
             agents::agents_answer,
+            agents::allow::permissions_allowed,
+            agents::allow::permissions_allow,
+            agents::allow::permissions_ask_again,
+            agents::allow::permissions_reset,
             agents::agents_pause,
             agents::agents_resume,
             agents::agents_cancel,

@@ -6,7 +6,7 @@ import type { AskStatus } from "../bindings/AskStatus";
 import { AttachButton, AttachmentStrip, useAttachments } from "../lib/attachments";
 import { api, EVENTS } from "../lib/ipc";
 import { useSettings, useTheme } from "../lib/useSettings";
-import { apply, waiting, withDocuments, type Item } from "./transcript";
+import { apply, type Consent, waiting, withDocuments, type Item } from "./transcript";
 import { RichText } from "../lib/markdown";
 
 const EXAMPLES = ["How do I find my spam folder?", "What does this error mean?", "Summarize what's on my screen"];
@@ -109,9 +109,12 @@ export function Panel() {
     }
   };
 
-  const answerPermission = (id: number, allow: boolean) => {
-    api.askScreenAnswer(id, allow);
-    setItems((prev) => prev.map((i) => (i.kind === "permission" && i.id === id ? { ...i, answer: allow ? "allowed" : "denied" } : i)));
+  const answerPermission = (kind: "permission" | "confirm", id: number, answer: Consent) => {
+    const allow = answer !== "denied";
+    const always = answer === "always";
+    const sent = kind === "permission" ? api.askScreenAnswer(id, allow, always) : api.askConfirmAnswer(id, allow, always);
+    sent.catch((e) => setItems((prev) => [...prev, { kind: "error", text: String(e), action: null }]));
+    setItems((prev) => prev.map((i) => (i.kind === kind && i.id === id ? { ...i, answer } : i)));
   };
 
   const ready = status && !status.problem;
@@ -201,7 +204,7 @@ export function Panel() {
   );
 }
 
-function ItemView({ item, onPermission, onAgents }: { item: Item; onPermission: (id: number, allow: boolean) => void; onAgents: (text: string) => void }) {
+function ItemView({ item, onPermission, onAgents }: { item: Item; onPermission: (kind: "permission" | "confirm", id: number, answer: Consent) => void; onAgents: (text: string) => void }) {
   const [big, setBig] = useState(false);
   switch (item.kind) {
     case "user":
@@ -251,16 +254,57 @@ function ItemView({ item, onPermission, onAgents }: { item: Item; onPermission: 
         </div>
       );
     case "permission":
-      if (item.answer) return <div className="note">{item.answer === "allowed" ? "You let Helpy look at your screen." : "You kept your screen private."}</div>;
+      if (item.answer)
+        return (
+          <div className="note">
+            {item.answer === "denied"
+              ? "You kept your screen private."
+              : item.answer === "always"
+                ? "Helpy may look at your screen when it needs to. Change this in Settings → Answer style."
+                : "You let Helpy look at your screen."}
+          </div>
+        );
       return (
         <div className="ask-perm" role="alertdialog" aria-label="Screen permission">
           <p>Helpy wants to look at your screen to answer this.</p>
           <div className="ask-perm__actions">
-            <button type="button" className="btn-s btn-s--primary" onClick={() => onPermission(item.id, true)} autoFocus>
+            <button type="button" className="btn-s btn-s--primary" onClick={() => onPermission("permission", item.id, "allowed")} autoFocus>
               Allow once
             </button>
-            <button type="button" className="btn-s" onClick={() => onPermission(item.id, false)}>
+            <button type="button" className="btn-s" onClick={() => onPermission("permission", item.id, "always")} title="Stop asking; change it back in Settings → Answer style">
+              Always allow
+            </button>
+            <button type="button" className="btn-s" onClick={() => onPermission("permission", item.id, "denied")}>
               Not now
+            </button>
+          </div>
+        </div>
+      );
+    case "confirm":
+      if (item.answer)
+        return (
+          <div className="note">
+            {item.answer === "denied"
+              ? `You said no: ${item.summary}.`
+              : item.answer === "always"
+                ? `Allowed from now on: ${item.always}. Change it in Settings → Permissions.`
+                : `Allowed: ${item.summary}.`}
+          </div>
+        );
+      return (
+        <div className="ask-perm" role="alertdialog" aria-label="Helpy wants to do something">
+          <p>{item.summary}?</p>
+          <div className="ask-perm__actions">
+            <button type="button" className="btn-s btn-s--primary" onClick={() => onPermission("confirm", item.id, "allowed")} autoFocus>
+              Allow
+            </button>
+            {item.always && (
+              <button type="button" className="btn-s" onClick={() => onPermission("confirm", item.id, "always")} title={`Stop asking for ${item.always}; change it back in Settings → Permissions`}>
+                Always allow
+              </button>
+            )}
+            <button type="button" className="btn-s" onClick={() => onPermission("confirm", item.id, "denied")}>
+              Don't
             </button>
           </div>
         </div>
