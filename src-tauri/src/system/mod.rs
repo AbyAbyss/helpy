@@ -393,7 +393,7 @@ async fn apps() -> Vec<App> {
         }
     }
     let mut list = blocking(os::apps).await.unwrap_or_default();
-    list.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    list.sort_by_key(|a| a.name.to_lowercase());
     list.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
     *APPS.lock().unwrap() = Some((Instant::now(), list.clone()));
     list

@@ -9,14 +9,14 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewWindow};
 
 use crate::settings::schema::Theme;
-use crate::windows::{AGENTS, DOCK_CARD, SETTINGS};
+use crate::windows::{AGENTS, CHATS, DOCK_CARD, SETTINGS};
 
 #[derive(Default)]
 pub struct Glass(Mutex<HashMap<String, &'static str>>);
 
 pub fn setup(app: &AppHandle) {
     let state = app.state::<Glass>();
-    for label in [SETTINGS, AGENTS, DOCK_CARD] {
+    for label in [SETTINGS, AGENTS, CHATS, DOCK_CARD] {
         if let Some(w) = app.get_webview_window(label) {
             if let Some(kind) = apply(&w) {
                 state.0.lock().unwrap().insert(label.into(), kind);
@@ -38,7 +38,7 @@ pub fn follow_theme(app: &AppHandle, theme: Theme) {
         Theme::Light => Some(tauri::Theme::Light),
         Theme::Dark => Some(tauri::Theme::Dark),
     };
-    for label in [SETTINGS, AGENTS, DOCK_CARD] {
+    for label in [SETTINGS, AGENTS, CHATS, DOCK_CARD] {
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.set_theme(t);
         }

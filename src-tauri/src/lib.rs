@@ -162,6 +162,7 @@ pub fn run() {
                     windows::ASK,
                     windows::PLAN,
                     windows::AGENTS,
+                    windows::CHATS,
                 ]
                 .contains(&window.label())
                 {
@@ -198,6 +199,12 @@ pub fn run() {
             ai::ask::ask_reset,
             ai::ask::ask_screen_answer,
             ai::ask::ask_confirm_answer,
+            ai::chats::chats_list,
+            ai::chats::chats_get,
+            ai::chats::chats_delete,
+            ai::chats::chats_clear,
+            ai::chats::chats_continue,
+            ai::chats::chats_open,
             ai::ask::ask_status,
             ai::ask::ask_activity,
             ai::memory::ai_notes,

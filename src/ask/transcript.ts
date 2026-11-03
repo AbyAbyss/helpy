@@ -1,5 +1,6 @@
 import type { AskAction } from "../bindings/AskAction";
 import type { AskEvent } from "../bindings/AskEvent";
+import type { Chat } from "../bindings/Chat";
 
 export type Item =
   /** `queued`: asked while another answer was running; it goes next. */
@@ -93,4 +94,14 @@ export function waiting(items: Item[], running: boolean) {
   if (!running) return false;
   const last = [...items].reverse().find((i) => !(i.kind === "user" && i.queued));
   return !last || (last.kind !== "assistant" && last.kind !== "retry" && !((last.kind === "permission" || last.kind === "confirm") && last.answer === null));
+}
+
+/** A past chat as the panel shows it, to carry on from. */
+export function fromChat(chat: Chat): Item[] {
+  return chat.turns.flatMap((t): Item[] => {
+    const out: Item[] = [{ kind: "user", text: t.question, voice: t.voice, ...(t.documents.length ? { documents: t.documents } : {}) }];
+    if (t.answer.trim()) out.push({ kind: "assistant", text: t.answer, final: true });
+    if (t.error) out.push(t.error === "Stopped." ? { kind: "notice", text: "Stopped." } : { kind: "error", text: t.error, action: null });
+    return out;
+  });
 }

@@ -33,6 +33,9 @@ pub const PILL_BUDDY_EVENT: &str = "pill://buddy";
 pub const ISLAND_HOVER_EVENT: &str = "island://hover";
 /// The agent panel.
 pub const AGENTS: &str = "agents";
+/// The chat history window.
+pub const CHATS: &str = "chats";
+pub const CHATS_FOCUS_EVENT: &str = "chats://focus";
 pub const AGENTS_FOCUS_EVENT: &str = "agents://focus";
 /// Focusing this instead of an agent id opens the approval inbox.
 pub const INBOX: &str = "inbox";
@@ -967,6 +970,18 @@ pub fn show_agents(app: &AppHandle, id: Option<String>) {
         let _ = w.set_focus();
         if let Some(id) = id {
             let _ = w.emit_to(AGENTS, AGENTS_FOCUS_EVENT, id);
+        }
+    }
+}
+
+/// Opens the chat history, at one chat if given.
+pub fn show_chats(app: &AppHandle, id: Option<String>) {
+    if let Some(w) = app.get_webview_window(CHATS) {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+        if let Some(id) = id {
+            let _ = w.emit_to(CHATS, CHATS_FOCUS_EVENT, id);
         }
     }
 }

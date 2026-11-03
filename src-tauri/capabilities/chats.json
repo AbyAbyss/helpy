@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chats",
+  "description": "The chat history window: lists, reads, continues and deletes past chats.",
+  "windows": [
+    "chats"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging"
+  ]
+}

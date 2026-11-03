@@ -22,6 +22,7 @@ export default defineConfig(() => ({
         dockcard: "dockcard.html",
         island: "island.html",
         agents: "agents.html",
+        chats: "chats.html",
       },
     },
   },

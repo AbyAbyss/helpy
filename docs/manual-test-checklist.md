@@ -308,3 +308,48 @@ These are picked to impress in a demo. Each one shows a different strength, and 
 
 - [ ] **16.26** Practise this order: 16.1 (dark mode) → 16.5 or 16.6 (explain with drawing) → 16.10 (live chart) → 16.13 (agent research, then **Show on my screen**) → 16.24 (transparency).
   - Mention the models as you go: "Nemotron Super answers, Nemotron Ultra plans, Kimi-K3 reads the screen, all on Nebius Token Factory, with Tavily for the web."
+
+## 17. Apps and windows
+
+macOS asks once to allow Helpy under Privacy & Security → Accessibility; windows can't move until it's on.
+
+- [ ] **17.1** Type: "Open Spotify" (or any app you have).
+  Expected: it opens, and Helpy says so in a sentence.
+- [ ] **17.2** Type: "Open Photoshop" on a computer without it.
+  Expected: Helpy says it isn't installed and names close matches, if any.
+- [ ] **17.3** With Chrome and Spotify open, say: "Move Spotify to the right and Chrome to the left."
+  Expected: two windows side by side, each half the screen, Dock and menu bar left clear.
+- [ ] **17.4** Type: "Make Chrome full screen", then "take it out of full screen".
+  Expected: native full screen, then back.
+- [ ] **17.5** Type: "Bring Spotify to the front" with it minimized.
+  Expected: it un-minimizes and comes to the front.
+- [ ] **17.6** With two screens, type: "Move Chrome to my other screen and maximize it."
+  Expected: it fills the other screen.
+- [ ] **17.7** Type: "Quit Spotify".
+  Expected: an Allow / Always allow / Don't prompt in the panel first; Allow quits it as ⌘Q would.
+
+## 18. Permissions
+
+- [ ] **18.1** Start an agent that does deep research (Tavily key saved).
+  Expected: its approval shows **Always allow deep research with Tavily**; pick it, and the next research doesn't ask.
+- [ ] **18.2** Start an agent that creates a Notion page.
+  Expected: **Always allow Notion: create page**; the next one doesn't ask, even in the same agent.
+- [ ] **18.3** Settings → Permissions → Always allowed.
+  Expected: both are listed; **Ask again** on one makes the next request ask again.
+- [ ] **18.4** Settings → Permissions → set **Apps and windows** to **Ask me**, then type "Open Calculator".
+  Expected: the panel asks first; **Always allow** sets it back to Allow.
+- [ ] **18.5** Answer style → screen access **Ask me each time**, then ask "what's on my screen?" and pick **Always allow**.
+  Expected: it looks, and screen access is now **When needed**.
+- [ ] **18.6** Permissions → **Reset**.
+  Expected: every rule back to its default; skills and triggers are untouched.
+
+## 19. Chat history
+
+- [ ] **19.1** Ask two typed questions and one spoken one, then click the clock in the Ask panel (or the tray's **Chat history**).
+  Expected: the Chats window, today's chat at the top, the spoken question marked with a microphone.
+- [ ] **19.2** Filter **Voice**, then **Typed**, then search for a word from an earlier question.
+  Expected: only matching chats show.
+- [ ] **19.3** Open an older chat and press **Continue chat**, then ask "and what about the second one?"
+  Expected: the panel shows the old chat, and the answer follows on from it.
+- [ ] **19.4** **Delete** a chat, then **Delete all chats…** (click twice).
+  Expected: gone from the list, and the next question starts a new chat.

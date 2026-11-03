@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AllowTarget } from "../bindings/AllowTarget";
 import type { AlwaysAllow } from "../bindings/AlwaysAllow";
 import type { AskActivity } from "../bindings/AskActivity";
+import type { Chat } from "../bindings/Chat";
+import type { ChatSummary } from "../bindings/ChatSummary";
 import type { AskStatus } from "../bindings/AskStatus";
 import type { Note } from "../bindings/Note";
 import type { CardView } from "../bindings/CardView";
@@ -54,6 +56,10 @@ export const EVENTS = {
   sleepy: "buddy://sleepy",
   openSection: "settings://open-section",
   askShown: "ask://shown",
+  /** A past chat continues in the panel. */
+  askRestore: "ask://restore",
+  chatsChanged: "chats://changed",
+  chatsFocus: "chats://focus",
   ask: "ask://event",
   askActivity: "ask://activity",
   memoryChanged: "memory://changed",
@@ -236,6 +242,14 @@ export const api = {
   planCancel: () => invoke<void>("agents_plan_cancel"),
   /** Opens the agent panel, at one agent if given. */
   openAgentPanel: (id?: string) => invoke<void>("agents_open_panel", { id: id ?? null }),
+  // Chat history.
+  openChats: (id?: string) => invoke<void>("chats_open", { id: id ?? null }),
+  chats: () => invoke<ChatSummary[]>("chats_list"),
+  chat: (id: string) => invoke<Chat | null>("chats_get", { id }),
+  chatDelete: (id: string) => invoke<void>("chats_delete", { id }),
+  /** Every chat, or those untouched for `days` days. */
+  chatsClear: (days?: number) => invoke<void>("chats_clear", { days: days ?? null }),
+  chatContinue: (id: string) => invoke<void>("chats_continue", { id }),
   agentVoiceFollowUp: (id: string) => invoke<void>("agents_voice_follow_up", { id }),
   dockLayout: (width: number, height: number) => invoke<void>("dock_layout", { width, height }),
   dockCardShow: (id: string, anchor: number) => invoke<void>("dock_card_show", { id, anchor }),

@@ -19,6 +19,7 @@ use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
 use super::call;
+use super::chats;
 use super::context;
 use super::error::{ErrorKind, ProviderError};
 use super::ledger::Ledger;
@@ -48,6 +49,9 @@ pub struct AiState {
     pub ledger: Ledger,
 }
 
+/// A Confirm's id, where its answer goes, and what "Always allow" allows.
+type Confirming = (u32, oneshot::Sender<bool>, Option<AllowTarget>);
+
 #[derive(Default)]
 pub struct AskState {
     conversation: Mutex<Vec<Message>>,
@@ -63,12 +67,14 @@ pub struct AskState {
     permission: Mutex<Option<(u32, oneshot::Sender<bool>)>>,
     /// An action waiting for the user's OK in the panel, with what
     /// "Always allow" would allow.
-    confirm: Mutex<Option<(u32, oneshot::Sender<bool>, Option<AllowTarget>)>>,
+    confirm: Mutex<Option<Confirming>>,
     /// The newest screenshot in the conversation, which step coordinates refer to.
     screen: Mutex<Option<CaptureMeta>>,
     next_id: AtomicU32,
     /// When the last question finished, for starting fresh after a break.
     last_turn: Mutex<Option<Instant>>,
+    /// The chat in the history that this conversation adds to.
+    chat: Mutex<Option<String>>,
     /// Questions that fell off the end of the conversation, waiting to be
     /// reviewed for memory in one batch rather than one call each.
     leftover: Mutex<Vec<Message>>,
@@ -106,6 +112,9 @@ struct SavedConversation {
     summary: Option<String>,
     /// Unix milliseconds when the last question ended.
     last_turn_ms: i64,
+    /// Its chat in the history.
+    #[serde(default)]
+    chat: Option<String>,
 }
 
 /// What the panel and the voice pill show while a question is answered.
@@ -628,10 +637,22 @@ struct Turn<'a> {
     /// An explanation's pictures and charts, kept on screen through its
     /// later steps; models often send them only with the first.
     visuals: Mutex<Vec<step::Action>>,
+    /// The answer as the user saw it, for the chat history.
+    record: Mutex<chats::Recording>,
 }
 
 impl Turn<'_> {
     fn send(&self, e: AskEvent) {
+        {
+            let mut r = self.record.lock().unwrap();
+            match &e {
+                AskEvent::Text { text } => r.text(text),
+                AskEvent::Checkpoint => r.checkpoint(),
+                AskEvent::Retry { .. } => r.retry(),
+                AskEvent::Step { number, instruction, .. } => r.step(*number, instruction),
+                _ => {}
+            }
+        }
         if let Some(f) = &self.feed {
             f.on_event(&e);
         }
@@ -1404,6 +1425,7 @@ pub fn restore(app: &AppHandle) {
     *state.last_turn.lock().unwrap() = Instant::now().checked_sub(Duration::from_millis(ago));
     *state.conversation.lock().unwrap() = saved.messages;
     *state.summary.lock().unwrap() = saved.summary;
+    *state.chat.lock().unwrap() = saved.chat;
 }
 
 /// Saves the conversation for the next run (or forgets it when empty).
@@ -1421,6 +1443,7 @@ fn persist(app: &AppHandle) {
             messages,
             summary: state.summary.lock().unwrap().clone(),
             last_turn_ms: chrono::Utc::now().timestamp_millis(),
+            chat: state.chat.lock().unwrap().clone(),
         },
     );
 }
@@ -1456,6 +1479,7 @@ async fn answer(app: &AppHandle, pending: Pending) {
         memory::mine(app, &settings, &ended);
         state.summary.lock().unwrap().take();
         state.screen.lock().unwrap().take();
+        state.chat.lock().unwrap().take();
     }
     state.offer.lock().unwrap().take();
     emit(AskEvent::Question {
@@ -1488,8 +1512,10 @@ async fn answer(app: &AppHandle, pending: Pending) {
         cancel,
         playing: Mutex::new(None),
         visuals: Mutex::new(Vec::new()),
+        record: Mutex::new(chats::Recording::default()),
     };
     let history = turn.compact(history).await;
+    let image_count = images.len() as u32;
     let result = turn.run(history, text.clone(), images).await;
     *state.last_turn.lock().unwrap() = Some(Instant::now());
     match &result {
@@ -1501,6 +1527,25 @@ async fn answer(app: &AppHandle, pending: Pending) {
         step.abort();
     }
     guide::end(app);
+
+    let (question, documents) = chats::split_documents(&text);
+    let answer_text = std::mem::take(&mut *turn.record.lock().unwrap()).finish();
+    let chat_turn = chats::ChatTurn {
+        at: chrono::Utc::now().timestamp_millis(),
+        question,
+        voice: origin == Origin::Voice,
+        images: image_count,
+        documents,
+        answer: answer_text,
+        error: match &result {
+            Ok(_) => None,
+            Err(e) if e.kind == ErrorKind::Cancelled => Some("Stopped.".into()),
+            Err(e) => Some(e.message.clone()),
+        },
+        model: result.as_ref().map(|(_, c, _)| c.model.clone()).unwrap_or_default(),
+    };
+    let current = state.chat.lock().unwrap().clone();
+    *state.chat.lock().unwrap() = Some(chats::record(app, current, chat_turn));
 
     match result {
         Ok((messages, completion, acted)) => {
@@ -1742,7 +1787,58 @@ pub fn ask_reset(app: AppHandle, state: tauri::State<AskState>) {
     state.summary.lock().unwrap().take();
     state.offer.lock().unwrap().take();
     state.screen.lock().unwrap().take();
+    state.chat.lock().unwrap().take();
     persist(&app);
+}
+
+/// The panel shows a chat from the history again.
+pub const RESTORE_EVENT: &str = "ask://restore";
+
+/// Stops adding to chat `id` (all chats when empty), which was deleted.
+pub fn forget_chat(app: &AppHandle, id: &str) {
+    let state = app.state::<AskState>();
+    let mut chat = state.chat.lock().unwrap();
+    if id.is_empty() || chat.as_deref() == Some(id) {
+        chat.take();
+    }
+    drop(chat);
+    persist(app);
+}
+
+/// Makes a past chat the conversation again, so the next question carries
+/// on from it, and shows it in the panel.
+pub fn continue_chat(app: &AppHandle, chat: chats::Chat) -> Result<(), String> {
+    let state = app.state::<AskState>();
+    if state.running.lock().unwrap().is_some() {
+        return Err("Helpy is answering something; try again when it's done".into());
+    }
+    let ended = state.end_conversation();
+    memory::mine(app, &app.state::<SettingsStore>().get(), &ended);
+    let mut messages = Vec::new();
+    // The model gets the latest questions word for word, as it would have.
+    let skip = chat.turns.len().saturating_sub(KEEP_QUESTIONS);
+    for t in &chat.turns[skip..] {
+        messages.push(Message::user_text(t.question.clone()));
+        let answer = match (&t.error, t.answer.trim()) {
+            (_, a) if !a.is_empty() => a.to_string(),
+            (Some(e), _) => format!("(No answer: {e})"),
+            _ => "(No answer.)".to_string(),
+        };
+        messages.push(Message {
+            role: Role::Assistant,
+            parts: vec![Part::Text(answer)],
+        });
+    }
+    *state.conversation.lock().unwrap() = messages;
+    state.summary.lock().unwrap().take();
+    state.screen.lock().unwrap().take();
+    state.offer.lock().unwrap().take();
+    *state.chat.lock().unwrap() = Some(chat.id.clone());
+    *state.last_turn.lock().unwrap() = Some(Instant::now());
+    persist(app);
+    crate::windows::show_ask(app);
+    let _ = app.emit(RESTORE_EVENT, chat);
+    Ok(())
 }
 
 /// `always`: stop asking before looking at the screen.

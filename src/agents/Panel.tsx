@@ -510,7 +510,7 @@ function Stat({ label, value, className, children }: { label: string; value: str
  * light, image-4 dark), so the page carries the look that's actually in
  * use: the setting, or the system's when it's "system".
  */
-function useLook(theme: string | undefined) {
+export function useLook(theme: string | undefined) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
