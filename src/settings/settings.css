@@ -2927,3 +2927,14 @@ html[data-mac] .dragbar {
 html[data-mac] .rail {
   padding-top: 46px;
 }
+
+/* ---------- System access ---------- */
+
+.access {
+  margin-bottom: 10px;
+}
+
+.access__actions {
+  align-items: center;
+  gap: 12px;
+}

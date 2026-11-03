@@ -669,6 +669,12 @@ FIELDS.push(
     },
   },
   {
+    path: "general.checkPermissions", section: "permissions", group: "System access", label: "Check at startup",
+    help: "Opens this page when Helpy starts and something above is turned off.",
+    keywords: "permission microphone screen recording accessibility privacy system settings startup check",
+    control: { kind: "toggle" },
+  },
+  {
     path: "agents.approvals", section: "permissions", group: "Before Helpy acts", label: "Before Helpy acts",
     help: "For agents and the chat alike. Commands follow the setting below; each connector's actions are under Connectors.",
     keywords: "approval permission allow ask never delete always deep research tavily open link apps windows quit",

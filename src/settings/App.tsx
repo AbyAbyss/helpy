@@ -17,6 +17,7 @@ import { TemplateEditor } from "./TemplateControls";
 import { TriggerEditor } from "./TriggerControls";
 import { MemoryNotes, UsagePanel } from "./Usage";
 import { Onboarding } from "./Onboarding";
+import { missing, SystemAccess } from "./SystemAccess";
 import type { AgentTools } from "../bindings/AgentTools";
 import type { Builder } from "../bindings/Builder";
 import type { Approvals } from "../bindings/Approvals";
@@ -56,6 +57,13 @@ export function App() {
     const off = listen<HotkeyStatus[]>(EVENTS.hotkeyStatus, (e) => setHotkeys(e.payload));
     return () => void off.then((f) => f());
   }, []);
+
+  // Helpy opens this window at startup when a permission is off; show it.
+  const checkPermissions = settings?.general.onboarded && settings.general.checkPermissions;
+  useEffect(() => {
+    if (!checkPermissions) return;
+    api.permissions().then((p) => missing(p).length > 0 && setSection("permissions"), () => {});
+  }, [checkPermissions]);
 
   // Other windows (the ask panel) can open a specific section.
   useEffect(() => {
@@ -199,6 +207,7 @@ export function App() {
     "Conversation memory": <MemoryNotes />,
     "Your screen": <ScreenRecipients settings={settings} />,
     Voice: <SampleButton />,
+    "System access": <SystemAccess onError={onError} />,
   };
   const results = searchFields(query);
   const current = SECTIONS.find((s) => s.id === section)!;

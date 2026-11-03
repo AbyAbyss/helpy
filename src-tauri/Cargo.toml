@@ -78,7 +78,7 @@ core-graphics = "0.24"
 accessibility-sys = "0.2"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSResponder", "NSScreen", "NSGraphics", "NSRunningApplication"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSGeometry"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSGeometry", "NSString"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = "0.13"

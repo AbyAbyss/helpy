@@ -72,6 +72,8 @@ pub struct General {
     /// existed counts as done.
     #[serde(default = "yes")]
     pub onboarded: bool,
+    /// At startup, open Settings when a permission Helpy needs is off.
+    pub check_permissions: bool,
 }
 
 impl Default for General {
@@ -84,6 +86,7 @@ impl Default for General {
             response_language: "auto".into(),
             check_for_updates: true,
             onboarded: false,
+            check_permissions: true,
         }
     }
 }

@@ -152,6 +152,7 @@ pub fn run() {
             if !s.general.start_minimized || !s.general.onboarded {
                 windows::show_settings(&handle);
             }
+            permissions::check_at_startup(&handle);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -259,6 +260,7 @@ pub fn run() {
             permissions::permissions_status,
             permissions::permissions_request,
             permissions::permissions_open,
+            permissions::permissions_relaunch,
             install::install_info,
             install::install_move,
             ai::ai_usage_history,

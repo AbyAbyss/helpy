@@ -208,7 +208,9 @@ export const api = {
   builders: () => invoke<CoderInfo[]>("agents_builders"),
   canSeeWindows: () => invoke<boolean>("privacy_can_see_windows"),
   permissions: () => invoke<Permissions>("permissions_status"),
-  permissionsRequest: () => invoke<Permissions>("permissions_request"),
+  /** The system's prompt when it still shows one, otherwise its settings page. */
+  permissionsRequest: (which: "microphone" | "screen" | "accessibility") => invoke<Permissions>("permissions_request", { which }),
+  permissionsRelaunch: () => invoke<void>("permissions_relaunch"),
   permissionsOpen: (which: "microphone" | "screen" | "accessibility") => invoke<void>("permissions_open", { which }),
   installInfo: () => invoke<InstallInfo>("install_info"),
   installMove: () => invoke<void>("install_move"),

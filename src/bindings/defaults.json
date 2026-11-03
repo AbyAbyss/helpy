@@ -6,7 +6,8 @@
     "interfaceLanguage": "en",
     "responseLanguage": "auto",
     "checkForUpdates": true,
-    "onboarded": false
+    "onboarded": false,
+    "checkPermissions": true
   },
   "profiles": {
     "active": "beginner"

@@ -353,3 +353,13 @@ macOS asks once to allow Helpy under Privacy & Security → Accessibility; windo
   Expected: the panel shows the old chat, and the answer follows on from it.
 - [ ] **19.4** **Delete** a chat, then **Delete all chats…** (click twice).
   Expected: gone from the list, and the next question starts a new chat.
+
+## 20. System access
+
+- [ ] **20.1** Open Settings → Permissions. Under **System access**, Microphone, Screen Recording and Accessibility show their state (Allowed, Off or Not asked yet). On Windows only Microphone shows; on Linux a note says there's nothing to allow.
+- [ ] **20.2** Turn Accessibility off in System Settings, then come back.
+  Expected: within two seconds it shows **Off**; **Turn on…** shows macOS's prompt and opens the Accessibility page; turning it back on shows **Allowed** without a click.
+- [ ] **20.3** With Accessibility off and **Check at startup** on, quit and reopen Helpy.
+  Expected: Settings opens on Permissions. With **Check at startup** off, it doesn't.
+- [ ] **20.4** Turn Screen Recording off, press **Restart Helpy**.
+  Expected: Helpy relaunches and Screen Recording shows **Off**.
