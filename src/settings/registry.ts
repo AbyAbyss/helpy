@@ -677,7 +677,7 @@ FIELDS.push(
   {
     path: "agents.approvals", section: "permissions", group: "Before Helpy acts", label: "Before Helpy acts",
     help: "For agents and the chat alike. Commands follow the setting below; each connector's actions are under Connectors.",
-    keywords: "approval permission allow ask never delete always deep research tavily open link apps windows quit",
+    keywords: "approval permission allow ask never delete always deep research tavily open link apps windows quit click type keyboard mouse press keys",
     control: { kind: "approvalRules" },
   },
   {

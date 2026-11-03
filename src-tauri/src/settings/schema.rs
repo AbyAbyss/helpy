@@ -857,6 +857,9 @@ pub struct Approvals {
     /// Quitting apps, which may lose unsaved work.
     #[serde(default = "ask")]
     pub quit_apps: Rule,
+    /// Clicking, typing and pressing keys on the user's screen, from the chat.
+    #[serde(default = "ask")]
+    pub screen_control: Rule,
 }
 
 fn allow() -> Rule {
@@ -879,6 +882,7 @@ impl Default for Approvals {
             open_links: Rule::Ask,
             apps_and_windows: Rule::Allow,
             quit_apps: Rule::Ask,
+            screen_control: Rule::Ask,
         }
     }
 }

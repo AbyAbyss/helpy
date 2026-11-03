@@ -6,6 +6,7 @@
 //! lists apps and windows and acts on them in its own module (macOS through
 //! the Accessibility API, Windows through Win32, Linux through wmctrl on X11).
 
+pub mod input;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -617,6 +618,15 @@ async fn find(app: &str, title: &str) -> Result<Win, String> {
 async fn act(w: &Win, op: Op) -> Result<(), String> {
     let w = w.clone();
     blocking(move || os::act(&w, &op)).await?
+}
+
+/// Gives the keyboard back to the app in front of Helpy, so typing doesn't
+/// land in Helpy's own panel.
+pub async fn focus_front_app() -> Result<(), String> {
+    match windows().await?.first() {
+        Some(w) => act(w, Op::Focus).await,
+        None => Ok(()),
+    }
 }
 
 async fn arrange(app: &str, title: &str, layout: &str, screen: &str) -> Result<String, String> {

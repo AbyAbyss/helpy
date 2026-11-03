@@ -148,7 +148,8 @@
       "deepResearch": "ask",
       "openLinks": "ask",
       "appsAndWindows": "allow",
-      "quitApps": "ask"
+      "quitApps": "ask",
+      "screenControl": "ask"
     },
     "tools": {
       "webSearch": true,

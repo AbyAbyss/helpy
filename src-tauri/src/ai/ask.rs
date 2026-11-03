@@ -252,6 +252,13 @@ pub struct Plan {
     pub agents: bool,
 }
 
+impl Plan {
+    /// It may click and type for the user: it can see what it's aiming at.
+    pub fn controls_screen(&self, settings: &Settings) -> bool {
+        self.agents && settings.agents.tools.system && !matches!(self.screen, ScreenMode::Off(_))
+    }
+}
+
 pub fn plan(ai: &Ai, style: &AnswerStyle) -> Result<Plan, String> {
     let main = ai
         .routing
@@ -404,6 +411,17 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
                   and name close matches. Call list_windows when you need to know what's open. Then confirm in one \
                   short sentence; don't hand this to agents.";
         }
+        if plan.controls_screen(settings) {
+            s += "\n\nYou can also click, type and press keys on the user's screen yourself. When they ask you to \
+                  click something, fill something in or press a shortcut in the app in front of them (\"click Start \
+                  chart\", \"type my address here\", \"save this\"), look at the screen, then click_screen at the \
+                  middle of the exact control, type_text into the focused field, or press_keys. Each click returns a \
+                  new screenshot: check it worked before the next action, and stop to ask when something unexpected \
+                  shows up. Do these yourself instead of starting agents or showing steps; never click to buy, pay, \
+                  send messages, delete, or agree to anything the user didn't ask for. Then say in one short \
+                  sentence what you did. This comes before the start_agents advice below: a few clicks or keys in \
+                  the app on screen are yours to do; bigger tasks still go to agents.";
+        }
         s += "\n\nLook up quick facts yourself when an answer needs facts you don't have or that change (prices, rates, \
               news, figures, opening hours): call web_search, and fetch_page when the snippets aren't enough. Then \
               answer, guide or draw with what you found; for \"chart the rupee against the dollar over 5 years\", \
@@ -413,7 +431,7 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
               \"sort my downloads\", \"research and compare…\", \"build…\"), such as research across many sources, \
               organizing files, creating reminders or calendar events, or building an app or site, call start_agents \
               with the user's full request. Do this even when the task could be done by clicking through an app: they asked for it to \
-              be done, not to be shown how. You can't do tasks yourself, and describing the steps instead of \
+              be done, not to be shown how. You can't do such tasks yourself, and describing the steps instead of \
               calling start_agents leaves the task undone. The user confirms a plan card before anything starts. \
               Answer ordinary questions directly; a chart, table or explanation is an answer, not an app, so make \
               it yourself. When the user asks you to research, compare or shortlist options (\"research the best \
@@ -737,6 +755,94 @@ impl Turn<'_> {
         match crate::system::run(tool, input).await {
             Ok(text) => (vec![Part::Text(text)], false),
             Err(text) => (vec![Part::Text(text)], true),
+        }
+    }
+
+    /// Clicking, typing or pressing keys for the user. A click aims at the
+    /// latest screenshot and answers with a new one.
+    async fn input(&self, tool: &str, input: &serde_json::Value) -> (Vec<Part>, bool) {
+        use crate::system::input::{self, CLICK, TYPE};
+        let error = |m: String| (vec![Part::Text(m)], true);
+        let meta = *self.app.state::<AskState>().screen.lock().unwrap();
+        let point = if tool == CLICK {
+            let Some(meta) = meta else {
+                return error("Look at the screen first, then click at a point in that screenshot.".into());
+            };
+            let (x, y) = (input["x"].as_f64(), input["y"].as_f64());
+            let (Some(x), Some(y)) = (x, y) else { return error("Give x and y.".into()) };
+            if x < 0.0 || y < 0.0 || x > meta.image_width as f64 || y > meta.image_height as f64 {
+                return error("That point is outside the screenshot.".into());
+            }
+            let (mut gx, mut gy) = meta.to_global_physical(x, y);
+            // The model's point is a guess; land on the control under it.
+            if self.settings.guidance.snap_to_controls {
+                let screen = (meta.monitor_width as f64, meta.monitor_height as f64);
+                if let Some(el) = crate::a11y::element_at(gx, gy, meta.scale_factor).await {
+                    if let Some((sx, sy)) = crate::a11y::snap_point(&el, screen) {
+                        (gx, gy) = (sx, sy);
+                    }
+                }
+            }
+            Some((gx, gy, meta.scale_factor))
+        } else {
+            None
+        };
+        let live = self.app.state::<SettingsStore>().get();
+        match input::gate(&live.agents.approvals, tool, input) {
+            Gate::Never(why) => return error(format!("Not allowed: {why}")),
+            Gate::Ask { summary, always, .. } => {
+                if !self.confirm(summary, always).await {
+                    return error("The user said no. Don't try again.".into());
+                }
+            }
+            Gate::Allow => {}
+        }
+        let s = |k: &str| input[k].as_str().unwrap_or("").to_string();
+        let done = match point {
+            Some((x, y, scale)) => {
+                // Helpy's own panel may sit over the spot; step it aside.
+                let panel = self.app.get_webview_window(crate::windows::ASK).filter(|w| {
+                    let (Ok(true), Ok(p), Ok(size)) = (w.is_visible(), w.outer_position(), w.outer_size()) else {
+                        return false;
+                    };
+                    let (px, py) = (p.x as f64, p.y as f64);
+                    x >= px && y >= py && x < px + size.width as f64 && y < py + size.height as f64
+                });
+                if let Some(w) = &panel {
+                    let _ = w.hide();
+                }
+                let right = s("button") == "right";
+                let done = input::click(x, y, scale, right, input["double"].as_bool().unwrap_or(false)).await;
+                if let Some(w) = &panel {
+                    let _ = w.show();
+                }
+                done.map(|_| format!("Clicked {}", s("target")))
+            }
+            None => {
+                let ours = self.app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false));
+                if ours {
+                    let _ = crate::system::focus_front_app().await;
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                }
+                if tool == TYPE {
+                    input::type_text(s("text")).await
+                } else {
+                    input::press(s("keys")).await
+                }
+            }
+        };
+        let done = match done {
+            Ok(d) => d,
+            Err(m) => return error(m),
+        };
+        if point.is_none() {
+            return (vec![Part::Text(done)], false);
+        }
+        // Let the app react before looking again.
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+        match self.screen(false, false).await {
+            Ok(shot) => (Self::screenshot_parts(&format!("{done}. Here is the screen now"), shot), false),
+            Err(reason) => (vec![Part::Text(format!("{done}. {reason}"))], false),
         }
     }
 
@@ -1133,6 +1239,9 @@ impl Turn<'_> {
             tools.push(start_agents_tool());
             if self.settings.agents.tools.system {
                 tools.extend(crate::system::defs());
+                if self.plan.controls_screen(&self.settings) {
+                    tools.extend(crate::system::input::defs());
+                }
             }
             if !self.services().is_empty() {
                 tools.extend(service_tools());
@@ -1276,6 +1385,12 @@ impl Turn<'_> {
                             Err(m) => (vec![Part::Text(m)], true),
                         },
                         n if crate::system::is_tool(n) => self.system(n, &input).await,
+                        n if crate::system::input::is_tool(n) => {
+                            let result = self.input(n, &input).await;
+                            // A click ends with a fresh screenshot.
+                            looked |= n == crate::system::input::CLICK;
+                            result
+                        }
                         SERVICE_ACTIONS => self.service_actions(&input),
                         USE_SERVICE => self.use_service(&input).await,
                         WEB_SEARCH | FETCH_PAGE => self.web(&name, &input).await,
@@ -2359,6 +2474,22 @@ mod tests {
         let mut f = SentinelFilter::new(false, false);
         assert_eq!(f.push("VIEW_SCREEN"), Some("VIEW_SCREEN".into()));
         assert!(is_sentinel(" VIEW_SCREEN\n"));
+    }
+
+    #[test]
+    fn helpy_clicks_and_types_only_when_it_can_see_the_screen() {
+        let mut s = Settings::default();
+        let mut a = ai();
+        a.routing.ask = Some(r("cloud", "claude-opus-5"));
+        let mut p = plan(&a, &AnswerStyle::default()).unwrap();
+        assert!(p.controls_screen(&s));
+        assert!(system_prompt(&s, &p, &[]).contains("click_screen"));
+        s.agents.tools.system = false;
+        assert!(!p.controls_screen(&s));
+        s.agents.tools.system = true;
+        p.screen = ScreenMode::Off("paused".into());
+        assert!(!p.controls_screen(&s));
+        assert!(!system_prompt(&s, &p, &[]).contains("click_screen"));
     }
 
     #[test]

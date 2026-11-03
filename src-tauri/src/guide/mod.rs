@@ -700,28 +700,7 @@ fn is_stop(text: &str) -> bool {
 /// Clicks at a point in global physical pixels for the user, then puts the
 /// pointer back where it was.
 async fn click(x: f64, y: f64, scale: f64) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        use enigo::{Button, Coordinate, Direction, Enigo, Mouse};
-        let fail = |e: &dyn std::fmt::Display| {
-            format!("Helpy couldn't click here ({e}). On macOS, allow Helpy under Privacy & Security → Accessibility")
-        };
-        let mut e = Enigo::new(&enigo::Settings::default()).map_err(|e| fail(&e))?;
-        // macOS moves the pointer in points.
-        let k = if cfg!(target_os = "macos") { scale } else { 1.0 };
-        let back = e.location().ok();
-        let pause = || std::thread::sleep(Duration::from_millis(60));
-        e.move_mouse((x / k).round() as i32, (y / k).round() as i32, Coordinate::Abs)
-            .map_err(|e| fail(&e))?;
-        pause();
-        e.button(Button::Left, Direction::Click).map_err(|e| fail(&e))?;
-        pause();
-        if let Some((bx, by)) = back {
-            let _ = e.move_mouse(bx, by, Coordinate::Abs);
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    crate::system::input::click(x, y, scale, false, false).await
 }
 
 fn on_card(app: &AppHandle, x: f64, y: f64) -> bool {

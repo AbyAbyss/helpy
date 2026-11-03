@@ -363,3 +363,16 @@ macOS asks once to allow Helpy under Privacy & Security → Accessibility; windo
   Expected: Settings opens on Permissions. With **Check at startup** off, it doesn't.
 - [ ] **20.4** Turn Screen Recording off, press **Restart Helpy**.
   Expected: Helpy relaunches and Screen Recording shows **Off**.
+
+## 21. Clicking and typing
+
+- [ ] **21.1** With an app on screen that has a visible button, ask "click the Start chart button" (or any button you can see).
+  Expected: Helpy looks, the panel asks **Click “Start chart” on your screen** with Allow / Always allow / Don't; on Allow the button is clicked and the pointer returns where it was. No agent starts.
+- [ ] **21.2** Click into a text field yourself, then ask "type hello world".
+  Expected: the text goes into that field, not into Helpy's panel.
+- [ ] **21.3** Ask "press cmd+a" in a text editor.
+  Expected: everything is selected and no modifier key stays stuck.
+- [ ] **21.4** Set **Clicking and typing** to **Never** in Settings → Permissions and ask again.
+  Expected: Helpy says it isn't allowed.
+- [ ] **21.5** Ask the chat to start an agent about what's on screen while the agent model can't read pictures.
+  Expected: the agent runs on the Vision fallback (or a fallback model that reads pictures) instead of failing.

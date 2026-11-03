@@ -62,6 +62,7 @@ pub const APPROVALS: &[(&str, &str)] = &[
     ("openLinks", "opening links in your browser"),
     ("appsAndWindows", "opening apps and arranging windows"),
     ("quitApps", "quitting apps"),
+    ("screenControl", "clicking and typing on your screen"),
 ];
 
 fn approval_label(key: &str) -> Option<&'static str> {

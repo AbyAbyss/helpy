@@ -35,4 +35,8 @@ appsAndWindows: Rule,
 /**
  * Quitting apps, which may lose unsaved work.
  */
-quitApps: Rule, };
+quitApps: Rule, 
+/**
+ * Clicking, typing and pressing keys on the user's screen, from the chat.
+ */
+screenControl: Rule, };

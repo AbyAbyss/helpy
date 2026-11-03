@@ -31,6 +31,7 @@ export function ApprovalRules({ value, onChange }: { value: Approvals; onChange:
     { key: "openLinks", label: "Opening links", help: "A builder agent showing you its work in your own browser." },
     { key: "appsAndWindows", label: "Apps and windows", help: "Opening apps, and moving, resizing, focusing, minimizing or hiding windows, from the chat or by agents." },
     { key: "quitApps", label: "Quitting apps", help: "Like choosing Quit in the app; it may ask to save your work." },
+    { key: "screenControl", label: "Clicking and typing", help: "From the chat: clicking buttons on your screen, typing into the focused field and pressing shortcuts for you." },
   ];
   return (
     <div className="rules">
