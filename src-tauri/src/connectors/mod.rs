@@ -528,6 +528,13 @@ impl External for ExternalTools {
                     summary,
                     detail,
                     editable: a.editable.iter().map(|s| s.to_string()).collect(),
+                    always: Some(crate::agents::allow::AlwaysAllow {
+                        label: format!("{}: {}", c.name(), action.replace('_', " ")),
+                        target: crate::agents::allow::AllowTarget::Connector {
+                            id: c.id().into(),
+                            action: action.clone(),
+                        },
+                    }),
                 }
             }
         })

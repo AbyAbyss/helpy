@@ -6,7 +6,8 @@
     "interfaceLanguage": "en",
     "responseLanguage": "auto",
     "checkForUpdates": true,
-    "onboarded": false
+    "onboarded": false,
+    "checkPermissions": true
   },
   "profiles": {
     "active": "beginner"
@@ -14,7 +15,7 @@
   "buddy": {
     "enabled": true,
     "style": "pip",
-    "home": "cursor",
+    "home": "notch",
     "notchEdge": "top",
     "notchOffset": 0.5,
     "islandLook": "face",
@@ -143,7 +144,12 @@
       "fileDeletes": "ask",
       "reminders": "ask",
       "browserForms": "ask",
-      "builds": "ask"
+      "builds": "ask",
+      "deepResearch": "ask",
+      "openLinks": "ask",
+      "appsAndWindows": "allow",
+      "quitApps": "ask",
+      "screenControl": "ask"
     },
     "tools": {
       "webSearch": true,
@@ -152,7 +158,8 @@
       "shell": true,
       "reminders": true,
       "browser": true,
-      "build": true
+      "build": true,
+      "system": true
     },
     "approvedFolders": [],
     "projectsFolder": "",

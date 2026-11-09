@@ -59,6 +59,57 @@ pub struct Element {
     pub name: String,
 }
 
+/// A control found by name: where it is, and whether it took a press.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pressed {
+    pub rect: Rect,
+    pub pressed: bool,
+}
+
+/// How well a control's label matches the name asked for: 3 the same, 2 one
+/// holds the other, 0 not at all. Case, punctuation and spacing don't count.
+pub fn name_score(asked: &str, label: &str) -> u32 {
+    let norm = |s: &str| {
+        s.to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let (a, l) = (norm(asked), norm(label));
+    // Words like "button" are how the model names it, not its label.
+    let a = a
+        .split(' ')
+        .filter(|w| !["button", "link", "the", "tab", "icon", "menu"].contains(w))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if a.is_empty() || l.is_empty() {
+        0
+    } else if a == l {
+        3
+    } else if (l.contains(&a) && a.len() >= 3) || (a.contains(&l) && l.len() >= 4) {
+        2
+    } else {
+        0
+    }
+}
+
+/// Presses the control called `name` in the window in front, nearest `near`
+/// (global physical pixels) when several match. None when there's no such
+/// control or the system can't tell (only macOS can, for now).
+pub async fn press_named(name: &str, near: Option<(f64, f64)>, scale: f64) -> Option<Pressed> {
+    #[cfg(target_os = "macos")]
+    return tokio::time::timeout(Duration::from_secs(4), macos::press_named(name.to_string(), near, scale))
+        .await
+        .ok()
+        .flatten();
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (name, near, scale);
+        None
+    }
+}
+
 /// Whether Helpy may read other apps' controls and click for the user:
 /// Some on macOS, where that needs the Accessibility permission.
 pub fn trusted() -> Option<bool> {
@@ -178,6 +229,15 @@ pub fn snap_point(el: &Element, screen: (f64, f64)) -> Option<(f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn controls_match_by_name_not_by_how_the_model_says_it() {
+        assert_eq!(name_score("Start chat button", "Start chat"), 3);
+        assert_eq!(name_score("start chat", "Start chat with AI"), 2);
+        assert_eq!(name_score("Share", "Start chat"), 0);
+        assert_eq!(name_score("the OK button", "OK"), 3);
+        assert_eq!(name_score("button", "Save"), 0);
+    }
 
     fn el(x: f64, y: f64, w: f64, h: f64) -> Element {
         Element {

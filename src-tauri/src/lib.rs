@@ -17,6 +17,7 @@ mod permissions;
 mod platform;
 mod privacy;
 mod settings;
+mod system;
 mod tray;
 mod voice;
 mod windows;
@@ -127,6 +128,7 @@ pub fn run() {
             app.manage(voice::VoiceState::new(handle.clone()));
             app.manage(agents::AgentsState::load(app.path().app_data_dir()?));
             ai::ask::restore(&handle);
+            system::init(&handle);
             app.manage(connectors::ConnectorsState::load(
                 app.path().app_data_dir()?,
             ));
@@ -150,6 +152,7 @@ pub fn run() {
             if !s.general.start_minimized || !s.general.onboarded {
                 windows::show_settings(&handle);
             }
+            permissions::check_at_startup(&handle);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -160,6 +163,7 @@ pub fn run() {
                     windows::ASK,
                     windows::PLAN,
                     windows::AGENTS,
+                    windows::CHATS,
                 ]
                 .contains(&window.label())
                 {
@@ -195,6 +199,13 @@ pub fn run() {
             ai::ask::ask_cancel,
             ai::ask::ask_reset,
             ai::ask::ask_screen_answer,
+            ai::ask::ask_confirm_answer,
+            ai::chats::chats_list,
+            ai::chats::chats_get,
+            ai::chats::chats_delete,
+            ai::chats::chats_clear,
+            ai::chats::chats_continue,
+            ai::chats::chats_open,
             ai::ask::ask_status,
             ai::ask::ask_activity,
             ai::memory::ai_notes,
@@ -214,6 +225,10 @@ pub fn run() {
             circle::circle_to_agent,
             agents::agents_list,
             agents::agents_answer,
+            agents::allow::permissions_allowed,
+            agents::allow::permissions_allow,
+            agents::allow::permissions_ask_again,
+            agents::allow::permissions_reset,
             agents::agents_pause,
             agents::agents_resume,
             agents::agents_cancel,
@@ -245,6 +260,7 @@ pub fn run() {
             permissions::permissions_status,
             permissions::permissions_request,
             permissions::permissions_open,
+            permissions::permissions_relaunch,
             install::install_info,
             install::install_move,
             ai::ai_usage_history,

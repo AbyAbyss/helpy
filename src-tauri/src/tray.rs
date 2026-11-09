@@ -105,6 +105,7 @@ pub fn build(app: &AppHandle, s: &Settings) -> tauri::Result<()> {
     let circle = MenuItem::with_id(app, "circle", "Circle to explain", true, None::<&str>)?;
     let agents = MenuItem::with_id(app, "agents", "Agent panel", true, None::<&str>)?;
     let approvals = MenuItem::with_id(app, "approvals", "Approval inbox", true, None::<&str>)?;
+    let chats = MenuItem::with_id(app, "chats", "Chat history", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Helpy", true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
@@ -121,6 +122,7 @@ pub fn build(app: &AppHandle, s: &Settings) -> tauri::Result<()> {
             &sep()?,
             &agents,
             &approvals,
+            &chats,
             &sep()?,
             &settings_item,
             &quit,
@@ -164,6 +166,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         "circle" => crate::circle::toggle(app),
         "agents" => crate::windows::show_agents(app, None),
         "approvals" => crate::windows::show_agents(app, Some(crate::windows::INBOX.into())),
+        "chats" => crate::windows::show_chats(app, None),
         "settings" => crate::windows::show_settings(app),
         "quit" => app.exit(0),
         id => {

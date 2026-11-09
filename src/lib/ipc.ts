@@ -1,6 +1,10 @@
 // Typed wrappers around Helpy's Rust commands and events.
 import { invoke } from "@tauri-apps/api/core";
+import type { AllowTarget } from "../bindings/AllowTarget";
+import type { AlwaysAllow } from "../bindings/AlwaysAllow";
 import type { AskActivity } from "../bindings/AskActivity";
+import type { Chat } from "../bindings/Chat";
+import type { ChatSummary } from "../bindings/ChatSummary";
 import type { AskStatus } from "../bindings/AskStatus";
 import type { Note } from "../bindings/Note";
 import type { CardView } from "../bindings/CardView";
@@ -52,6 +56,12 @@ export const EVENTS = {
   sleepy: "buddy://sleepy",
   openSection: "settings://open-section",
   askShown: "ask://shown",
+  /** A past chat continues in the panel. */
+  askRestore: "ask://restore",
+  /** A prompt in the panel was answered out loud; payload is the Consent. */
+  askAnswered: "ask://answered",
+  chatsChanged: "chats://changed",
+  chatsFocus: "chats://focus",
   ask: "ask://event",
   askActivity: "ask://activity",
   memoryChanged: "memory://changed",
@@ -131,7 +141,9 @@ export const api = {
   pdfText: async (file: Blob) => invoke<string>("pdf_text", new Uint8Array(await file.arrayBuffer())),
   askCancel: () => invoke<void>("ask_cancel"),
   askReset: () => invoke<void>("ask_reset"),
-  askScreenAnswer: (id: number, allow: boolean) => invoke<void>("ask_screen_answer", { id, allow }),
+  askScreenAnswer: (id: number, allow: boolean, always = false) => invoke<void>("ask_screen_answer", { id, allow, always }),
+  /** The user's answer to an action waiting in the panel. */
+  askConfirmAnswer: (id: number, allow: boolean, always = false) => invoke<void>("ask_confirm_answer", { id, allow, always }),
   askStatus: () => invoke<AskStatus>("ask_status"),
   askActivity: () => invoke<AskActivity>("ask_activity"),
   notes: () => invoke<Note[]>("ai_notes"),
@@ -180,6 +192,10 @@ export const api = {
   // Agents. Changes arrive as EVENTS.agentUpdate and friends.
   agents: () => invoke<AgentList>("agents_list"),
   agentAnswer: (id: string, answer: Answer) => invoke<void>("agents_answer", { id, answer }),
+  // Standing permissions ("Always allow") and turning them back to asking.
+  permissionsAllowed: () => invoke<AlwaysAllow[]>("permissions_allowed"),
+  permissionsAskAgain: (target: AllowTarget) => invoke<void>("permissions_ask_again", { target }),
+  permissionsReset: () => invoke<Settings>("permissions_reset"),
   agentPause: (id: string) => invoke<void>("agents_pause", { id }),
   agentResume: (id: string) => invoke<void>("agents_resume", { id }),
   agentCancel: (id: string) => invoke<void>("agents_cancel", { id }),
@@ -194,7 +210,9 @@ export const api = {
   builders: () => invoke<CoderInfo[]>("agents_builders"),
   canSeeWindows: () => invoke<boolean>("privacy_can_see_windows"),
   permissions: () => invoke<Permissions>("permissions_status"),
-  permissionsRequest: () => invoke<Permissions>("permissions_request"),
+  /** The system's prompt when it still shows one, otherwise its settings page. */
+  permissionsRequest: (which: "microphone" | "screen" | "accessibility") => invoke<Permissions>("permissions_request", { which }),
+  permissionsRelaunch: () => invoke<void>("permissions_relaunch"),
   permissionsOpen: (which: "microphone" | "screen" | "accessibility") => invoke<void>("permissions_open", { which }),
   installInfo: () => invoke<InstallInfo>("install_info"),
   installMove: () => invoke<void>("install_move"),
@@ -228,6 +246,14 @@ export const api = {
   planCancel: () => invoke<void>("agents_plan_cancel"),
   /** Opens the agent panel, at one agent if given. */
   openAgentPanel: (id?: string) => invoke<void>("agents_open_panel", { id: id ?? null }),
+  // Chat history.
+  openChats: (id?: string) => invoke<void>("chats_open", { id: id ?? null }),
+  chats: () => invoke<ChatSummary[]>("chats_list"),
+  chat: (id: string) => invoke<Chat | null>("chats_get", { id }),
+  chatDelete: (id: string) => invoke<void>("chats_delete", { id }),
+  /** Every chat, or those untouched for `days` days. */
+  chatsClear: (days?: number) => invoke<void>("chats_clear", { days: days ?? null }),
+  chatContinue: (id: string) => invoke<void>("chats_continue", { id }),
   agentVoiceFollowUp: (id: string) => invoke<void>("agents_voice_follow_up", { id }),
   dockLayout: (width: number, height: number) => invoke<void>("dock_layout", { width, height }),
   dockCardShow: (id: string, anchor: number) => invoke<void>("dock_card_show", { id, anchor }),

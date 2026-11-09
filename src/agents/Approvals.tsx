@@ -18,10 +18,11 @@ export function ApprovalBox({ agent, pending: p, showAgent }: { agent: AgentView
   const [error, setError] = useState<string | null>(null);
   const edited = Object.keys(edits).some((k) => edits[k] !== String(p.args[k] ?? ""));
 
-  const answer = async (approve: boolean) => {
+  const answer = async (approve: boolean | "always") => {
     setError(null);
     try {
-      if (!approve) await api.agentAnswer(agent.id, { type: "reject", note: note.trim() || null });
+      if (approve === "always") await api.agentAnswer(agent.id, { type: "alwaysAllow" });
+      else if (!approve) await api.agentAnswer(agent.id, { type: "reject", note: note.trim() || null });
       else if (edited) await api.agentAnswer(agent.id, { type: "edit", args: { ...p.args, ...edits } });
       else await api.agentAnswer(agent.id, { type: "approve" });
     } catch (e) {
@@ -67,10 +68,16 @@ export function ApprovalBox({ agent, pending: p, showAgent }: { agent: AgentView
         <button type="button" className="btn btn--primary" onClick={() => answer(true)}>
           {edited ? "Approve with changes" : "Approve"}
         </button>
+        {p.always && !edited && (
+          <button type="button" className="btn" onClick={() => answer("always")} title="Approve this and stop asking. Change it back in Settings → Permissions.">
+            Always allow {p.always.label}
+          </button>
+        )}
         <button type="button" className="btn" onClick={() => answer(false)}>
           Reject
         </button>
       </div>
+      {p.always && <p className="muted small approval__hint">“Always allow” stops asking for {p.always.label}. Turn it back in Settings → Permissions.</p>}
     </section>
   );
 }

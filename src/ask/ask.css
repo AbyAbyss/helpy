@@ -388,6 +388,7 @@ a.md-link:hover {
 
 .ask-perm__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

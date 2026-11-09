@@ -91,6 +91,8 @@ pub enum ActionKind {
     Browser,
     /// A builder agent's coding round, project command or launch.
     Build,
+    /// Opening, arranging or quitting apps on the user's desktop.
+    System,
 }
 
 /// Something the agent is waiting on the user for.
@@ -116,6 +118,9 @@ pub enum Pending {
         args: serde_json::Value,
         /// Fields of `args` the user may edit.
         editable: Vec<String>,
+        /// What "Always allow" would allow from now on, if it's offered.
+        #[serde(default)]
+        always: Option<super::allow::AlwaysAllow>,
     },
     Question {
         id: String,
@@ -136,6 +141,8 @@ pub enum Pending {
 #[ts(export)]
 pub enum Answer {
     Approve,
+    /// Approve, and stop asking for this kind of action.
+    AlwaysAllow,
     /// Approve with changes to the editable fields.
     Edit {
         #[ts(type = "Record<string, unknown>")]

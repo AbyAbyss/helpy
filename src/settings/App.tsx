@@ -11,12 +11,13 @@ import { api, asFieldErrors, EVENTS, getValue, type SettingPath, type ValueAt } 
 import { useSettings, useTheme } from "../lib/useSettings";
 import { BuddyStage, BuddyStylePicker, HomePicker, NotchStage, useCustomBuddy } from "./BuddyPreview";
 import { GuidanceStage } from "./GuidancePreview";
-import { ApprovalRules, Blocklist, BuilderPicker, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
+import { AlwaysAllowed, ApprovalRules, Blocklist, BuilderPicker, FolderList, FolderPicker, SearchEnginePicker, StringList, ToolToggles } from "./AgentControls";
 import { ConnectorList, McpServers } from "./ConnectorControls";
 import { TemplateEditor } from "./TemplateControls";
 import { TriggerEditor } from "./TriggerControls";
 import { MemoryNotes, UsagePanel } from "./Usage";
 import { Onboarding } from "./Onboarding";
+import { missing, SystemAccess } from "./SystemAccess";
 import type { AgentTools } from "../bindings/AgentTools";
 import type { Builder } from "../bindings/Builder";
 import type { Approvals } from "../bindings/Approvals";
@@ -41,6 +42,7 @@ export function App() {
   const [platform, setPlatform] = useState<PlatformInfo | null>(null);
   const [support, setSupport] = useState<VoiceSupport>({ piper: true });
   const [toast, setToast] = useState<{ text: string; tone: "ok" | "err" } | null>(null);
+  const onError = useCallback((m: string) => setToast({ text: m, tone: "err" }), []);
   const customSrc = useCustomBuddy();
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLElement>(null);
@@ -55,6 +57,13 @@ export function App() {
     const off = listen<HotkeyStatus[]>(EVENTS.hotkeyStatus, (e) => setHotkeys(e.payload));
     return () => void off.then((f) => f());
   }, []);
+
+  // Helpy opens this window at startup when a permission is off; show it.
+  const checkPermissions = settings?.general.onboarded && settings.general.checkPermissions;
+  useEffect(() => {
+    if (!checkPermissions) return;
+    api.permissions().then((p) => missing(p).length > 0 && setSection("permissions"), () => {});
+  }, [checkPermissions]);
 
   // Other windows (the ask panel) can open a specific section.
   useEffect(() => {
@@ -126,6 +135,17 @@ export function App() {
   };
 
   const resetSection = async (id: SectionId) => {
+    if (id === "permissions") {
+      // Only the permissions: the rest of the agents' settings stay.
+      try {
+        setSettings(await api.permissionsReset());
+        clearSection(id);
+        setToast({ text: "Permissions are back to their defaults", tone: "ok" });
+      } catch (e) {
+        setToast({ text: String(e), tone: "err" });
+      }
+      return;
+    }
     try {
       const before = settings?.ai.providers.map((p) => p.id) ?? [];
       let next: Settings | null = null;
@@ -181,12 +201,13 @@ export function App() {
       />
     );
 
-  const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, support, update, commitAi, onError: (m) => setToast({ text: m, tone: "err" }) };
+  const ctx: RowContext = { settings, errors, drafts, hotkeys, customSrc, support, update, commitAi, onError };
   const extras: Record<string, React.ReactNode> = {
     "Retries and daily budget": <UsagePanel settings={settings} />,
     "Conversation memory": <MemoryNotes />,
     "Your screen": <ScreenRecipients settings={settings} />,
     Voice: <SampleButton />,
+    "System access": <SystemAccess onError={onError} />,
   };
   const results = searchFields(query);
   const current = SECTIONS.find((s) => s.id === section)!;
@@ -277,6 +298,7 @@ export function App() {
               </p>
             )}
             <Groups fields={FIELDS.filter((f) => f.section === section)} ctx={ctx} extras={extras} />
+            {section === "permissions" && <AlwaysAllowed settings={settings} onError={onError} />}
           </div>
         )}
       </main>
@@ -614,6 +636,12 @@ function SectionIcon({ id }: { id: SectionId }) {
     ),
     voiceOutput: <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />,
     privacy: <path d="M12 3.5 5 6v5.5c0 4.3 3 7.6 7 9 4-1.4 7-4.7 7-9V6zM9.5 12l2 2 3.5-4" />,
+    permissions: (
+      <>
+        <circle cx="8" cy="12" r="4" />
+        <path d="M12 12h9M18 12v3M21 12v2" />
+      </>
+    ),
   };
   return (
     <svg className="nav__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">

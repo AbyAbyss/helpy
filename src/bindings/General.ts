@@ -14,4 +14,8 @@ responseLanguage: string, checkForUpdates: boolean,
  * The welcome tour is done. A settings file from before the tour
  * existed counts as done.
  */
-onboarded: boolean, };
+onboarded: boolean, 
+/**
+ * At startup, open Settings when a permission Helpy needs is off.
+ */
+checkPermissions: boolean, };

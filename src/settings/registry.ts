@@ -5,7 +5,7 @@
 import type { Settings } from "../bindings/Settings";
 import type { SettingPath } from "../lib/ipc";
 
-export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "usage" | "answerStyle" | "guidance" | "circle" | "agents" | "connectors" | "voiceInput" | "voiceOutput" | "privacy";
+export type SectionId = "general" | "buddy" | "hotkeys" | "ai" | "usage" | "answerStyle" | "guidance" | "circle" | "agents" | "permissions" | "connectors" | "voiceInput" | "voiceOutput" | "privacy";
 
 export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "general", title: "General", blurb: "Startup, profile, appearance and language." },
@@ -16,6 +16,7 @@ export const SECTIONS: { id: SectionId; title: string; blurb: string }[] = [
   { id: "answerStyle", title: "Answer style", blurb: "How Helpy answers, and when it may look at your screen." },
   { id: "guidance", title: "Visual guidance", blurb: "How Helpy points things out on your screen, and how walkthroughs move from step to step." },
   { id: "agents", title: "Agents", blurb: "Background agents: what they may do, where, and the limits they can never pass." },
+  { id: "permissions", title: "Permissions", blurb: "What Helpy may do without asking you first. Choose Allow, Ask me or Never for each kind of action; “Always allow” on a request changes these too." },
   { id: "connectors", title: "Connectors", blurb: "Services and MCP servers agents can use, and what they may do there without asking." },
   { id: "circle", title: "Circle to explain", blurb: "Draw around anything on screen to have it explained, labelled, copied or translated." },
   { id: "voiceInput", title: "Voice input", blurb: "How Helpy hears you: the microphone, the speech engine, and when it stops listening." },
@@ -668,8 +669,15 @@ FIELDS.push(
     },
   },
   {
-    path: "agents.approvals", section: "agents", group: "Approvals", label: "Before agents act",
-    help: "Commands follow the command setting under Tools.", keywords: "approval permission allow ask never delete",
+    path: "general.checkPermissions", section: "permissions", group: "System access", label: "Check at startup",
+    help: "Opens this page when Helpy starts and something above is turned off.",
+    keywords: "permission microphone screen recording accessibility privacy system settings startup check",
+    control: { kind: "toggle" },
+  },
+  {
+    path: "agents.approvals", section: "permissions", group: "Before Helpy acts", label: "Before Helpy acts",
+    help: "For agents and the chat alike. Commands follow the setting below; each connector's actions are under Connectors.",
+    keywords: "approval permission allow ask never delete always deep research tavily open link apps windows quit click type keyboard mouse press keys",
     control: { kind: "approvalRules" },
   },
   {
@@ -704,7 +712,7 @@ FIELDS.push(
     keywords: "backup undo retention", control: { kind: "number", min: 1, max: 365, unit: "days" },
   },
   {
-    path: "agents.shellPolicy", section: "agents", group: "Tools", label: "Shell commands",
+    path: "agents.shellPolicy", section: "permissions", group: "Commands", label: "Shell commands",
     keywords: "shell terminal command policy",
     control: {
       kind: "segmented",
@@ -716,9 +724,10 @@ FIELDS.push(
     },
   },
   {
-    path: "agents.shellAllowlist", section: "agents", group: "Tools", label: "Allowed commands",
-    help: "Run without asking. Chained or redirected commands are never allowed this way.", keywords: "allowlist safe commands",
-    control: { kind: "stringList", placeholder: "Add a command, e.g. git status" }, when: (s) => s.agents.shellPolicy === "allowlist",
+    path: "agents.shellAllowlist", section: "permissions", group: "Commands", label: "Allowed commands",
+    help: "Run without asking; with “Only these”, nothing else runs. “Always allow” on a command adds it here. Chained or redirected commands are never allowed this way.",
+    keywords: "allowlist safe commands always allow",
+    control: { kind: "stringList", placeholder: "Add a command, e.g. git status" }, when: (s) => s.agents.shellPolicy !== "never",
   },
   {
     path: "agents.templates", section: "agents", group: "Skills", label: "Your skills",

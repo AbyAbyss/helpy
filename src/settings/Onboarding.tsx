@@ -191,10 +191,10 @@ export function Onboarding({ settings, platform, commitAi, setProfile, setWhispe
                     <strong>Accessibility</strong>
                     <span>So highlights land on the exact button, and for "Do it for me".</span>
                   </div>
-                  {perms?.accessibility ? (
+                  {perms?.accessibility === "allowed" ? (
                     <span className="pill pill--ok">Allowed</span>
                   ) : (
-                    <button type="button" className="btn btn--sm" onClick={() => api.permissionsRequest().then(setPerms)}>
+                    <button type="button" className="btn btn--sm" onClick={() => api.permissionsRequest("accessibility").then(setPerms)}>
                       Allow…
                     </button>
                   )}

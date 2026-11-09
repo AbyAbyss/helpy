@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AskEvent } from "../bindings/AskEvent";
-import { apply, waiting, withDocuments, type Item } from "./transcript";
+import { apply, fromChat, waiting, withDocuments, type Item } from "./transcript";
 
 const run = (events: AskEvent[], start: Item[] = [{ kind: "user", text: "q", voice: false }]) => events.reduce(apply, start);
 
@@ -60,5 +60,27 @@ describe("ask transcript", () => {
     expect(waiting([{ kind: "user", text: "q", voice: false }], false)).toBe(false);
     expect(waiting(run([{ type: "text", text: "a" }]), true)).toBe(false);
     expect(waiting(run([{ type: "screenPermission", id: 1 }]), true)).toBe(false);
+  });
+});
+
+describe("continuing a chat", () => {
+  it("shows each question with its answer, and what went wrong", () => {
+    const turn = { at: 0, images: 0, model: "m", documents: [] as string[] };
+    const items = fromChat({
+      id: "c1",
+      title: "t",
+      started: 0,
+      updated: 0,
+      turns: [
+        { ...turn, question: "hi", voice: true, answer: "Hello!", error: null },
+        { ...turn, question: "and?", voice: false, answer: "", error: "Stopped." },
+      ],
+    });
+    expect(items).toEqual([
+      { kind: "user", text: "hi", voice: true },
+      { kind: "assistant", text: "Hello!", final: true },
+      { kind: "user", text: "and?", voice: false },
+      { kind: "notice", text: "Stopped." },
+    ]);
   });
 });

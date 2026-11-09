@@ -366,6 +366,10 @@ fn run_session(
             },
         );
     }
+    // "yes" / "no" / "always" to a question Helpy asked out loud.
+    if let Some(message) = ask::take_spoken_answer(app, &text) {
+        return emit_phase(app, VoicePhase::Idle { message: Some(message) });
+    }
     // A reply during a walkthrough ("I got it", "where is that?") goes to it.
     if crate::guide::take_voice_reply(app, &text) {
         crate::windows::hide_pill(app);
@@ -419,6 +423,21 @@ fn run_session(
     if let Err(message) = tauri::async_runtime::block_on(ask::ask(app, text, ask::Origin::Voice, Vec::new())) {
         emit_phase(app, VoicePhase::Error { message });
     }
+}
+
+/// A question Helpy asks back during a spoken question ("Click “Start
+/// chat” on your screen? Say yes, no, or always."): said aloud and shown in
+/// the pill, so the user knows it's waiting on them.
+pub fn ask_aloud(app: &AppHandle, question: &str) {
+    let speaker = &app.state::<VoiceState>().speaker;
+    speaker.say(question.to_string());
+    crate::windows::show_pill(app);
+    emit_phase(
+        app,
+        VoicePhase::Idle {
+            message: Some(question.to_string()),
+        },
+    );
 }
 
 /// A short reply to something said aloud (e.g. "Told Research."): shown in
@@ -531,6 +550,13 @@ impl Feed {
             self.said.store(true, Ordering::Relaxed);
             speaker.say(sentence);
         }
+    }
+
+    /// Reads the rest of the answer after the user spoke a reply to it (a new
+    /// recording stops the speaker and moves its generation on).
+    pub fn resume(&self) {
+        let speaker = &self.app.state::<VoiceState>().speaker;
+        self.generation.store(speaker.generation(), Ordering::Relaxed);
     }
 
     /// Says `text` if nothing of the answer was spoken, so a spoken question

@@ -1,6 +1,7 @@
 //! Background agents: running them within hard limits, their tools and
 //! approvals, persistence, and what the dock, cards and panel show.
 
+pub mod allow;
 pub mod model;
 pub mod planner;
 pub mod runner;
@@ -329,7 +330,9 @@ fn voice_asked(app: &AppHandle, id: &str) {
 /// Models an agent may use: the agent-worker model, else the questions
 /// model, then the fallback chain. An orchestrator (an agent that splits its
 /// task among helpers) takes the orchestrator model first, when one is set.
-/// All must call tools, and read images when the agent was given one.
+/// All must call tools, and read images when the agent was given one; then
+/// the vision fallback joins in after the questions model, and with none of
+/// those fit, the fallback chain alone serves.
 pub fn agent_models(
     ai: &Ai,
     needs_vision: bool,
@@ -339,19 +342,27 @@ pub fn agent_models(
         ai.model(r)
             .is_some_and(|(_, m)| m.tools && (m.vision || !needs_vision))
     };
-    let first = orchestrator.then_some(&ai.routing.agent_orchestrator);
-    let primary = [first, Some(&ai.routing.agent_worker), Some(&ai.routing.ask)]
-        .into_iter()
-        .flatten()
-        .flatten()
-        .find(|r| ok(r))
-        .cloned()
-        .ok_or("Agents need a model that can use tools. Choose one for Agent workers in Settings → AI providers")?;
-    let mut out = vec![primary];
-    for f in &ai.fallback_chain {
-        if ok(f) && !out.contains(f) {
-            out.push(f.clone());
+    let routed = [
+        orchestrator.then_some(&ai.routing.agent_orchestrator),
+        Some(&ai.routing.agent_worker),
+        Some(&ai.routing.ask),
+        needs_vision.then_some(&ai.routing.vision_fallback),
+    ];
+    let primary = routed.into_iter().flatten().flatten().find(|r| ok(r));
+    let mut out: Vec<ModelRef> = Vec::new();
+    for r in primary.into_iter().chain(&ai.fallback_chain) {
+        if ok(r) && !out.contains(r) {
+            out.push(r.clone());
         }
+    }
+    if out.is_empty() {
+        return Err(if needs_vision {
+            "This agent was given a screenshot, and none of your agent models can both use tools and read \
+             pictures. Choose one that can for Agent workers or Vision fallback in Settings → AI providers"
+        } else {
+            "Agents need a model that can use tools. Choose one for Agent workers in Settings → AI providers"
+        }
+        .into());
     }
     Ok(out)
 }
@@ -527,7 +538,15 @@ impl Env for AppEnv {
     }
 
     fn gate(&self, agent: &Agent, tool: &str, args: &Value) -> Gate {
-        self.toolbox.gate(&agent.tools, tool, args)
+        match self.toolbox.gate(&agent.tools, tool, args) {
+            // Allowed from now on since this agent started.
+            Gate::Ask { always: Some(a), .. }
+                if allow::is_allowed(&self.app.state::<SettingsStore>().get(), &a.target) =>
+            {
+                Gate::Allow
+            }
+            g => g,
+        }
     }
 
     fn run_tool<'a>(
@@ -1215,6 +1234,28 @@ pub fn agents_list(
 #[tauri::command]
 pub fn agents_answer(app: AppHandle, id: String, answer: Answer) -> Result<(), String> {
     let state = app.state::<AgentsState>();
+    if answer == Answer::AlwaysAllow {
+        let target = match state.agents.lock().unwrap().get(&id).and_then(|a| a.pending.clone()) {
+            Some(Pending::Approval { always: Some(a), .. }) => a.target,
+            _ => return Err("This action can't be allowed from now on".into()),
+        };
+        allow::commit_allow(&app, &target)?;
+        // Other agents waiting for the same thing go ahead too.
+        let others: Vec<String> = state
+            .agents
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|a| a.id != id)
+            .filter(|a| matches!(&a.pending, Some(Pending::Approval { always: Some(x), .. }) if x.target == target))
+            .map(|a| a.id.clone())
+            .collect();
+        for other in others {
+            if let Some(tx) = state.handles.lock().unwrap().get_mut(&other).and_then(|h| h.answer.take()) {
+                let _ = tx.send(Answer::Approve);
+            }
+        }
+    }
     let tx = state
         .handles
         .lock()
@@ -2237,10 +2278,17 @@ mod tests {
         ai.routing.agent_worker = Some(r("worker"));
         ai.fallback_chain = vec![r("chat"), r("eyes")];
         assert_eq!(agent_models(&ai, false, false).unwrap(), [r("worker"), r("eyes")]);
-        // With a picture to look at, only the vision model qualifies.
-        assert!(agent_models(&ai, true, false).is_err());
+        // With a picture to look at, only the vision model qualifies, from
+        // the fallback chain, the vision fallback or routing.
+        assert_eq!(agent_models(&ai, true, false).unwrap(), [r("eyes")]);
+        ai.fallback_chain.clear();
+        assert!(agent_models(&ai, true, false).unwrap_err().contains("screenshot"));
+        ai.routing.vision_fallback = Some(r("eyes"));
+        assert_eq!(agent_models(&ai, true, false).unwrap(), [r("eyes")]);
+        ai.routing.vision_fallback = None;
         ai.routing.ask = Some(r("eyes"));
         assert_eq!(agent_models(&ai, true, false).unwrap(), [r("eyes")]);
+        ai.fallback_chain = vec![r("chat"), r("eyes")];
         // An orchestrator takes its own model first, and the workers' one otherwise.
         assert_eq!(agent_models(&ai, false, true).unwrap()[0], r("worker"));
         ai.routing.agent_orchestrator = Some(r("eyes"));

@@ -3,6 +3,7 @@
 pub mod anthropic;
 pub mod ask;
 pub mod call;
+pub mod chats;
 pub mod context;
 pub mod error;
 pub mod gemini;

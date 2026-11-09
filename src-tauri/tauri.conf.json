@@ -77,6 +77,20 @@
         "hiddenTitle": true
       },
       {
+        "label": "chats",
+        "url": "chats.html",
+        "title": "Helpy chats",
+        "width": 980,
+        "height": 680,
+        "minWidth": 680,
+        "minHeight": 440,
+        "visible": false,
+        "center": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      },
+      {
         "label": "dockcard",
         "url": "dockcard.html",
         "title": "Helpy agent",

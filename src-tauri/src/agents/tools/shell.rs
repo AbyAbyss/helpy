@@ -23,6 +23,16 @@ fn chains(cmd: &str) -> bool {
     cmd.contains([';', '|', '&', '`', '>', '<', '\n']) || cmd.contains("$(")
 }
 
+/// Whether the command starts with an allowlist entry and doesn't chain.
+fn listed(allowlist: &[String], cmd: &str) -> bool {
+    !chains(cmd)
+        && allowlist
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| !a.is_empty())
+            .any(|a| cmd == a || cmd.strip_prefix(a).is_some_and(|rest| rest.starts_with(' ')))
+}
+
 pub fn verdict(policy: ShellPolicy, allowlist: &[String], cmd: &str) -> Verdict {
     let cmd = cmd.trim();
     if cmd.is_empty() {
@@ -32,19 +42,11 @@ pub fn verdict(policy: ShellPolicy, allowlist: &[String], cmd: &str) -> Verdict 
         ShellPolicy::Never => {
             Verdict::Refuse("shell commands are turned off in Settings → Agents.".into())
         }
+        // Commands the user chose to always allow run without asking.
+        ShellPolicy::Ask if listed(allowlist, cmd) => Verdict::Run,
         ShellPolicy::Ask => Verdict::Ask,
         ShellPolicy::Allowlist => {
-            let listed = allowlist
-                .iter()
-                .map(|a| a.trim())
-                .filter(|a| !a.is_empty())
-                .any(|a| {
-                    cmd == a
-                        || cmd
-                            .strip_prefix(a)
-                            .is_some_and(|rest| rest.starts_with(' '))
-                });
-            if listed && !chains(cmd) {
+            if listed(allowlist, cmd) {
                 Verdict::Run
             } else {
                 Verdict::Refuse(format!(

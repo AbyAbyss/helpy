@@ -308,3 +308,73 @@ These are picked to impress in a demo. Each one shows a different strength, and 
 
 - [ ] **16.26** Practise this order: 16.1 (dark mode) → 16.5 or 16.6 (explain with drawing) → 16.10 (live chart) → 16.13 (agent research, then **Show on my screen**) → 16.24 (transparency).
   - Mention the models as you go: "Nemotron Super answers, Nemotron Ultra plans, Kimi-K3 reads the screen, all on Nebius Token Factory, with Tavily for the web."
+
+## 17. Apps and windows
+
+macOS asks once to allow Helpy under Privacy & Security → Accessibility; windows can't move until it's on.
+
+- [ ] **17.1** Type: "Open Spotify" (or any app you have).
+  Expected: it opens, and Helpy says so in a sentence.
+- [ ] **17.2** Type: "Open Photoshop" on a computer without it.
+  Expected: Helpy says it isn't installed and names close matches, if any.
+- [ ] **17.3** With Chrome and Spotify open, say: "Move Spotify to the right and Chrome to the left."
+  Expected: two windows side by side, each half the screen, Dock and menu bar left clear.
+- [ ] **17.4** Type: "Make Chrome full screen", then "take it out of full screen".
+  Expected: native full screen, then back.
+- [ ] **17.5** Type: "Bring Spotify to the front" with it minimized.
+  Expected: it un-minimizes and comes to the front.
+- [ ] **17.6** With two screens, type: "Move Chrome to my other screen and maximize it."
+  Expected: it fills the other screen.
+- [ ] **17.7** Type: "Quit Spotify".
+  Expected: an Allow / Always allow / Don't prompt in the panel first; Allow quits it as ⌘Q would.
+
+## 18. Permissions
+
+- [ ] **18.1** Start an agent that does deep research (Tavily key saved).
+  Expected: its approval shows **Always allow deep research with Tavily**; pick it, and the next research doesn't ask.
+- [ ] **18.2** Start an agent that creates a Notion page.
+  Expected: **Always allow Notion: create page**; the next one doesn't ask, even in the same agent.
+- [ ] **18.3** Settings → Permissions → Always allowed.
+  Expected: both are listed; **Ask again** on one makes the next request ask again.
+- [ ] **18.4** Settings → Permissions → set **Apps and windows** to **Ask me**, then type "Open Calculator".
+  Expected: the panel asks first; **Always allow** sets it back to Allow.
+- [ ] **18.5** Answer style → screen access **Ask me each time**, then ask "what's on my screen?" and pick **Always allow**.
+  Expected: it looks, and screen access is now **When needed**.
+- [ ] **18.6** Permissions → **Reset**.
+  Expected: every rule back to its default; skills and triggers are untouched.
+
+## 19. Chat history
+
+- [ ] **19.1** Ask two typed questions and one spoken one, then click the clock in the Ask panel (or the tray's **Chat history**).
+  Expected: the Chats window, today's chat at the top, the spoken question marked with a microphone.
+- [ ] **19.2** Filter **Voice**, then **Typed**, then search for a word from an earlier question.
+  Expected: only matching chats show.
+- [ ] **19.3** Open an older chat and press **Continue chat**, then ask "and what about the second one?"
+  Expected: the panel shows the old chat, and the answer follows on from it.
+- [ ] **19.4** **Delete** a chat, then **Delete all chats…** (click twice).
+  Expected: gone from the list, and the next question starts a new chat.
+
+## 20. System access
+
+- [ ] **20.1** Open Settings → Permissions. Under **System access**, Microphone, Screen Recording and Accessibility show their state (Allowed, Off or Not asked yet). On Windows only Microphone shows; on Linux a note says there's nothing to allow.
+- [ ] **20.2** Turn Accessibility off in System Settings, then come back.
+  Expected: within two seconds it shows **Off**; **Turn on…** shows macOS's prompt and opens the Accessibility page; turning it back on shows **Allowed** without a click.
+- [ ] **20.3** With Accessibility off and **Check at startup** on, quit and reopen Helpy.
+  Expected: Settings opens on Permissions. With **Check at startup** off, it doesn't.
+- [ ] **20.4** Turn Screen Recording off, press **Restart Helpy**.
+  Expected: Helpy relaunches and Screen Recording shows **Off**.
+
+## 21. Clicking and typing
+
+- [ ] **21.1** With an app on screen that has a visible button, ask "click the Start chart button" (or any button you can see).
+  Expected: Helpy looks, the panel asks **Click “Start chart” on your screen** with Allow / Always allow / Don't; on Allow the button is clicked and the pointer returns where it was. No agent starts.
+- [ ] **21.1b** Ask the same **out loud** with the panel closed.
+  Expected: Helpy says "Click “…” on your screen? Say yes, no, or always." and the voice pill shows it; hold the voice key and say "yes": it clicks, says "OK", then reads the rest of the answer. The log (`~/Library/Logs/com.helpy.app/Helpy.log`) has a line `ask: click "…"` saying whether it pressed by name or clicked the point.
+- [ ] **21.2** Click into a text field yourself, then ask "type hello world".
+  Expected: the text goes into that field, not into Helpy's panel.
+- [ ] **21.3** Ask "press cmd+a" in a text editor.
+  Expected: everything is selected and no modifier key stays stuck.
+- [ ] **21.4** Set **Clicking and typing** to **Never** in Settings → Permissions and ask again.
+  Expected: Helpy says it isn't allowed.
+- [ ] **21.5** Ask the chat to start an agent about what's on screen while the agent model can't read pictures.
+  Expected: the agent runs on the Vision fallback (or a fallback model that reads pictures) instead of failing.

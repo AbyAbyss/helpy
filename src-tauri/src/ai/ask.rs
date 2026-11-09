@@ -19,11 +19,13 @@ use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
 use super::call;
+use super::chats;
 use super::context;
 use super::error::{ErrorKind, ProviderError};
 use super::ledger::Ledger;
 use super::memory;
 use super::types::*;
+use crate::agents::allow::{self, AllowTarget};
 use crate::agents::runner::Gate;
 use crate::capture::{self, CaptureMeta, Shot};
 use crate::guide::{self, step};
@@ -47,6 +49,9 @@ pub struct AiState {
     pub ledger: Ledger,
 }
 
+/// A Confirm's id, where its answer goes, and what "Always allow" allows.
+type Confirming = (u32, oneshot::Sender<bool>, Option<AllowTarget>);
+
 #[derive(Default)]
 pub struct AskState {
     conversation: Mutex<Vec<Message>>,
@@ -60,11 +65,16 @@ pub struct AskState {
     /// by voice hands it to the agents.
     offer: Mutex<Option<String>>,
     permission: Mutex<Option<(u32, oneshot::Sender<bool>)>>,
+    /// An action waiting for the user's OK in the panel, with what
+    /// "Always allow" would allow.
+    confirm: Mutex<Option<Confirming>>,
     /// The newest screenshot in the conversation, which step coordinates refer to.
     screen: Mutex<Option<CaptureMeta>>,
     next_id: AtomicU32,
     /// When the last question finished, for starting fresh after a break.
     last_turn: Mutex<Option<Instant>>,
+    /// The chat in the history that this conversation adds to.
+    chat: Mutex<Option<String>>,
     /// Questions that fell off the end of the conversation, waiting to be
     /// reviewed for memory in one batch rather than one call each.
     leftover: Mutex<Vec<Message>>,
@@ -102,6 +112,9 @@ struct SavedConversation {
     summary: Option<String>,
     /// Unix milliseconds when the last question ended.
     last_turn_ms: i64,
+    /// Its chat in the history.
+    #[serde(default)]
+    chat: Option<String>,
 }
 
 /// What the panel and the voice pill show while a question is answered.
@@ -144,6 +157,14 @@ pub enum AskEvent {
     /// Screen access is "ask each time": the panel should ask the user.
     ScreenPermission {
         id: u32,
+    },
+    /// An action that needs the user's OK first (quitting an app, or
+    /// anything the user set to "Ask me").
+    Confirm {
+        id: u32,
+        summary: String,
+        /// What "Always allow" covers; None when it isn't offered.
+        always: Option<String>,
     },
     Screen {
         thumbnail: String,
@@ -229,6 +250,13 @@ pub struct Plan {
     pub guide_model: Option<ModelRef>,
     /// The questions model can hand work to background agents.
     pub agents: bool,
+}
+
+impl Plan {
+    /// It may click and type for the user: it can see what it's aiming at.
+    pub fn controls_screen(&self, settings: &Settings) -> bool {
+        self.agents && settings.agents.tools.system && !matches!(self.screen, ScreenMode::Off(_))
+    }
 }
 
 pub fn plan(ai: &Ai, style: &AnswerStyle) -> Result<Plan, String> {
@@ -374,6 +402,26 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
     if plan.agents {
         s += "\n\nWhen the user asks you to open a link, website or page, call open_link yourself; it opens in \
               their browser, so don't hand it to agents or say you can't. Don't open links they didn't ask for.";
+        if settings.agents.tools.system {
+            s += "\n\nYou can open any app installed on this computer (open_app) and arrange the windows of running \
+                  apps yourself: snap them left, right, to quarters or thirds, center, maximize, full-screen, minimize, \
+                  hide, move them to another screen (arrange_window), bring one to the front (focus_window) or quit an \
+                  app (quit_app). Do it straight away when asked, with one call per window in the order the user said \
+                  (\"Spotify right and Chrome left\" is two arrange_window calls). If an app isn't installed, say so \
+                  and name close matches. Call list_windows when you need to know what's open. Then confirm in one \
+                  short sentence; don't hand this to agents.";
+        }
+        if plan.controls_screen(settings) {
+            s += "\n\nYou can also click, type and press keys on the user's screen yourself. When they ask you to \
+                  click something, fill something in or press a shortcut in the app in front of them (\"click Start \
+                  chart\", \"type my address here\", \"save this\"), look at the screen, then click_screen at the \
+                  middle of the exact control, type_text into the focused field, or press_keys. Each click returns a \
+                  new screenshot: check it worked before the next action, and stop to ask when something unexpected \
+                  shows up. Do these yourself instead of starting agents or showing steps; never click to buy, pay, \
+                  send messages, delete, or agree to anything the user didn't ask for. Then say in one short \
+                  sentence what you did. This comes before the start_agents advice below: a few clicks or keys in \
+                  the app on screen are yours to do; bigger tasks still go to agents.";
+        }
         s += "\n\nLook up quick facts yourself when an answer needs facts you don't have or that change (prices, rates, \
               news, figures, opening hours): call web_search, and fetch_page when the snippets aren't enough. Then \
               answer, guide or draw with what you found; for \"chart the rupee against the dollar over 5 years\", \
@@ -383,7 +431,7 @@ pub fn system_prompt(settings: &Settings, plan: &Plan, services: &[String]) -> S
               \"sort my downloads\", \"research and compare…\", \"build…\"), such as research across many sources, \
               organizing files, creating reminders or calendar events, or building an app or site, call start_agents \
               with the user's full request. Do this even when the task could be done by clicking through an app: they asked for it to \
-              be done, not to be shown how. You can't do tasks yourself, and describing the steps instead of \
+              be done, not to be shown how. You can't do such tasks yourself, and describing the steps instead of \
               calling start_agents leaves the task undone. The user confirms a plan card before anything starts. \
               Answer ordinary questions directly; a chart, table or explanation is an answer, not an app, so make \
               it yourself. When the user asks you to research, compare or shortlist options (\"research the best \
@@ -607,10 +655,41 @@ struct Turn<'a> {
     /// An explanation's pictures and charts, kept on screen through its
     /// later steps; models often send them only with the first.
     visuals: Mutex<Vec<step::Action>>,
+    /// The answer as the user saw it, for the chat history.
+    record: Mutex<chats::Recording>,
+    /// Asked out loud: questions back to the user are spoken too, and can be
+    /// answered by voice.
+    spoken: bool,
 }
 
 impl Turn<'_> {
+    /// A question back to the user while they may not be looking at the
+    /// panel: said aloud and shown in the voice pill for a spoken question.
+    fn ask_aloud(&self, question: &str) {
+        if self.spoken {
+            crate::voice::ask_aloud(self.app, &format!("{question}? Say yes, no, or always."));
+        }
+    }
+
+    /// After the user answered out loud, the rest of the answer is read
+    /// again (their reply stopped the speaker).
+    fn resume_voice(&self) {
+        if let Some(f) = &self.feed {
+            f.resume();
+        }
+    }
+
     fn send(&self, e: AskEvent) {
+        {
+            let mut r = self.record.lock().unwrap();
+            match &e {
+                AskEvent::Text { text } => r.text(text),
+                AskEvent::Checkpoint => r.checkpoint(),
+                AskEvent::Retry { .. } => r.retry(),
+                AskEvent::Step { number, instruction, .. } => r.step(*number, instruction),
+                _ => {}
+            }
+        }
         if let Some(f) = &self.feed {
             f.on_event(&e);
         }
@@ -678,6 +757,168 @@ impl Turn<'_> {
         }
     }
 
+    /// Opens an app or arranges a window, after the user's OK when their
+    /// rules ask for one.
+    async fn system(&self, tool: &str, input: &serde_json::Value) -> (Vec<Part>, bool) {
+        // The live rules, so "Always allow" counts from the next call on.
+        let live = self.app.state::<SettingsStore>().get();
+        match crate::system::gate(&live.agents.approvals, tool, input) {
+            Gate::Never(why) => return (vec![Part::Text(format!("Not allowed: {why}"))], true),
+            Gate::Ask { summary, always, .. } => {
+                if !self.confirm(summary, always).await {
+                    return (vec![Part::Text("The user said no. Don't try again.".into())], true);
+                }
+            }
+            Gate::Allow => {}
+        }
+        match crate::system::run(tool, input).await {
+            Ok(text) => (vec![Part::Text(text)], false),
+            Err(text) => (vec![Part::Text(text)], true),
+        }
+    }
+
+    /// Clicking, typing or pressing keys for the user. A click aims at the
+    /// latest screenshot and answers with a new one.
+    async fn input(&self, tool: &str, input: &serde_json::Value) -> (Vec<Part>, bool) {
+        use crate::system::input::{self, CLICK, TYPE};
+        let error = |m: String| (vec![Part::Text(m)], true);
+        let meta = *self.app.state::<AskState>().screen.lock().unwrap();
+        let point = if tool == CLICK {
+            let Some(meta) = meta else {
+                return error("Look at the screen first, then click at a point in that screenshot.".into());
+            };
+            let (x, y) = (input["x"].as_f64(), input["y"].as_f64());
+            let (Some(x), Some(y)) = (x, y) else { return error("Give x and y.".into()) };
+            if x < 0.0 || y < 0.0 || x > meta.image_width as f64 || y > meta.image_height as f64 {
+                return error("That point is outside the screenshot.".into());
+            }
+            let (mut gx, mut gy) = meta.to_global_physical(x, y);
+            // The model's point is a guess; land on the control under it.
+            if self.settings.guidance.snap_to_controls {
+                let screen = (meta.monitor_width as f64, meta.monitor_height as f64);
+                if let Some(el) = crate::a11y::element_at(gx, gy, meta.scale_factor).await {
+                    if let Some((sx, sy)) = crate::a11y::snap_point(&el, screen) {
+                        (gx, gy) = (sx, sy);
+                    }
+                }
+            }
+            Some((gx, gy, meta.scale_factor))
+        } else {
+            None
+        };
+        let live = self.app.state::<SettingsStore>().get();
+        match input::gate(&live.agents.approvals, tool, input) {
+            Gate::Never(why) => return error(format!("Not allowed: {why}")),
+            Gate::Ask { summary, always, .. } => {
+                if !self.confirm(summary, always).await {
+                    return error("The user said no. Don't try again.".into());
+                }
+            }
+            Gate::Allow => {}
+        }
+        let s = |k: &str| input[k].as_str().unwrap_or("").to_string();
+        let done = match point {
+            Some((x, y, scale)) => {
+                let (target, right) = (s("target"), s("button") == "right");
+                let double = input["double"].as_bool().unwrap_or(false);
+                // Pressing the control by name doesn't depend on the model's
+                // aim, and works without bringing the app to the front.
+                let found = if right || double {
+                    None
+                } else {
+                    crate::a11y::press_named(&target, Some((x, y)), scale).await
+                };
+                log::info!(
+                    "ask: click \"{target}\" at {x:.0},{y:.0}: {}",
+                    match found {
+                        Some(p) if p.pressed => "pressed by name".to_string(),
+                        Some(p) => format!("found by name at {:.0},{:.0}, clicking", p.rect.center().0, p.rect.center().1),
+                        None => "not found by name, clicking the point".into(),
+                    }
+                );
+                match found {
+                    Some(p) if p.pressed => Ok(format!("Pressed “{target}”")),
+                    _ => {
+                        let (x, y) = found.map(|p| p.rect.center()).unwrap_or((x, y));
+                        // A click on a window behind Helpy's may only bring it forward.
+                        if self.app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false)) {
+                            let _ = crate::system::focus_front_app().await;
+                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        }
+                        // Helpy's own panel may sit over the spot; step it aside.
+                        let panel = self.app.get_webview_window(crate::windows::ASK).filter(|w| {
+                            let (Ok(true), Ok(p), Ok(size)) = (w.is_visible(), w.outer_position(), w.outer_size()) else {
+                                return false;
+                            };
+                            let (px, py) = (p.x as f64, p.y as f64);
+                            x >= px && y >= py && x < px + size.width as f64 && y < py + size.height as f64
+                        });
+                        if let Some(w) = &panel {
+                            let _ = w.hide();
+                        }
+                        let done = input::click(x, y, scale, right, double).await;
+                        if let Some(w) = &panel {
+                            let _ = w.show();
+                        }
+                        let how = if found.is_some() { "" } else { " (at your point; no control by that name was found)" };
+                        done.map(|_| format!("Clicked “{target}”{how}"))
+                    }
+                }
+            }
+            None => {
+                let ours = self.app.webview_windows().values().any(|w| w.is_focused().unwrap_or(false));
+                if ours {
+                    let _ = crate::system::focus_front_app().await;
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                }
+                if tool == TYPE {
+                    input::type_text(s("text")).await
+                } else {
+                    input::press(s("keys")).await
+                }
+            }
+        };
+        let done = match done {
+            Ok(d) => d,
+            Err(m) => return error(m),
+        };
+        if point.is_none() {
+            return (vec![Part::Text(done)], false);
+        }
+        // Let the app react before looking again.
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+        match self.screen(false, false).await {
+            Ok(shot) => (
+                Self::screenshot_parts(
+                    &format!(
+                        "{done}. Here is the screen now: check that it changed the way you expected. If it \
+                         didn't, tell the user the click didn't work instead of saying it's done"
+                    ),
+                    shot,
+                ),
+                false,
+            ),
+            Err(reason) => (vec![Part::Text(format!("{done}. {reason}"))], false),
+        }
+    }
+
+    /// Asks in the panel; true when the user allows it.
+    async fn confirm(&self, summary: String, always: Option<allow::AlwaysAllow>) -> bool {
+        let state = self.app.state::<AskState>();
+        let id = state.next_id.fetch_add(1, Ordering::Relaxed);
+        let (tx, rx) = oneshot::channel();
+        let label = always.as_ref().map(|a| a.label.clone());
+        *state.confirm.lock().unwrap() = Some((id, tx, always.map(|a| a.target)));
+        self.ask_aloud(&summary);
+        self.send(AskEvent::Confirm { id, summary, always: label });
+        let allowed = tokio::select! {
+            _ = self.cancel.cancelled() => false,
+            r = rx => r.unwrap_or(false),
+        };
+        self.resume_voice();
+        allowed
+    }
+
     /// A web search or a page read, done the way the agents do them.
     async fn web(&self, tool: &str, input: &serde_json::Value) -> (Vec<Part>, bool) {
         use crate::agents::runner::{truncate, ToolOutcome, MAX_TOOL_OUTPUT};
@@ -708,11 +949,13 @@ impl Turn<'_> {
             let id = state.next_id.fetch_add(1, Ordering::Relaxed);
             let (tx, rx) = oneshot::channel();
             *state.permission.lock().unwrap() = Some((id, tx));
+            self.ask_aloud("Can I look at your screen");
             self.send(AskEvent::ScreenPermission { id });
             let allowed = tokio::select! {
                 _ = self.cancel.cancelled() => false,
                 r = rx => r.unwrap_or(false),
             };
+            self.resume_voice();
             if !allowed {
                 return Err("The user chose not to share their screen. Answer without it.".into());
             }
@@ -1055,6 +1298,12 @@ impl Turn<'_> {
             tools.push(open_link_tool());
             tools.extend(web_tools());
             tools.push(start_agents_tool());
+            if self.settings.agents.tools.system {
+                tools.extend(crate::system::defs());
+                if self.plan.controls_screen(&self.settings) {
+                    tools.extend(crate::system::input::defs());
+                }
+            }
             if !self.services().is_empty() {
                 tools.extend(service_tools());
             }
@@ -1196,6 +1445,13 @@ impl Turn<'_> {
                             Ok(m) => (vec![Part::Text(m)], false),
                             Err(m) => (vec![Part::Text(m)], true),
                         },
+                        n if crate::system::is_tool(n) => self.system(n, &input).await,
+                        n if crate::system::input::is_tool(n) => {
+                            let result = self.input(n, &input).await;
+                            // A click ends with a fresh screenshot.
+                            looked |= n == crate::system::input::CLICK;
+                            result
+                        }
                         SERVICE_ACTIONS => self.service_actions(&input),
                         USE_SERVICE => self.use_service(&input).await,
                         WEB_SEARCH | FETCH_PAGE => self.web(&name, &input).await,
@@ -1345,6 +1601,7 @@ pub fn restore(app: &AppHandle) {
     *state.last_turn.lock().unwrap() = Instant::now().checked_sub(Duration::from_millis(ago));
     *state.conversation.lock().unwrap() = saved.messages;
     *state.summary.lock().unwrap() = saved.summary;
+    *state.chat.lock().unwrap() = saved.chat;
 }
 
 /// Saves the conversation for the next run (or forgets it when empty).
@@ -1362,6 +1619,7 @@ fn persist(app: &AppHandle) {
             messages,
             summary: state.summary.lock().unwrap().clone(),
             last_turn_ms: chrono::Utc::now().timestamp_millis(),
+            chat: state.chat.lock().unwrap().clone(),
         },
     );
 }
@@ -1397,6 +1655,7 @@ async fn answer(app: &AppHandle, pending: Pending) {
         memory::mine(app, &settings, &ended);
         state.summary.lock().unwrap().take();
         state.screen.lock().unwrap().take();
+        state.chat.lock().unwrap().take();
     }
     state.offer.lock().unwrap().take();
     emit(AskEvent::Question {
@@ -1429,8 +1688,11 @@ async fn answer(app: &AppHandle, pending: Pending) {
         cancel,
         playing: Mutex::new(None),
         visuals: Mutex::new(Vec::new()),
+        record: Mutex::new(chats::Recording::default()),
+        spoken: origin == Origin::Voice,
     };
     let history = turn.compact(history).await;
+    let image_count = images.len() as u32;
     let result = turn.run(history, text.clone(), images).await;
     *state.last_turn.lock().unwrap() = Some(Instant::now());
     match &result {
@@ -1442,6 +1704,25 @@ async fn answer(app: &AppHandle, pending: Pending) {
         step.abort();
     }
     guide::end(app);
+
+    let (question, documents) = chats::split_documents(&text);
+    let answer_text = std::mem::take(&mut *turn.record.lock().unwrap()).finish();
+    let chat_turn = chats::ChatTurn {
+        at: chrono::Utc::now().timestamp_millis(),
+        question,
+        voice: origin == Origin::Voice,
+        images: image_count,
+        documents,
+        answer: answer_text,
+        error: match &result {
+            Ok(_) => None,
+            Err(e) if e.kind == ErrorKind::Cancelled => Some("Stopped.".into()),
+            Err(e) => Some(e.message.clone()),
+        },
+        model: result.as_ref().map(|(_, c, _)| c.model.clone()).unwrap_or_default(),
+    };
+    let current = state.chat.lock().unwrap().clone();
+    *state.chat.lock().unwrap() = Some(chats::record(app, current, chat_turn));
 
     match result {
         Ok((messages, completion, acted)) => {
@@ -1671,6 +1952,7 @@ pub fn ask_cancel(state: tauri::State<AskState>) {
         c.cancel();
     }
     state.permission.lock().unwrap().take();
+    state.confirm.lock().unwrap().take();
 }
 
 /// Forgets the conversation (the panel was dismissed).
@@ -1682,16 +1964,147 @@ pub fn ask_reset(app: AppHandle, state: tauri::State<AskState>) {
     state.summary.lock().unwrap().take();
     state.offer.lock().unwrap().take();
     state.screen.lock().unwrap().take();
+    state.chat.lock().unwrap().take();
     persist(&app);
 }
 
+/// The panel shows a chat from the history again.
+pub const RESTORE_EVENT: &str = "ask://restore";
+
+/// Stops adding to chat `id` (all chats when empty), which was deleted.
+pub fn forget_chat(app: &AppHandle, id: &str) {
+    let state = app.state::<AskState>();
+    let mut chat = state.chat.lock().unwrap();
+    if id.is_empty() || chat.as_deref() == Some(id) {
+        chat.take();
+    }
+    drop(chat);
+    persist(app);
+}
+
+/// Makes a past chat the conversation again, so the next question carries
+/// on from it, and shows it in the panel.
+pub fn continue_chat(app: &AppHandle, chat: chats::Chat) -> Result<(), String> {
+    let state = app.state::<AskState>();
+    if state.running.lock().unwrap().is_some() {
+        return Err("Helpy is answering something; try again when it's done".into());
+    }
+    let ended = state.end_conversation();
+    memory::mine(app, &app.state::<SettingsStore>().get(), &ended);
+    let mut messages = Vec::new();
+    // The model gets the latest questions word for word, as it would have.
+    let skip = chat.turns.len().saturating_sub(KEEP_QUESTIONS);
+    for t in &chat.turns[skip..] {
+        messages.push(Message::user_text(t.question.clone()));
+        let answer = match (&t.error, t.answer.trim()) {
+            (_, a) if !a.is_empty() => a.to_string(),
+            (Some(e), _) => format!("(No answer: {e})"),
+            _ => "(No answer.)".to_string(),
+        };
+        messages.push(Message {
+            role: Role::Assistant,
+            parts: vec![Part::Text(answer)],
+        });
+    }
+    *state.conversation.lock().unwrap() = messages;
+    state.summary.lock().unwrap().take();
+    state.screen.lock().unwrap().take();
+    state.offer.lock().unwrap().take();
+    *state.chat.lock().unwrap() = Some(chat.id.clone());
+    *state.last_turn.lock().unwrap() = Some(Instant::now());
+    persist(app);
+    crate::windows::show_ask(app);
+    let _ = app.emit(RESTORE_EVENT, chat);
+    Ok(())
+}
+
+/// `always`: stop asking before looking at the screen.
 #[tauri::command]
-pub fn ask_screen_answer(state: tauri::State<AskState>, id: u32, allow: bool) {
+pub fn ask_screen_answer(app: AppHandle, state: tauri::State<AskState>, id: u32, allow: bool, always: Option<bool>) {
     let mut pending = state.permission.lock().unwrap();
     if pending.as_ref().is_some_and(|(pid, _)| *pid == id) {
         let (_, tx) = pending.take().unwrap();
+        if allow && always == Some(true) {
+            if let Err(e) = allow::commit_allow(&app, &AllowTarget::Screen) {
+                log::warn!("ask: couldn't save the screen permission: {e}");
+            }
+        }
         let _ = tx.send(allow);
     }
+}
+
+/// "yes", "no", "always": an answer to a question Helpy asked out loud.
+/// Some((allow, always)); None for anything else.
+pub fn spoken_consent(text: &str) -> Option<(bool, bool)> {
+    let t = text.to_lowercase();
+    let words: Vec<&str> = t.split(|c: char| !c.is_alphanumeric() && c != '\'').filter(|w| !w.is_empty()).collect();
+    if words.is_empty() || words.len() > 6 {
+        return None;
+    }
+    let has = |list: &[&str]| words.iter().any(|w| list.contains(w));
+    // "no", "don't" win over a "yes" in the same breath ("no, don't do it").
+    if has(&["no", "nope", "don't", "dont", "stop", "cancel", "deny", "never"]) {
+        return Some((false, false));
+    }
+    if has(&["always"]) {
+        return Some((true, true));
+    }
+    has(&["yes", "yeah", "yep", "sure", "ok", "okay", "allow", "go", "do", "fine", "please", "approve"])
+        .then_some((true, false))
+}
+
+/// Answers a question Helpy asked out loud (a confirmation or the screen
+/// permission) with the user's spoken reply. None when nothing is waiting or
+/// the words aren't an answer; otherwise what to tell the user.
+pub fn take_spoken_answer(app: &AppHandle, text: &str) -> Option<String> {
+    let state = app.state::<AskState>();
+    let confirm = state.confirm.lock().unwrap().as_ref().map(|(id, ..)| *id);
+    let screen = state.permission.lock().unwrap().as_ref().map(|(id, _)| *id);
+    if confirm.is_none() && screen.is_none() {
+        return None;
+    }
+    let (allow, always) = spoken_consent(text)?;
+    if let Some(id) = confirm {
+        if let Err(e) = ask_confirm_answer(app.clone(), state, id, allow, Some(always)) {
+            return Some(e);
+        }
+    } else if let Some(id) = screen {
+        ask_screen_answer(app.clone(), state, id, allow, Some(always));
+    }
+    // Tells the panel the prompt is answered.
+    let consent = match (allow, always) {
+        (true, true) => "always",
+        (true, false) => "allowed",
+        _ => "denied",
+    };
+    let _ = app.emit(ANSWERED_EVENT, consent);
+    Some(match (allow, always) {
+        (true, true) => "OK, and I won't ask again.".into(),
+        (true, false) => "OK.".into(),
+        _ => "OK, I won't.".into(),
+    })
+}
+
+/// A prompt was answered some other way (out loud).
+pub const ANSWERED_EVENT: &str = "ask://answered";
+
+/// The user's answer to a Confirm: allow, allow from now on, or not.
+#[tauri::command]
+pub fn ask_confirm_answer(
+    app: AppHandle,
+    state: tauri::State<AskState>,
+    id: u32,
+    allow: bool,
+    always: Option<bool>,
+) -> Result<(), String> {
+    let Some((_, tx, target)) = state.confirm.lock().unwrap().take_if(|(pid, ..)| *pid == id) else {
+        return Ok(());
+    };
+    if let (true, Some(true), Some(target)) = (allow, always, &target) {
+        allow::commit_allow(&app, target)?;
+    }
+    let _ = tx.send(allow);
+    Ok(())
 }
 
 #[tauri::command]
@@ -2178,6 +2591,32 @@ mod tests {
         let mut f = SentinelFilter::new(false, false);
         assert_eq!(f.push("VIEW_SCREEN"), Some("VIEW_SCREEN".into()));
         assert!(is_sentinel(" VIEW_SCREEN\n"));
+    }
+
+    #[test]
+    fn spoken_replies_answer_prompts() {
+        assert_eq!(spoken_consent("Yes please"), Some((true, false)));
+        assert_eq!(spoken_consent("okay go ahead"), Some((true, false)));
+        assert_eq!(spoken_consent("always allow it"), Some((true, true)));
+        assert_eq!(spoken_consent("no, don't do that"), Some((false, false)));
+        assert_eq!(spoken_consent("what's the weather in London today then"), None);
+        assert_eq!(spoken_consent("open spotify"), None);
+    }
+
+    #[test]
+    fn helpy_clicks_and_types_only_when_it_can_see_the_screen() {
+        let mut s = Settings::default();
+        let mut a = ai();
+        a.routing.ask = Some(r("cloud", "claude-opus-5"));
+        let mut p = plan(&a, &AnswerStyle::default()).unwrap();
+        assert!(p.controls_screen(&s));
+        assert!(system_prompt(&s, &p, &[]).contains("click_screen"));
+        s.agents.tools.system = false;
+        assert!(!p.controls_screen(&s));
+        s.agents.tools.system = true;
+        p.screen = ScreenMode::Off("paused".into());
+        assert!(!p.controls_screen(&s));
+        assert!(!system_prompt(&s, &p, &[]).contains("click_screen"));
     }
 
     #[test]

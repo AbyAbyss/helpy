@@ -12,7 +12,8 @@ use accessibility_sys::{
     kAXSizeAttribute, kAXSubroleAttribute, kAXTitleAttribute, kAXURLAttribute, kAXValueAttribute,
     kAXValueTypeCGPoint, kAXValueTypeCGSize, AXIsProcessTrusted, AXUIElementCopyAttributeValue,
     AXUIElementCopyElementAtPosition, AXUIElementCreateApplication, AXUIElementCreateSystemWide,
-    AXUIElementGetPid, AXUIElementRef, AXUIElementSetMessagingTimeout, AXValueGetValue, AXValueRef,
+    AXUIElementGetPid, AXUIElementPerformAction, AXUIElementRef, AXUIElementSetAttributeValue,
+    AXUIElementSetMessagingTimeout, AXValueGetValue, AXValueRef,
 };
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, CFTypeRef, TCFType};
@@ -26,7 +27,7 @@ use core_graphics::window::{
     kCGWindowListOptionOnScreenOnly, kCGWindowOwnerName, kCGWindowOwnerPID,
 };
 
-use super::{Element, Rect};
+use super::{Element, Pressed, Rect};
 
 /// Most elements looked at in one search, so a huge page can't stall it.
 const MAX_NODES: usize = 3000;
@@ -229,9 +230,9 @@ const BROWSERS: [&str; 9] = [
     "Chromium",
 ];
 
-/// The process of the frontmost window that isn't Helpy's, if it's a
-/// browser's (so it's found even while Helpy's panel is in front).
-fn front_browser_pid() -> Option<i32> {
+/// The process and name of the app owning the frontmost window that isn't
+/// Helpy's (so it's found even while Helpy's panel is in front).
+fn front_app() -> Option<(i32, String)> {
     let windows = copy_window_info(
         kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
         kCGNullWindowID,
@@ -255,12 +256,15 @@ fn front_browser_pid() -> Option<i32> {
             .and_then(|v| v.downcast::<CFString>())
             .map(|s| s.to_string())
             .unwrap_or_default();
-        return BROWSERS
-            .contains(&owner.as_str())
-            .then(|| pid.map(|p| p as i32))
-            .flatten();
+        return pid.map(|p| (p as i32, owner));
     }
     None
+}
+
+/// The process of the frontmost window that isn't Helpy's, if it's a
+/// browser's.
+fn front_browser_pid() -> Option<i32> {
+    front_app().and_then(|(pid, owner)| BROWSERS.contains(&owner.as_str()).then_some(pid))
 }
 
 pub async fn browser_url() -> Option<String> {
@@ -293,6 +297,83 @@ pub async fn browser_url() -> Option<String> {
             false,
         )
         .pop()
+    })
+    .await
+    .flatten()
+}
+
+/// Elements looked at when finding a control by name; web pages are big.
+const MAX_PRESS_NODES: usize = 8000;
+
+/// Roles that do something when pressed.
+const PRESSABLE: [&str; 10] = [
+    "AXButton",
+    "AXLink",
+    "AXMenuItem",
+    "AXMenuButton",
+    "AXPopUpButton",
+    "AXCheckBox",
+    "AXRadioButton",
+    "AXDisclosureTriangle",
+    "AXTab",
+    "AXMenuBarItem",
+];
+
+/// Finds the control called `name` in the window in front (the one nearest
+/// `near`, in global physical pixels, when several match) and presses it.
+pub async fn press_named(name: String, near: Option<(f64, f64)>, scale: f64) -> Option<Pressed> {
+    blocking(move || {
+        system()?;
+        let (pid, _) = front_app()?;
+        let app = Ax::from_create(unsafe { AXUIElementCreateApplication(pid) })?;
+        unsafe { AXUIElementSetMessagingTimeout(app.raw(), 0.5) };
+        // Chrome and Electron apps only build their page's tree for
+        // assistive apps that ask for it.
+        let manual = CFString::new("AXManualAccessibility");
+        let on = core_foundation::boolean::CFBoolean::true_value();
+        let fresh = unsafe {
+            AXUIElementSetAttributeValue(app.raw(), manual.as_concrete_TypeRef() as _, on.as_CFTypeRef())
+        } == kAXErrorSuccess;
+        let find = || {
+            let window = app.element(kAXFocusedWindowAttribute).or_else(|| app.element(kAXMainWindowAttribute))?;
+            let mut best: Option<(u32, f64, Ax, Rect)> = None;
+            let mut seen = 0;
+            let mut queue = VecDeque::from([window]);
+            while let Some(e) = queue.pop_front() {
+                seen += 1;
+                if seen > MAX_PRESS_NODES {
+                    break;
+                }
+                let role = e.string(kAXRoleAttribute).unwrap_or_default();
+                let label = e
+                    .string(kAXTitleAttribute)
+                    .filter(|t| !t.is_empty())
+                    .or_else(|| e.string(kAXDescriptionAttribute))
+                    .unwrap_or_default();
+                let score = super::name_score(&name, &label) * if PRESSABLE.contains(&role.as_str()) { 2 } else { 1 };
+                if score > 0 {
+                    if let Some(rect) = e.rect().map(|r| physical(r, scale)).filter(|r| r.w >= 1.0 && r.h >= 1.0) {
+                        let (cx, cy) = rect.center();
+                        let distance = near.map(|(x, y)| (cx - x).hypot(cy - y)).unwrap_or(0.0);
+                        let better = best.as_ref().is_none_or(|(s, d, ..)| score > *s || (score == *s && distance < *d));
+                        if better {
+                            best = Some((score, distance, Ax(e.0.clone()), rect));
+                        }
+                    }
+                }
+                queue.extend(e.children());
+            }
+            best
+        };
+        let found = find().or_else(|| {
+            // A tree just switched on takes a moment to fill in.
+            fresh.then(|| std::thread::sleep(std::time::Duration::from_millis(500)))?;
+            find()
+        });
+        let (_, _, el, rect) = found?;
+        let action = CFString::new(accessibility_sys::kAXPressAction);
+        let pressed = unsafe { AXUIElementPerformAction(el.raw(), action.as_concrete_TypeRef() as _) } == kAXErrorSuccess;
+        Some(Pressed { rect, pressed })
     })
     .await
     .flatten()

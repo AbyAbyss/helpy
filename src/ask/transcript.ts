@@ -1,5 +1,6 @@
 import type { AskAction } from "../bindings/AskAction";
 import type { AskEvent } from "../bindings/AskEvent";
+import type { Chat } from "../bindings/Chat";
 
 export type Item =
   /** `queued`: asked while another answer was running; it goes next. */
@@ -10,10 +11,14 @@ export type Item =
   | { kind: "assistant"; text: string; final: boolean }
   | { kind: "screen"; thumbnail: string; monitor: string }
   | { kind: "step"; number: number; total: number | null; text: string }
-  | { kind: "permission"; id: number; answer: "allowed" | "denied" | null }
+  | { kind: "permission"; id: number; answer: Consent | null }
+  /** An action waiting for the user's OK; `always` is what "Always allow" covers. */
+  | { kind: "confirm"; id: number; summary: string; always: string | null; answer: Consent | null }
   | { kind: "retry"; text: string }
   | { kind: "notice"; text: string }
   | { kind: "error"; text: string; action: AskAction | null };
+
+export type Consent = "allowed" | "always" | "denied";
 
 const DOCUMENT = /\n\n<document name="([^"]*)">\n[\s\S]*?\n<\/document>/g;
 
@@ -66,6 +71,8 @@ export function apply(items: Item[], e: AskEvent): Item[] {
       return withoutRetry(items).map((i) => (i.kind === "assistant" && !i.final ? { ...i, final: true } : i));
     case "screenPermission":
       return [...items, { kind: "permission", id: e.id, answer: null }];
+    case "confirm":
+      return [...items, { kind: "confirm", id: e.id, summary: e.summary, always: e.always, answer: null }];
     case "screen":
       return [...items, { kind: "screen", thumbnail: e.thumbnail, monitor: e.monitor }];
     case "step":
@@ -86,5 +93,15 @@ export function apply(items: Item[], e: AskEvent): Item[] {
 export function waiting(items: Item[], running: boolean) {
   if (!running) return false;
   const last = [...items].reverse().find((i) => !(i.kind === "user" && i.queued));
-  return !last || (last.kind !== "assistant" && last.kind !== "retry" && !(last.kind === "permission" && last.answer === null));
+  return !last || (last.kind !== "assistant" && last.kind !== "retry" && !((last.kind === "permission" || last.kind === "confirm") && last.answer === null));
+}
+
+/** A past chat as the panel shows it, to carry on from. */
+export function fromChat(chat: Chat): Item[] {
+  return chat.turns.flatMap((t): Item[] => {
+    const out: Item[] = [{ kind: "user", text: t.question, voice: t.voice, ...(t.documents.length ? { documents: t.documents } : {}) }];
+    if (t.answer.trim()) out.push({ kind: "assistant", text: t.answer, final: true });
+    if (t.error) out.push(t.error === "Stopped." ? { kind: "notice", text: "Stopped." } : { kind: "error", text: t.error, action: null });
+    return out;
+  });
 }

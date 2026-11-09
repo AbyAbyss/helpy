@@ -44,7 +44,7 @@ function build(scene: string): Demo {
       d.agents = [laptops, inbox, agent("a3", "Report", "Write the weekly report", { status: "done", finished: Date.now() - 60_000, plan: done(4, 4) })];
       break;
     case "approval":
-      d.agents = [agent("a4", "Expenses", "File the receipts in Drive", { status: "approval", statusLine: "Waiting for your OK", pending: { type: "approval", id: "p1", kind: "write" as never, source: "Files", summary: "Move 12 receipts to Drive/Expenses", detail: "", args: {}, editable: [] }, plan: done(2, 4) }), laptops, inbox, agent("a5", "Notes", "Tidy meeting notes", { statusLine: "Reading notes" })];
+      d.agents = [agent("a4", "Expenses", "File the receipts in Drive", { status: "approval", statusLine: "Waiting for your OK", pending: { type: "approval", id: "p1", kind: "write" as never, source: "Files", summary: "Move 12 receipts to Drive/Expenses", detail: "", args: {}, editable: [], always: null }, plan: done(2, 4) }), laptops, inbox, agent("a5", "Notes", "Tidy meeting notes", { statusLine: "Reading notes" })];
       break;
     case "listening":
       d.voice = { phase: "listening" };
